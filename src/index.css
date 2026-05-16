@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #0F0F0F;
+  color: #F5F5F5;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1A1A;
+}
+::-webkit-scrollbar-thumb {
+  background: #2E2E2E;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9A9A9A;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(224, 96, 94, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(224, 96, 94, 0.6); }
+}
+
+@keyframes scoreCount {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-score {
+  animation: scoreCount 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* WhatsApp-like chat bubbles */
+.bubble-sent {
+  background: #005C4B;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.bubble-received {
+  background: #1A1A1A;
+  border-radius: 18px 18px 18px 4px;
+  border: 1px solid #2E2E2E;
+}
+
+/* FOMO bar gradient */
+.fomo-bar-low { background: linear-gradient(90deg, #DC2626, #EF4444); }
+.fomo-bar-mid { background: linear-gradient(90deg, #D97706, #F59E0B); }
+.fomo-bar-high { background: linear-gradient(90deg, #059669, #10B981); }
+
+/* Coach panel mobile drawer */
+.coach-drawer {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Input focus ring */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(224, 96, 94, 0.4);
+}
