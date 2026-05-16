@@ -18,6 +18,7 @@ import RealLeadForm from './pages/RealLeadForm';
 import RealLeadConversation from './pages/RealLeadConversation';
 import Analytics from './pages/Analytics';
 import AdminAnalytics from './pages/AdminAnalytics';
+import Migrate from './pages/Migrate';
 
 function App() {
   return (
@@ -49,6 +50,8 @@ function App() {
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/setter/:setterId" element={<ProtectedRoute adminOnly><AdminSetterDetail /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
+
+          <Route path="/migrate" element={<Migrate />} />
 
           {/* Redirects */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
