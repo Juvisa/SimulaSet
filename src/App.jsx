@@ -19,6 +19,7 @@ import RealLeadConversation from './pages/RealLeadConversation';
 import Analytics from './pages/Analytics';
 import AdminAnalytics from './pages/AdminAnalytics';
 import Migrate from './pages/Migrate';
+import RestoreData from './pages/RestoreData';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
           <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
 
           <Route path="/migrate" element={<Migrate />} />
+          <Route path="/restore" element={<RestoreData />} />
 
           {/* Redirects */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
