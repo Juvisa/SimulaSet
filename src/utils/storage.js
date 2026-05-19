@@ -1,3 +1,5 @@
+import { createSession, clearSession } from './auth';
+
 const KEYS = {
   USERS: 'simulaset_users',
   CURRENT_USER: 'simulaset_current_user',
@@ -19,49 +21,90 @@ const set = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
+const hashPw = (pw) => btoa(pw);
+const checkPw = (plain, stored) => stored === btoa(plain) || stored === plain; // support legacy plain
+
 // Users
 export const getUsers = () => get(KEYS.USERS) || [];
 export const saveUsers = (users) => set(KEYS.USERS, users);
 export const getCurrentUser = () => get(KEYS.CURRENT_USER);
 export const saveCurrentUser = (user) => set(KEYS.CURRENT_USER, user);
-export const clearCurrentUser = () => localStorage.removeItem(KEYS.CURRENT_USER);
+export const clearCurrentUser = () => clearSession();
+
+// Ensure admin account always exists
+export const seedAdmin = () => {
+  const users = getUsers();
+  if (users.find(u => u.id === 'admin')) return;
+  users.unshift({
+    id: 'admin',
+    name: 'Jul',
+    nombre: 'Jul',
+    email: 'admin@simulaset.com',
+    password: hashPw('admin123'),
+    role: 'admin',
+    rol: 'admin',
+    nivel: 'Admin',
+    fecha_registro: new Date().toISOString(),
+    activo: true,
+    level: 5,
+  });
+  saveUsers(users);
+};
 
 export const registerUser = (name, email, password) => {
+  seedAdmin();
   const users = getUsers();
-  if (users.find(u => u.email === email)) return { error: 'Email ya registrado' };
+  if (users.find(u => u.email === email.toLowerCase())) return { error: 'Email ya registrado' };
   const newUser = {
     id: crypto.randomUUID(),
     name,
-    email,
-    password,
+    nombre: name,
+    email: email.toLowerCase(),
+    password: hashPw(password),
     role: 'setter',
-    createdAt: new Date().toISOString(),
+    rol: 'setter',
+    nivel: 'Setter Novato',
+    fecha_registro: new Date().toISOString(),
+    ultimo_acceso: new Date().toISOString(),
+    activo: true,
     level: 1,
     totalSessions: 0,
     totalScore: 0,
   };
   users.push(newUser);
   saveUsers(users);
-  return { user: newUser };
+  createSession(newUser);
+  return { user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, level: 1 } };
 };
 
 export const loginUser = (email, password) => {
-  if (email === 'admin@simulaset.com' && password === 'admin123') {
-    const admin = { id: 'admin', name: 'Jul', email, role: 'admin' };
-    saveCurrentUser(admin);
-    return { user: admin };
-  }
+  seedAdmin();
   const users = getUsers();
-  const user = users.find(u => u.email === email && u.password === password);
-  if (!user) return { error: 'Credenciales incorrectas' };
-  saveCurrentUser(user);
-  return { user };
+  const user = users.find(u => u.email === email.toLowerCase() && checkPw(password, u.password));
+  if (!user) return { error: 'Email o contraseña incorrectos' };
+  if (user.activo === false) return { error: 'Cuenta desactivada' };
+  const idx = users.findIndex(u => u.id === user.id);
+  users[idx].ultimo_acceso = new Date().toISOString();
+  saveUsers(users);
+  const sessionUser = { id: user.id, name: user.name || user.nombre, email: user.email, role: user.role || user.rol, level: user.level || 1 };
+  createSession(user);
+  saveCurrentUser(sessionUser);
+  return { user: sessionUser };
+};
+
+export const updatePassword = (userId, newPassword) => {
+  const users = getUsers();
+  const idx = users.findIndex(u => u.id === userId);
+  if (idx < 0) return { error: 'Usuario no encontrado' };
+  users[idx].password = hashPw(newPassword);
+  saveUsers(users);
+  return { ok: true };
 };
 
 // Projects
 export const getProjects = (userId) => {
   const all = get(KEYS.PROJECTS) || [];
-  return all.filter(p => p.userId === userId);
+  return all.filter(p => p.userId === userId || p.setter_id === userId);
 };
 
 export const getAllProjects = () => get(KEYS.PROJECTS) || [];
@@ -82,7 +125,7 @@ export const deleteProject = (id) => {
 // Sessions
 export const getSessions = (userId) => {
   const all = get(KEYS.SESSIONS) || [];
-  return all.filter(s => s.userId === userId);
+  return all.filter(s => s.userId === userId || s.setter_id === userId);
 };
 
 export const getAllSessions = () => get(KEYS.SESSIONS) || [];
@@ -98,7 +141,7 @@ export const saveSession = (session) => {
 // Analyses
 export const getAnalyses = (userId) => {
   const all = get(KEYS.ANALYSES) || [];
-  return all.filter(a => a.userId === userId);
+  return all.filter(a => a.userId === userId || a.setter_id === userId);
 };
 
 export const getAllAnalyses = () => get(KEYS.ANALYSES) || [];
@@ -143,7 +186,6 @@ export const updateUserStats = (userId, score) => {
   users[idx].lastActivity = new Date().toISOString();
   const avg = users[idx].totalScore / users[idx].totalSessions;
   const total = users[idx].totalSessions;
-  // Level calculation
   if (total >= 20 && avg > 90) users[idx].level = 5;
   else if (total >= 15 && avg > 80) users[idx].level = 4;
   else if (total >= 10 && avg > 65) users[idx].level = 3;

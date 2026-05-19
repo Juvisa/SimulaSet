@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { migrarDatosExistentes } from './utils/migration';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Login from './pages/Login';
@@ -18,8 +19,12 @@ import RealLeadForm from './pages/RealLeadForm';
 import RealLeadConversation from './pages/RealLeadConversation';
 import Analytics from './pages/Analytics';
 import AdminAnalytics from './pages/AdminAnalytics';
+import Profile from './pages/Profile';
 import Migrate from './pages/Migrate';
 import RestoreData from './pages/RestoreData';
+
+// Run migration once on app load
+migrarDatosExistentes();
 
 function App() {
   return (
@@ -38,8 +43,9 @@ function App() {
           <Route path="/simulator" element={<ProtectedRoute><Simulator /></ProtectedRoute>} />
           <Route path="/simulation-report" element={<ProtectedRoute><SimulationReport /></ProtectedRoute>} />
           <Route path="/analyzer" element={<ProtectedRoute><Analyzer /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
-          {/* Live Setter Copilot routes */}
+          {/* Copiloto en Vivo / Leads Reales */}
           <Route path="/leads-reales" element={<ProtectedRoute><RealLeads /></ProtectedRoute>} />
           <Route path="/leads-reales/nuevo" element={<ProtectedRoute><RealLeadForm /></ProtectedRoute>} />
           <Route path="/leads-reales/:leadId" element={<ProtectedRoute><RealLeadConversation /></ProtectedRoute>} />
@@ -52,10 +58,10 @@ function App() {
           <Route path="/admin/setter/:setterId" element={<ProtectedRoute adminOnly><AdminSetterDetail /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
 
+          {/* Utilities */}
           <Route path="/migrate" element={<Migrate />} />
           <Route path="/restore" element={<RestoreData />} />
 
-          {/* Redirects */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

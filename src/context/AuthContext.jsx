@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser, clearCurrentUser } from '../utils/storage';
+import { getSession, clearSession, sessionToUser } from '../utils/auth';
+import { getCurrentUser, saveCurrentUser } from '../utils/storage';
 
 const AuthContext = createContext(null);
 
@@ -8,19 +9,31 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = getCurrentUser();
-    if (stored) setUser(stored);
+    // Try new session first, fall back to legacy current_user
+    const session = getSession();
+    if (session) {
+      setUser(sessionToUser(session));
+    } else {
+      const legacy = getCurrentUser();
+      if (legacy) setUser(legacy);
+    }
     setLoading(false);
   }, []);
 
-  const login = (userData) => setUser(userData);
+  const login = (userData) => {
+    setUser(userData);
+    saveCurrentUser(userData);
+  };
 
   const logout = () => {
-    clearCurrentUser();
+    clearSession();
     setUser(null);
   };
 
-  const updateUser = (userData) => setUser(userData);
+  const updateUser = (userData) => {
+    setUser(userData);
+    saveCurrentUser(userData);
+  };
 
   return (
     <AuthContext.Provider value={{ user, login, logout, updateUser, loading }}>

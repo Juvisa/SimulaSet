@@ -129,6 +129,9 @@ const AnalysisPanel = ({ analysis }) => {
           ))}
         </div>
       )}
+      {analysis.nota_tactica && (
+        <p className="text-text-secondary text-xs italic">{analysis.nota_tactica}</p>
+      )}
       {analysis.alerta && (
         <div className="flex items-start gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
           <AlertTriangle size={12} className="text-amber-400 flex-shrink-0 mt-0.5" />

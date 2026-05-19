@@ -258,43 +258,44 @@ RESPONDE EN ESTE JSON (JSON puro, sin markdown):
 
 export const buildRealLeadAnalysisPrompt = (project, lead, historialReciente, mensajeLead) => `
 Eres un experto coach de appointment setting de alto ticket.
-Tu rol es analizar el mensaje que acaba de escribir un lead real
-y sugerir al setter las 3 mejores opciones de respuesta basadas
-en el Método S.E.T. y el contexto del proyecto.
+Analiza el mensaje que acaba de enviar un lead real
+y sugiere al setter las 3 mejores respuestas.
 
 CONTEXTO DEL PROYECTO:
 - Experto: ${project.expertName}
 - Nicho: ${project.niche}
 - Promesa: ${project.promise}
-- Precio aproximado: ${project.price}
-- Avatar: ${project.avatarDescription}
+- Precio: ${project.price}
+- Avatar ideal: ${project.avatarDescription}
+- Objeciones comunes: ${project.commonObjections || 'No especificadas'}
 - Resultados reales: ${JSON.stringify(project.testimonials)}${buildRecursosContext(project)}
 
 DATOS DEL LEAD:
 - Nombre: ${lead.nombre}
 - Origen: ${lead.origen}
 - Canal: ${lead.canal}
-- Dolor principal registrado: ${lead.dolor_principal}
-- Nivel de consciencia: ${lead.nivel_consciencia}
-- Temperatura actual: ${lead.temperatura}
+- Dolor principal: ${lead.dolor_principal}
+- Temperatura: ${lead.temperatura}
 
-HISTORIAL DE LA CONVERSACIÓN (últimos 6 turnos):
-${historialReciente}
+HISTORIAL RECIENTE (últimos 4 turnos):
+${historialReciente || 'Sin historial previo'}
 
 MENSAJE ACTUAL DEL LEAD:
 "${mensajeLead}"
 
-MÉTODO S.E.T. COMO MARCO:
-- S (Situación): Rapport y entender el contexto actual
-- E (Emoción): Activar el costo real del problema, elevar la conciencia
-- T (Transacción): Calificar y proponer el siguiente paso
+MÉTODO S.E.T.:
+- S (Situación): Rapport, contexto, entender su mundo
+- E (Emoción): Activar dolor, costo real, elevar conciencia
+- T (Transacción): Calificar y proponer la cita — nunca el programa
 
 REGLAS:
-- Las 3 opciones deben ser diferentes entre sí — distintas técnicas
-- Si el lead está en etapa S: no proponer cita todavía
-- Si el lead está en etapa E avanzada: una opción puede ser calificar (T)
-- Tono: WhatsApp/DM natural, no corporativo
-- Máximo 3-4 líneas por sugerencia
+- Las 3 opciones deben ser distintas entre sí (técnicas diferentes)
+- Máximo 3-4 líneas por mensaje — conversacional, no corporativo
+- Si estamos en S: no ir a la T todavía
+- Si el lead reveló dolor fuerte: una opción puede ser T suave
+- Si el lead pregunta por precio: manejarlo con elegancia, no esquivar
+- Objetivo siempre: conseguir la cita, no cerrar el programa
+- Si el lead ya está listo: proponer la cita directamente en la opción 3
 
 RESPONDE EN ESTE JSON (JSON puro, sin markdown):
 {
@@ -303,7 +304,8 @@ RESPONDE EN ESTE JSON (JSON puro, sin markdown):
     "nivel_interes": 65,
     "señales_detectadas": ["señal 1"],
     "temperatura_actualizada": "Tibio",
-    "alerta": ""
+    "alerta": "",
+    "nota_tactica": "insight breve — qué está pasando y qué hacer"
   },
   "sugerencias": [
     {
