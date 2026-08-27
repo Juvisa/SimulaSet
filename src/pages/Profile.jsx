@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getSessions, getUsers, updatePassword } from '../utils/storage';
+import { getSessions } from '../utils/storage';
 import { getRealLeads } from '../utils/storage';
 import Layout from '../components/Layout';
-import { User, Lock, LogOut, Check, AlertTriangle } from 'lucide-react';
+import { Lock, LogOut, Check, AlertTriangle } from 'lucide-react';
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors outline-none";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
@@ -17,8 +17,7 @@ const NIVEL_LABELS = {
 };
 
 const Profile = () => {
-  const { user, logout } = useAuth();
-  const [currentPw, setCurrentPw] = useState('');
+  const { user, logout, updatePassword } = useAuth();
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [pwError, setPwError] = useState('');
@@ -35,24 +34,22 @@ const Profile = () => {
   const stars = Math.min(user.level || 1, 5);
 
   const fechaRegistro = (() => {
-    const users = getUsers();
-    const u = users.find(x => x.id === user.id);
-    if (!u?.fecha_registro) return 'N/A';
-    return new Date(u.fecha_registro).toLocaleDateString('es', { month: 'long', year: 'numeric' });
+    if (!user.created_at) return 'N/A';
+    return new Date(user.created_at).toLocaleDateString('es', { month: 'long', year: 'numeric' });
   })();
 
-  const handleChangePw = (e) => {
+  const handleChangePw = async (e) => {
     e.preventDefault();
     setPwError('');
     setPwSuccess(false);
     if (newPw.length < 6) { setPwError('Mínimo 6 caracteres'); return; }
     if (newPw !== confirmPw) { setPwError('Las contraseñas no coinciden'); return; }
     setSaving(true);
-    const result = updatePassword(user.id, newPw);
+    const result = await updatePassword(newPw);
     setSaving(false);
     if (result.error) { setPwError(result.error); return; }
     setPwSuccess(true);
-    setCurrentPw(''); setNewPw(''); setConfirmPw('');
+    setNewPw(''); setConfirmPw('');
     setTimeout(() => setPwSuccess(false), 3000);
   };
 

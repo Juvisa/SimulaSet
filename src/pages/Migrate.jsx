@@ -3,7 +3,7 @@ import { Download, Upload, Check, AlertTriangle } from 'lucide-react';
 
 const KEYS = ['simulaset_projects', 'simulaset_sessions', 'simulaset_analyses',
   'simulaset_admin_feedback', 'real_leads_sessions', 'follow_up_schedule',
-  'simulaset_users', 'simulaset_current_user'];
+  'simulaset_users'];
 
 const Migrate = () => {
   const [exported, setExported] = useState('');

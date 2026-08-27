@@ -8,7 +8,7 @@ import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
-import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock } from 'lucide-react';
+import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot } from 'lucide-react';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
 import { getProjects as getAllProjs } from '../utils/storage';
@@ -37,6 +37,7 @@ const Dashboard = () => {
   const refreshFollowUps = () => setFollowUps(verificarSeguimientosPendientes(user.id));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProjects(getProjects(user.id));
     setSessions(getSessions(user.id));
     setAnalyses(getAnalyses(user.id));
@@ -45,7 +46,7 @@ const Dashboard = () => {
     refreshFollowUps();
     const interval = setInterval(refreshFollowUps, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user.id]);
+  }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const levelInfo = getLevelInfo(user.level || 1);
   const progress = getProgressToNext(user);
@@ -59,12 +60,6 @@ const Dashboard = () => {
   const leadsClosed = sessions.filter(s =>
     ['pidio_llamada', 'confirmado_con_entusiasmo', 'quiere_reagendar'].includes(s.finalState)
   ).length;
-
-  const modeCounts = sessions.reduce((acc, s) => {
-    acc[s.mode] = (acc[s.mode] || 0) + 1;
-    return acc;
-  }, {});
-  const topMode = Object.entries(modeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
 
   const dismissFeedback = (id) => {
     markFeedbackSeen(id);
@@ -102,6 +97,30 @@ const Dashboard = () => {
 
   return (
     <Layout>
+      {/* DIGITAL SET journey hero */}
+      <section className="relative overflow-hidden bg-bg-card border border-accent-coral/20 rounded-2xl p-6 md:p-8 mb-6">
+        <div className="absolute -right-16 -top-20 w-56 h-56 rounded-full bg-accent-coral/10 blur-3xl" />
+        <div className="relative">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral mb-2">Tu recorrido</div>
+              <h1 className="text-2xl md:text-3xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
+              <p className="text-text-secondary text-sm mt-2">Aprende. Entrena. Demuestra. Desbloquea.</p>
+            </div>
+            <button onClick={() => navigate('/journey')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
+              Ver mi recorrido →
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-7 mb-4">
+            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1">SET Rookie 🌱</div></div>
+            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1">0</div></div>
+            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Próximo nivel</div><div className="text-sm md:text-lg font-black mt-1">SET Operator ⚡</div></div>
+          </div>
+          <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
+          <p className="text-text-secondary text-xs mt-2">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>
+        </div>
+      </section>
+
       {/* Seguimientos pendientes */}
       {followUps.total_activos > 0 ? (
         <div className="mb-6 bg-bg-card border border-border-subtle rounded-2xl overflow-hidden">
@@ -203,6 +222,42 @@ const Dashboard = () => {
             <span className="text-accent-gold font-bold">🏆 Certificación S.E.T. Desbloqueada</span>
           </div>
         )}
+      </div>
+
+      {/* DIGITAL SET quick access */}
+      <div className="grid md:grid-cols-3 gap-4 mb-6">
+        <button
+          onClick={() => navigate('/academy')}
+          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-accent-gold/40 transition-all group"
+        >
+          <div className="w-11 h-11 rounded-xl bg-accent-gold/10 flex items-center justify-center mb-4">
+            <BookOpen size={21} className="text-accent-gold" />
+          </div>
+          <div className="text-xs font-black tracking-widest text-accent-gold mb-1">CONTINÚA TU FORMACIÓN</div>
+          <div className="text-lg font-bold text-text-primary group-hover:text-accent-gold transition-colors">Ir a la Academia →</div>
+        </button>
+        <button
+          onClick={() => navigate('/simulate')}
+          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-accent-coral/40 transition-all group"
+        >
+          <div className="w-11 h-11 rounded-xl bg-accent-coral/10 flex items-center justify-center mb-4">
+            <Bot size={21} className="text-accent-coral" />
+          </div>
+          <div className="text-xs font-black tracking-widest text-accent-coral mb-1">ENTRENA CON IA</div>
+          <div className="text-lg font-bold text-text-primary group-hover:text-accent-coral transition-colors">Iniciar Simulación →</div>
+          <div className="text-text-secondary text-xs mt-1">Módulo SimulaSET</div>
+        </button>
+        <button
+          onClick={() => navigate('/wins')}
+          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-green-500/40 transition-all group"
+        >
+          <div className="w-11 h-11 rounded-xl bg-green-500/10 flex items-center justify-center mb-4">
+            <Award size={21} className="text-green-400" />
+          </div>
+          <div className="text-xs font-black tracking-widest text-green-400 mb-1">SET WINS</div>
+          <div className="text-sm text-text-secondary mb-1">Celebra resultados reales.</div>
+          <div className="text-lg font-bold text-text-primary group-hover:text-green-400 transition-colors">Ver comunidad →</div>
+        </button>
       </div>
 
       {/* Stats */}

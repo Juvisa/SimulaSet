@@ -1,32 +1,23 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getRealLeads } from '../utils/storage';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
-import { LayoutDashboard, Users, TrendingUp, UserCircle, Shield, Gamepad2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { LayoutDashboard, TrendingUp, UserCircle, Shield, Dumbbell, BookOpen, BriefcaseBusiness, Trophy } from 'lucide-react';
 
 const Navbar = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeLeads, setActiveLeads] = useState(0);
-  const [pendingFollowUpCount, setPendingFollowUpCount] = useState(0);
-
-  useEffect(() => {
-    if (user?.id) {
-      const leads = getRealLeads(user.id);
-      setActiveLeads(leads.filter(l => l.estado === 'activo' || l.estado === 'fantasma').length);
-      const fu = verificarSeguimientosPendientes(user.id);
-      setPendingFollowUpCount(fu.total_activos);
-    }
-  }, [user, location.pathname]);
+  const pendingFollowUpCount = user?.id
+    ? verificarSeguimientosPendientes(user.id).total_activos
+    : 0;
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
   const setterLinks = [
     { to: '/dashboard',    icon: LayoutDashboard, label: 'Inicio',   badge: pendingFollowUpCount },
-    { to: '/simulate',     icon: Gamepad2,         label: 'Simular' },
-    { to: '/leads-reales', icon: Users,             label: 'Leads',  badge: activeLeads },
-    { to: '/analytics',    icon: TrendingUp,        label: 'Stats' },
+    { to: '/academy',      icon: BookOpen,          label: 'SET Academy' },
+    { to: '/simulate',     icon: Dumbbell,          label: 'SimulaSET AI' },
+    { to: '/opportunities', icon: BriefcaseBusiness, label: 'SET Opportunity Hub' },
+    { to: '/wins',         icon: Trophy,            label: 'SET Wins' },
     { to: '/profile',      icon: UserCircle,        label: 'Perfil' },
   ];
 
@@ -45,7 +36,7 @@ const Navbar = () => {
         {/* Desktop */}
         <div className="hidden md:flex items-center justify-between h-16">
           <Link to="/dashboard" className="flex items-center gap-1">
-            <span className="text-xl font-black text-accent-coral">Simula</span>
+            <span className="text-xl font-black text-accent-coral">DIGITAL</span>
             <span className="text-xl font-black text-text-primary">SET</span>
           </Link>
           <div className="flex items-center gap-1">

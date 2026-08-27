@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { loginUser, registerUser } from '../utils/storage';
 import { Eye, EyeOff } from 'lucide-react';
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors outline-none";
@@ -21,30 +20,29 @@ const Login = () => {
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
 
-  const { login } = useAuth();
+  const { login, register, authError } = useAuth();
   const navigate = useNavigate();
 
   const switchMode = (m) => { setMode(m); setError(''); };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const result = loginUser(loginEmail.trim(), loginPassword);
+    const result = await login(loginEmail.trim(), loginPassword);
     setLoading(false);
     if (result.error) { setError(result.error); return; }
-    login(result.user);
     navigate(result.user.role === 'admin' ? '/admin' : '/dashboard');
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     if (!regName.trim()) { setError('El nombre es obligatorio'); return; }
     if (regPassword.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
     if (regPassword !== regConfirm) { setError('Las contraseñas no coinciden'); return; }
     setLoading(true);
-    const result = registerUser(regName.trim(), regEmail.trim(), regPassword);
+    const result = await register(regName.trim(), regEmail.trim(), regPassword);
     setLoading(false);
     if (result.error) {
       setError(result.error.includes('ya registrado')
@@ -52,7 +50,11 @@ const Login = () => {
         : result.error);
       return;
     }
-    login(result.user);
+    if (result.needsConfirmation) {
+      setError('Revisa tu correo para confirmar la cuenta antes de iniciar sesión.');
+      setMode('login');
+      return;
+    }
     navigate('/dashboard');
   };
 
@@ -77,9 +79,9 @@ const Login = () => {
             ))}
           </div>
 
-          {error && (
+          {(error || authError) && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-4 text-red-400 text-sm">
-              {error}
+              {error || authError}
               {error.includes('iniciar sesión') && (
                 <button onClick={() => switchMode('login')} className="underline ml-1 font-medium">Ir a login</button>
               )}

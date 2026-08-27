@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { migrarDatosExistentes } from './utils/migration';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Login from './pages/Login';
@@ -22,9 +21,10 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import Profile from './pages/Profile';
 import Migrate from './pages/Migrate';
 import RestoreData from './pages/RestoreData';
-
-// Run migration once on app load
-migrarDatosExistentes();
+import Academy from './pages/Academy';
+import Opportunities from './pages/Opportunities';
+import Wins from './pages/Wins';
+import Journey from './pages/Journey';
 
 function App() {
   return (
@@ -44,6 +44,10 @@ function App() {
           <Route path="/simulation-report" element={<ProtectedRoute><SimulationReport /></ProtectedRoute>} />
           <Route path="/analyzer" element={<ProtectedRoute><Analyzer /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/academy" element={<ProtectedRoute><Academy /></ProtectedRoute>} />
+          <Route path="/opportunities" element={<ProtectedRoute><Opportunities /></ProtectedRoute>} />
+          <Route path="/wins" element={<ProtectedRoute><Wins /></ProtectedRoute>} />
+          <Route path="/journey" element={<ProtectedRoute><Journey /></ProtectedRoute>} />
 
           {/* Copiloto en Vivo / Leads Reales */}
           <Route path="/leads-reales" element={<ProtectedRoute><RealLeads /></ProtectedRoute>} />
