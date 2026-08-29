@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, saveAnalysis } from '../utils/storage';
-import { callClaude } from '../utils/anthropic';
+import { callClaude, extractConversationText } from '../utils/anthropic';
 import { buildAnalyzerPrompt } from '../utils/prompts';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
@@ -81,18 +81,7 @@ const Analyzer = () => {
 
       // If image, extract text first
       if (form.imageData) {
-        const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-5',
-            max_tokens: 2000,
-            messages: [{
+        conversationText = await extractConversationText([{
               role: 'user',
               content: [
                 {
@@ -108,11 +97,7 @@ const Analyzer = () => {
                   text: 'Extrae el texto de esta conversación de WhatsApp o DM. Mantén el formato original con los nombres o indicadores de quién habla. Devuelve solo el texto de la conversación.',
                 },
               ],
-            }],
-          }),
-        });
-        const extractData = await extractResponse.json();
-        conversationText = extractData.content[0]?.text || 'No se pudo extraer el texto';
+            }]) || 'No se pudo extraer el texto';
       }
 
       const prompt = buildAnalyzerPrompt(project, form.mode, conversationText);
