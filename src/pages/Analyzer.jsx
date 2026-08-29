@@ -51,7 +51,13 @@ const Analyzer = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setProjects(getProjects(user.id));
+    const loadedProjects = getProjects(user.id);
+    setProjects(loadedProjects);
+    if (loadedProjects.length === 1) {
+      setForm(current => current.projectId
+        ? current
+        : { ...current, projectId: loadedProjects[0].id });
+    }
   }, [user.id]);
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
