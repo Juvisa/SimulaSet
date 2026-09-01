@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Component, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, saveAnalysis } from '../utils/storage';
@@ -11,6 +11,55 @@ import { BarChart2, Upload, FileText, Loader2, Copy, Check, AlertTriangle, Check
 
 const SELECT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary text-sm focus:border-accent-coral transition-colors";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
+
+const getReceivedType = (value) => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+
+const validateAnalyzerResult = (payload) => {
+  const requiredObjects = ['diagnostico', 'prediccion_lead', 'plan_accion', 'puntuacion_setter'];
+  for (const field of requiredObjects) {
+    const value = payload?.[field];
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return { field, receivedType: getReceivedType(value) };
+    }
+  }
+
+  const requiredArrays = [
+    ['diagnostico.etapas_presentes', payload.diagnostico.etapas_presentes],
+    ['diagnostico.etapas_ausentes', payload.diagnostico.etapas_ausentes],
+    ['diagnostico.mensajes_efectivos', payload.diagnostico.mensajes_efectivos],
+    ['diagnostico.mensajes_con_friccion', payload.diagnostico.mensajes_con_friccion],
+    ['diagnostico.oportunidades_perdidas', payload.diagnostico.oportunidades_perdidas],
+    ['prediccion_lead.senales_interes', payload.prediccion_lead.senales_interes],
+    ['prediccion_lead.senales_alerta', payload.prediccion_lead.senales_alerta],
+    ['puntuacion_setter.aprendizajes', payload.puntuacion_setter.aprendizajes],
+  ];
+  for (const [field, value] of requiredArrays) {
+    if (!Array.isArray(value)) return { field, receivedType: getReceivedType(value) };
+  }
+
+  return null;
+};
+
+class AnalyzerResultBoundary extends Component {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('Analyzer payload incompatible', {
+      field: 'result_render',
+      receivedType: error?.name || typeof error,
+      payload: this.props.payload,
+    });
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 const CopyButton = ({ text }) => {
   const [copied, setCopied] = useState(false);
@@ -108,6 +157,16 @@ const Analyzer = () => {
 
       const prompt = buildAnalyzerPrompt(project, form.mode, conversationText);
       const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { mode: 'analyzer' });
+
+      const validationError = validateAnalyzerResult(analysis);
+      if (validationError) {
+        console.error('Analyzer payload incompatible', {
+          field: validationError.field,
+          receivedType: validationError.receivedType,
+          payload: analysis,
+        });
+        throw new Error(`Respuesta incompatible en ${validationError.field}`);
+      }
 
       setResult(analysis);
       saveAnalysis({
@@ -231,6 +290,13 @@ const Analyzer = () => {
             </button>
           </div>
         ) : (
+          <AnalyzerResultBoundary
+            payload={result}
+            onError={() => {
+              setResult(null);
+              setError('Error: No se pudo mostrar el resultado del análisis');
+            }}
+          >
           <div className="space-y-5 animate-slide-up">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -410,6 +476,7 @@ const Analyzer = () => {
               Volver al inicio
             </button>
           </div>
+          </AnalyzerResultBoundary>
         )}
       </div>
     </Layout>
