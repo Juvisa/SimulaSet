@@ -10,6 +10,27 @@ const fetchProfile = async (userId) => supabase
   .eq('id', userId)
   .single();
 
+const fetchUser = async (userId) => {
+  const { data: profile, error: profileError } = await fetchProfile(userId);
+  if (profileError || !profile) return { profile: null, error: profileError };
+
+  const { data: onboarding, error: onboardingError } = await supabase
+    .from('onboarding')
+    .select('classification, experience_score, completed_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (onboardingError) return { profile: null, error: onboardingError };
+  return {
+    profile: {
+      ...profile,
+      onboardingCompleted: Boolean(onboarding?.completed_at),
+      onboarding: onboarding || null,
+    },
+    error: null,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(supabaseConfigured);
@@ -30,7 +51,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const { data: profile, error } = await fetchProfile(session.user.id);
+      const { profile, error } = await fetchUser(session.user.id);
       if (error || !profile?.active) {
         await supabase.auth.signOut();
         if (mounted) setUser(null);
@@ -69,7 +90,7 @@ export const AuthProvider = ({ children }) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
 
-    const { data: profile, error: profileError } = await fetchProfile(data.user.id);
+    const { profile, error: profileError } = await fetchUser(data.user.id);
     if (profileError || !profile) {
       await supabase.auth.signOut();
       return { error: 'No se pudo cargar el perfil del usuario.' };
@@ -92,7 +113,7 @@ export const AuthProvider = ({ children }) => {
     if (error) return { error: error.message };
     if (!data.session) return { needsConfirmation: true };
 
-    const { data: profile, error: profileError } = await fetchProfile(data.user.id);
+    const { profile, error: profileError } = await fetchUser(data.user.id);
     if (profileError || !profile) return { error: 'La cuenta se creó, pero no se pudo cargar el perfil.' };
     setUser(profile);
     return { user: profile };
@@ -108,7 +129,7 @@ export const AuthProvider = ({ children }) => {
     if (!supabase) return { error: 'Supabase no está configurado.' };
     const { data, error } = await supabase.from('profiles')
       .update({ name }).eq('id', user.id).select(PROFILE_FIELDS).single();
-    if (!error) setUser(data);
+    if (!error) setUser(current => ({ ...current, ...data }));
     return { user: data, error: error?.message };
   };
 
@@ -118,8 +139,43 @@ export const AuthProvider = ({ children }) => {
     return { error: error?.message };
   };
 
+  const completeOnboarding = async (answers) => {
+    if (!supabase || !user) return { error: 'No se pudo guardar el onboarding.' };
+
+    const classification = answers.worked_setter || answers.worked_closer || answers.sold_by_chat
+      ? 'experienced'
+      : 'starter';
+    const experienceScore =
+      Number(answers.worked_digital_business)
+      + Number(answers.knows_lead)
+      + Number(answers.crm !== 'none')
+      + (Number(answers.worked_setter) * 2)
+      + (Number(answers.worked_closer) * 2)
+      + Number(answers.participated_launch)
+      + (Number(answers.sold_by_chat) * 2);
+
+    const payload = {
+      user_id: user.id,
+      ...answers,
+      crm_other: answers.crm === 'other' ? answers.crm_other.trim() : null,
+      goal_other: answers.primary_goal === 'other' ? answers.goal_other.trim() : null,
+      classification,
+      experience_score: experienceScore,
+      completed_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase.from('onboarding')
+      .upsert(payload, { onConflict: 'user_id' })
+      .select('classification, experience_score, completed_at')
+      .single();
+
+    if (error) return { error: error.message };
+    setUser(current => ({ ...current, onboardingCompleted: true, onboarding: data }));
+    return { onboarding: data };
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updatePassword, loading, authError }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updatePassword, completeOnboarding, loading, authError }}>
       {children}
     </AuthContext.Provider>
   );

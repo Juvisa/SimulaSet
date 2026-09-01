@@ -25,6 +25,7 @@ import Academy from './pages/Academy';
 import Opportunities from './pages/Opportunities';
 import Wins from './pages/Wins';
 import Journey from './pages/Journey';
+import Onboarding from './pages/Onboarding';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/onboarding" element={<ProtectedRoute onboardingOnly><Onboarding /></ProtectedRoute>} />
 
           {/* Setter routes */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
