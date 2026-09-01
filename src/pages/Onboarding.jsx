@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -64,7 +63,6 @@ const BooleanQuestion = ({ label, value, onChange }) => (
 );
 
 const Onboarding = () => {
-  const navigate = useNavigate();
   const { completeOnboarding } = useAuth();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -94,7 +92,7 @@ const Onboarding = () => {
       setError(`No pudimos guardar tus respuestas: ${result.error}`);
       return;
     }
-    navigate('/dashboard', { replace: true });
+    window.location.replace('/dashboard');
   };
 
   return (
