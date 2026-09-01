@@ -1,12 +1,12 @@
 const MAX_TOKENS = 1500;
 
-const requestClaude = async ({ systemPrompt, messages, maxTokens }) => {
+const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
   const response = await fetch('/api/anthropic', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ systemPrompt, messages, maxTokens }),
+    body: JSON.stringify({ systemPrompt, messages, maxTokens, mode }),
   });
 
   if (!response.ok) {
@@ -18,8 +18,8 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens }) => {
   return data.text || '';
 };
 
-export const callClaude = async (systemPrompt, messages) => {
-  const text = await requestClaude({ systemPrompt, messages, maxTokens: MAX_TOKENS });
+export const callClaude = async (systemPrompt, messages, options = {}) => {
+  const text = await requestClaude({ systemPrompt, messages, maxTokens: MAX_TOKENS, mode: options.mode });
 
   // Parse JSON from response
   const jsonMatch = text.match(/\{[\s\S]*\}/);

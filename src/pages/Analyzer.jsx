@@ -107,7 +107,7 @@ const Analyzer = () => {
       }
 
       const prompt = buildAnalyzerPrompt(project, form.mode, conversationText);
-      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { mode: 'analyzer' });
 
       setResult(analysis);
       saveAnalysis({
