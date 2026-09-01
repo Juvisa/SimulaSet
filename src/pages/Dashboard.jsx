@@ -23,9 +23,12 @@ const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
   </div>
 );
 
+const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
+
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isStarter = user.onboarding?.classification === 'starter';
   const [projects, setProjects] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [analyses, setAnalyses] = useState([]);
@@ -105,11 +108,23 @@ const Dashboard = () => {
             <div>
               <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral mb-2">Tu recorrido</div>
               <h1 className="text-2xl md:text-3xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
-              <p className="text-text-secondary text-sm mt-2">Aprende. Entrena. Demuestra. Desbloquea.</p>
+              <p className="text-text-secondary text-sm mt-2">{isStarter ? 'Tu ruta comienza con una base clara.' : 'Tu experiencia te permite comenzar directamente en SET Academy.'}</p>
             </div>
-            <button onClick={() => navigate('/journey')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
-              Ver mi recorrido →
+            <button onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
+              {isStarter ? 'Comenzar DIGITAL SET START' : 'Entrar a SET Academy'} →
             </button>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5 mt-7">
+            {journeySteps.map((item, index) => {
+              const active = isStarter ? index === 0 : index === 1;
+              const optional = !isStarter && index === 0;
+              return (
+                <div key={item} className={`rounded-xl border px-2 py-2.5 text-center ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
+                  <div className={`text-[9px] md:text-[10px] font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
+                  {optional && <div className="text-[8px] text-text-secondary mt-0.5">Opcional</div>}
+                </div>
+              );
+            })}
           </div>
           <div className="grid grid-cols-3 gap-3 mt-7 mb-4">
             <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1">SET Rookie 🌱</div></div>
@@ -186,13 +201,14 @@ const Dashboard = () => {
         </div>
 
         {/* Main CTA */}
+        {isStarter && <p className="text-sm text-text-secondary mt-4">Según tu diagnóstico, te recomendamos comenzar por los fundamentos antes de entrar al entrenamiento.</p>}
         <div className="flex gap-2 mt-4">
           <button
-            onClick={() => navigate('/simulate')}
+            onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy')}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white transition-all hover:opacity-90 active:scale-95"
             style={{ backgroundColor: '#E0605E' }}
           >
-            <Play size={18} /> INICIAR SIMULACIÓN
+            <BookOpen size={18} /> {isStarter ? 'COMENZAR DIGITAL SET START' : 'ENTRAR A SET ACADEMY'}
           </button>
           <button
             onClick={() => navigate('/leads-reales/nuevo')}

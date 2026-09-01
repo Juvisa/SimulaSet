@@ -1,6 +1,9 @@
 import { ArrowRight, BriefcaseBusiness, CalendarCheck, Check, CircleDollarSign, Flame, LockKeyhole, Medal, Mic2, Sparkles, Target, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
+
+const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 
 const missionItems = [
   'Asiste a la sesión en vivo',
@@ -26,6 +29,8 @@ const unlocks = [
 
 const Journey = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isStarter = user.onboarding?.classification === 'starter';
 
   return (
     <Layout>
@@ -33,8 +38,32 @@ const Journey = () => {
         <header className="text-center py-4">
           <div className="text-accent-coral text-xs font-black uppercase tracking-[0.3em] mb-3">Tu recorrido</div>
           <h1 className="text-3xl md:text-5xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
-          <p className="text-text-secondary mt-3">Aprende. Entrena. Demuestra. Desbloquea.</p>
+          <p className="text-text-secondary mt-3">START. Aprende. Entrena. Demuestra. Desbloquea.</p>
         </header>
+
+        <section className="bg-bg-card border border-border-subtle rounded-2xl p-5 md:p-6">
+          <div className="grid grid-cols-5 gap-1.5">
+            {journeySteps.map((item, index) => {
+              const active = isStarter ? index === 0 : index === 1;
+              const optional = !isStarter && index === 0;
+              return (
+                <div key={item} className={`rounded-xl border px-2 py-3 text-center ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
+                  <div className={`text-[9px] md:text-xs font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
+                  {optional && <div className="text-[8px] md:text-[9px] text-text-secondary mt-1">Opcional</div>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-5">
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider text-accent-coral">Tu siguiente paso</div>
+              <p className="text-sm text-text-secondary mt-1">{isStarter ? 'Construye primero una base clara con DIGITAL SET START.' : 'Comienza directamente tu formación en SET Academy; START queda disponible si quieres repasar.'}</p>
+            </div>
+            <button onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy')} className="flex-shrink-0 bg-accent-coral text-white px-4 py-2.5 rounded-xl text-sm font-bold">
+              {isStarter ? 'Comenzar DIGITAL SET START' : 'Entrar a SET Academy'} <ArrowRight size={14} className="inline ml-1" />
+            </button>
+          </div>
+        </section>
 
         <section className="bg-bg-card border border-accent-coral/20 rounded-2xl p-6 md:p-8">
           <div className="grid md:grid-cols-3 gap-5 mb-6">

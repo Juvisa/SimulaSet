@@ -1,5 +1,8 @@
 import { BookOpen, CalendarDays, CheckCircle2, Clock3 } from 'lucide-react';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
+
+const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 
 const modules = [
   { week: 'Semana 1', title: 'El terreno y el Método S.E.T.', date: '3 de septiembre', available: true },
@@ -8,7 +11,11 @@ const modules = [
   { week: 'Semana 4', title: 'Oportunidades y entrevistas', date: '24 de septiembre' },
 ];
 
-const Academy = () => (
+const Academy = () => {
+  const { user } = useAuth();
+  const isStarter = user.onboarding?.classification === 'starter';
+
+  return (
   <Layout>
     <div className="max-w-4xl mx-auto animate-fade-in">
       <div className="mb-8">
@@ -18,6 +25,30 @@ const Academy = () => (
         <h1 className="text-3xl md:text-4xl font-black text-text-primary">Tu ruta DIGITAL SET</h1>
         <p className="text-text-secondary mt-2">Aprende. Entrena. Aplica.</p>
       </div>
+
+      <div className="grid grid-cols-5 gap-1.5 mb-6">
+        {journeySteps.map((item, index) => {
+          const active = isStarter ? index === 0 : index === 1;
+          const optional = !isStarter && index === 0;
+          return (
+            <div key={item} className={`rounded-xl border px-2 py-2.5 text-center ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
+              <div className={`text-[9px] md:text-[10px] font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
+              {optional && <div className="text-[8px] text-text-secondary mt-0.5">Opcional</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <article id="digital-set-start" className={`scroll-mt-6 rounded-2xl border p-6 mb-6 ${isStarter ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-card'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.2em] text-accent-coral">Módulo 0 · DIGITAL SET START</div>
+            <h2 className="text-xl font-black text-text-primary mt-2">Fundamentos para comenzar con claridad</h2>
+            <p className="text-sm text-text-secondary mt-2 max-w-2xl">Comprende el ecosistema digital, el rol del setter, qué es un lead y cómo funciona una conversación comercial por chat.</p>
+          </div>
+          <span className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-bold ${isStarter ? 'bg-accent-coral text-white' : 'bg-bg-input text-text-secondary'}`}>{isStarter ? 'Tu primer paso' : 'Opcional'}</span>
+        </div>
+      </article>
 
       <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 mb-6">
         <div className="flex justify-between text-sm mb-3">
@@ -48,6 +79,7 @@ const Academy = () => (
       </div>
     </div>
   </Layout>
-);
+  );
+};
 
 export default Academy;
