@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, deleteProject } from '../utils/storage';
 import Layout from '../components/Layout';
-import { Plus, Trash2, Edit3, Play, BarChart2, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit3, Play, ChevronRight } from 'lucide-react';
 
 const Projects = () => {
   const { user } = useAuth();
@@ -106,13 +106,6 @@ const Projects = () => {
                 >
                   <Play size={14} />
                   Simular
-                </button>
-                <button
-                  onClick={() => navigate('/analyzer', { state: { projectId: project.id } })}
-                  className="flex-1 flex items-center justify-center gap-2 bg-bg-input text-text-secondary border border-border-subtle px-3 py-2 rounded-lg text-sm font-medium hover:text-text-primary transition-all"
-                >
-                  <BarChart2 size={14} />
-                  Analizar
                 </button>
               </div>
             </div>

@@ -10,7 +10,6 @@ import ProjectForm from './pages/ProjectForm';
 import ModeSelector from './pages/ModeSelector';
 import Simulator from './pages/Simulator';
 import SimulationReport from './pages/SimulationReport';
-import Analyzer from './pages/Analyzer';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminSetterDetail from './pages/AdminSetterDetail';
 import RealLeads from './pages/RealLeads';
@@ -42,7 +41,7 @@ function App() {
           <Route path="/simulate" element={<ProtectedRoute><ModeSelector /></ProtectedRoute>} />
           <Route path="/simulator" element={<ProtectedRoute><Simulator /></ProtectedRoute>} />
           <Route path="/simulation-report" element={<ProtectedRoute><SimulationReport /></ProtectedRoute>} />
-          <Route path="/analyzer" element={<ProtectedRoute><Analyzer /></ProtectedRoute>} />
+          <Route path="/analyzer" element={<Navigate to="/dashboard" replace />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/academy" element={<ProtectedRoute><Academy /></ProtectedRoute>} />
           <Route path="/opportunities" element={<ProtectedRoute><Opportunities /></ProtectedRoute>} />

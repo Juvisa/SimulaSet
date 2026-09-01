@@ -8,7 +8,7 @@ import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import FomoBar from '../components/FomoBar';
 import LevelBadge from '../components/LevelBadge';
-import { Play, BarChart2, Home, Loader2, Trophy, AlertTriangle, CheckCircle, BookOpen, FileText } from 'lucide-react';
+import { Play, Home, Loader2, Trophy, AlertTriangle, CheckCircle, BookOpen, FileText } from 'lucide-react';
 import BriefingModal from '../components/BriefingModal';
 
 const SimulationReport = () => {
@@ -232,13 +232,6 @@ const SimulationReport = () => {
           >
             <Play size={20} />
             <span className="text-xs">Practicar</span>
-          </button>
-          <button
-            onClick={() => navigate('/analyzer')}
-            className="flex flex-col items-center gap-2 bg-bg-card border border-border-subtle py-4 rounded-xl text-text-secondary hover:text-text-primary transition-all"
-          >
-            <BarChart2 size={20} />
-            <span className="text-xs">Analizar</span>
           </button>
         </div>
       </div>

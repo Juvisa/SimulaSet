@@ -404,21 +404,6 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Analyzer CTA — always visible */}
-      <div className="mt-6 bg-bg-card border border-border-subtle rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:border-blue-500/40 transition-all"
-        onClick={() => navigate('/analyzer')}>
-        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-          <MessageSquare size={22} className="text-blue-400" />
-        </div>
-        <div className="flex-1">
-          <div className="font-bold text-text-primary text-sm">Analizar conversación real</div>
-          <div className="text-text-secondary text-xs mt-0.5">Pega una conversación de tu CRM y recibe sugerencias exactas de qué decir</div>
-        </div>
-        <div className="text-text-secondary text-xs border border-border-subtle rounded-lg px-3 py-1.5 flex-shrink-0">
-          Abrir →
-        </div>
-      </div>
-
       {openFollowUp && (
         <FollowUpMessagePanel
           isOpen={!!openFollowUp}
