@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const ADMIN_LESSON_FIELDS = 'id, course_id, module_id, lesson_id, title, description, position, topics, published, scheduled_at, video_status';
+const ADMIN_LESSON_FIELDS = 'id, course_id, module_id, lesson_id, title, description, position, topics, resources, published, scheduled_at, video_status';
 
 export const getAllAcademyLessons = async () => {
   try {
@@ -32,6 +32,7 @@ export const createAcademyLesson = async (lesson) => {
         description: lesson.description,
         position: lesson.position,
         topics: lesson.topics,
+        resources: lesson.resources,
         published: lesson.published,
         scheduled_at: lesson.scheduled_at,
       })
@@ -53,6 +54,7 @@ export const updateAcademyLesson = async (id, lesson) => {
         description: lesson.description,
         position: lesson.position,
         topics: lesson.topics,
+        resources: lesson.resources,
         published: lesson.published,
         scheduled_at: lesson.scheduled_at,
       })

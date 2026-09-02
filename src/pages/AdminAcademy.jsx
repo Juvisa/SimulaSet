@@ -6,7 +6,25 @@ import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateA
 
 const EMPTY_FORM = {
   title: '', description: '', module_id: '', lesson_id: '', position: 1,
-  scheduled_at: '', topics: '', published: false,
+  scheduled_at: '', topics: '', resources: [], published: false,
+};
+
+const RESOURCE_TYPES = [
+  { value: 'document', label: 'PDF / documento' },
+  { value: 'external_link', label: 'Enlace externo' },
+  { value: 'template', label: 'Plantilla' },
+  { value: 'supplementary', label: 'Material complementario' },
+];
+
+const createResourceId = () => globalThis.crypto?.randomUUID?.()
+  || `resource-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const isValidResourceUrl = (value) => {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 };
 
 const inputClass = 'min-h-12 w-full rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-primary outline-none focus:border-accent-coral disabled:cursor-not-allowed disabled:opacity-60';
@@ -89,6 +107,7 @@ const AdminAcademy = () => {
       position: lesson.position,
       scheduled_at: toColombiaDateTimeInput(lesson.scheduled_at),
       topics: Array.isArray(lesson.topics) ? lesson.topics.join('\n') : '',
+      resources: Array.isArray(lesson.resources) ? lesson.resources.map(resource => ({ ...resource, id: resource.id || createResourceId() })) : [],
       published: lesson.published,
     });
     setSaveError('');
@@ -103,10 +122,36 @@ const AdminAcademy = () => {
 
   const updateField = (field, value) => setForm(current => ({ ...current, [field]: value }));
 
+  const addResource = () => setForm(current => ({
+    ...current,
+    resources: [...current.resources, { id: createResourceId(), title: '', type: 'document', url: '' }],
+  }));
+
+  const updateResource = (id, field, value) => setForm(current => ({
+    ...current,
+    resources: current.resources.map(resource => resource.id === id ? { ...resource, [field]: value } : resource),
+  }));
+
+  const removeResource = (id) => setForm(current => ({
+    ...current,
+    resources: current.resources.filter(resource => resource.id !== id),
+  }));
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setSaving(true);
     setSaveError('');
+
+    const invalidResource = form.resources.find(resource => (
+      !resource.title.trim()
+      || !RESOURCE_TYPES.some(type => type.value === resource.type)
+      || !isValidResourceUrl(resource.url.trim())
+    ));
+    if (invalidResource) {
+      setSaveError('Completa el título, tipo y una URL válida http:// o https:// en cada recurso.');
+      return;
+    }
+
+    setSaving(true);
 
     const payload = {
       title: form.title.trim(),
@@ -114,6 +159,12 @@ const AdminAcademy = () => {
       position: Number(form.position),
       scheduled_at: toTimestamptz(form.scheduled_at),
       topics: [...new Set(form.topics.split('\n').map(topic => topic.trim()).filter(Boolean))],
+      resources: form.resources.map(resource => ({
+        id: resource.id,
+        title: resource.title.trim(),
+        type: resource.type,
+        url: resource.url.trim(),
+      })),
       published: form.published,
     };
 
@@ -194,6 +245,40 @@ const AdminAcademy = () => {
           <textarea value={form.topics} onChange={event => updateField('topics', event.target.value)} rows={5} placeholder={'Un tema por línea\nEjemplo: Pipeline'} className={`${inputClass} mt-2 resize-y`} />
           <span className="mt-1 block text-xs font-normal text-text-secondary">Escribe un tema por línea.</span>
         </label>
+        <div className="md:col-span-2">
+          <div className="mb-3 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Recursos</h3>
+              <p className="mt-1 text-xs text-text-secondary">Agrega enlaces a documentos y materiales de la clase.</p>
+            </div>
+            <button type="button" onClick={addResource} className="flex min-h-11 w-full flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-bg-input px-3 text-xs font-bold text-text-primary sm:w-auto">
+              <Plus size={15} /> Agregar recurso
+            </button>
+          </div>
+          <div className="space-y-3">
+            {form.resources.map((resource, resourceIndex) => (
+              <div key={resource.id} className="rounded-xl border border-border-subtle bg-bg-input/40 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold text-text-secondary">Recurso {resourceIndex + 1}</span>
+                  <button type="button" onClick={() => removeResource(resource.id)} className="min-h-11 rounded-lg px-3 text-xs font-bold text-red-400">Quitar</button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="text-xs font-semibold text-text-primary">Título
+                    <input required value={resource.title} onChange={event => updateResource(resource.id, 'title', event.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                  <label className="text-xs font-semibold text-text-primary">Tipo
+                    <select value={resource.type} onChange={event => updateResource(resource.id, 'type', event.target.value)} className={`${inputClass} mt-2`}>
+                      {RESOURCE_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-text-primary md:col-span-2">URL
+                    <input required type="url" placeholder="https://..." value={resource.url} onChange={event => updateResource(resource.id, 'url', event.target.value)} className={`${inputClass} mt-2`} />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <label className="md:col-span-2 flex min-h-12 items-center gap-3 rounded-xl border border-border-subtle bg-bg-input px-4 text-sm font-semibold text-text-primary">
           <input type="checkbox" checked={form.published} onChange={event => updateField('published', event.target.checked)} className="h-5 w-5 accent-accent-coral" /> Publicada
         </label>

@@ -50,6 +50,22 @@ const formatScheduledAt = (scheduledAt) => {
   }).format(new Date(scheduledAt)).replace(' a las ', ', ');
 };
 
+const LessonResources = ({ lesson }) => {
+  if (!Array.isArray(lesson.resources) || lesson.resources.length === 0) return null;
+  return (
+    <div className="mt-4 border-t border-border-subtle pt-4">
+      <h3 className="mb-3 text-sm font-bold text-text-primary">Recursos de la clase</h3>
+      <div className="space-y-2">
+        {lesson.resources.map((resource, resourceIndex) => (
+          <a key={resource.id || `${lesson.id}-resource-${resourceIndex}`} href={resource.url} target="_blank" rel="noreferrer" className="flex min-h-11 w-full items-center rounded-xl border border-border-subtle bg-bg-input px-4 py-2.5 text-sm font-semibold text-text-primary">
+            {resource.title || 'Abrir recurso'}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const Academy = () => {
   const { user } = useAuth();
   const isStarter = user.onboarding?.classification === 'starter';
@@ -209,15 +225,7 @@ const Academy = () => {
                       <p className="mt-2 text-sm leading-relaxed text-text-secondary">{lesson.description}</p>
                       {lesson.video_status !== 'ready' && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
                       {Array.isArray(lesson.topics) && lesson.topics.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{lesson.topics.map(topic => <span key={topic} className="max-w-full rounded-full border border-border-subtle bg-bg-input px-3 py-1.5 text-xs text-text-secondary">{topic}</span>)}</div>}
-                      {Array.isArray(lesson.resources) && lesson.resources.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          {lesson.resources.map((resource, resourceIndex) => (
-                            <a key={resource.id || `${lesson.id}-resource-${resourceIndex}`} href={resource.url} target="_blank" rel="noreferrer" className="flex min-h-11 w-full items-center rounded-xl border border-border-subtle bg-bg-input px-4 py-2.5 text-sm font-semibold text-text-primary">
-                              {resource.title || 'Abrir recurso'}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      <LessonResources lesson={lesson} />
                       <button type="button" onClick={() => toggleLessonStatus(lesson.id)} disabled={updating} className={`mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold disabled:opacity-50 ${completed ? 'bg-bg-input text-text-primary' : 'bg-accent-coral text-white'}`}>
                         {updating ? <Loader2 size={17} className="animate-spin" /> : completed ? <Clock3 size={17} /> : <Check size={17} />}
                         {updating ? 'Guardando...' : completed ? 'Marcar como pendiente' : 'Marcar como completada'}
@@ -260,6 +268,7 @@ const Academy = () => {
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
+                  <LessonResources lesson={lesson} />
                 </article>
               );
             })}
@@ -287,6 +296,7 @@ const Academy = () => {
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
+                  <LessonResources lesson={lesson} />
                 </article>
               );
             })}
