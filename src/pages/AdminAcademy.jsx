@@ -140,6 +140,52 @@ const AdminAcademy = () => {
     return groups;
   }, {});
 
+  const editingLessonId = editingLesson?.id;
+
+  const renderLessonForm = (inline = false) => (
+    <form key={inline ? editingLessonId : 'new-lesson'} onSubmit={handleSubmit} className={`${inline ? '' : 'mb-7'} rounded-2xl border border-accent-coral/30 bg-bg-card p-4 sm:p-6`}>
+      <div className="mb-5">
+        <h2 className="text-xl font-black text-text-primary">{editingLesson ? 'Editar clase' : 'Nueva clase'}</h2>
+        <p className="mt-1 text-xs text-text-secondary">Curso: set-academy</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="md:col-span-2 text-sm font-semibold text-text-primary">Título
+          <input required value={form.title} onChange={event => updateField('title', event.target.value)} className={`${inputClass} mt-2`} />
+        </label>
+        <label className="md:col-span-2 text-sm font-semibold text-text-primary">Descripción
+          <textarea value={form.description} onChange={event => updateField('description', event.target.value)} rows={3} className={`${inputClass} mt-2 resize-y`} />
+        </label>
+        <label className="text-sm font-semibold text-text-primary">Módulo
+          <input required disabled={Boolean(editingLesson)} value={form.module_id} onChange={event => updateField('module_id', event.target.value)} className={`${inputClass} mt-2`} />
+        </label>
+        <label className="text-sm font-semibold text-text-primary">Lesson ID
+          <input required disabled={Boolean(editingLesson)} value={form.lesson_id} onChange={event => updateField('lesson_id', event.target.value)} className={`${inputClass} mt-2`} />
+        </label>
+        <label className="text-sm font-semibold text-text-primary">Posición
+          <input required min="0" type="number" value={form.position} onChange={event => updateField('position', event.target.value)} className={`${inputClass} mt-2`} />
+        </label>
+        <label className="text-sm font-semibold text-text-primary">Fecha y hora programada
+          <input type="datetime-local" value={form.scheduled_at} onChange={event => updateField('scheduled_at', event.target.value)} className={`${inputClass} mt-2`} />
+          <span className="mt-1 block text-xs font-normal text-text-secondary">Hora Colombia</span>
+        </label>
+        <label className="md:col-span-2 text-sm font-semibold text-text-primary">Topics
+          <textarea value={form.topics} onChange={event => updateField('topics', event.target.value)} rows={5} placeholder={'Un tema por línea\nEjemplo: Pipeline'} className={`${inputClass} mt-2 resize-y`} />
+          <span className="mt-1 block text-xs font-normal text-text-secondary">Escribe un tema por línea.</span>
+        </label>
+        <label className="md:col-span-2 flex min-h-12 items-center gap-3 rounded-xl border border-border-subtle bg-bg-input px-4 text-sm font-semibold text-text-primary">
+          <input type="checkbox" checked={form.published} onChange={event => updateField('published', event.target.checked)} className="h-5 w-5 accent-accent-coral" /> Publicada
+        </label>
+      </div>
+      {saveError && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{saveError}</div>}
+      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button type="button" onClick={closeForm} disabled={saving} className="min-h-12 w-full rounded-xl bg-bg-input px-5 text-sm font-bold text-text-primary disabled:opacity-50 sm:w-auto">Cancelar</button>
+        <button type="submit" disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto">
+          {saving && <Loader2 size={17} className="animate-spin" />}{saving ? 'Guardando...' : 'Guardar clase'}
+        </button>
+      </div>
+    </form>
+  );
+
   return (
     <Layout>
       <div className="mx-auto max-w-5xl animate-fade-in">
@@ -152,49 +198,7 @@ const AdminAcademy = () => {
           <button type="button" onClick={openCreate} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 text-sm font-bold text-white sm:w-auto"><Plus size={17} /> Nueva clase</button>
         </div>
 
-        {form && (
-          <form onSubmit={handleSubmit} className="mb-7 rounded-2xl border border-accent-coral/30 bg-bg-card p-4 sm:p-6">
-            <div className="mb-5">
-              <h2 className="text-xl font-black text-text-primary">{editingLesson ? 'Editar clase' : 'Nueva clase'}</h2>
-              <p className="mt-1 text-xs text-text-secondary">Curso: set-academy</p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="md:col-span-2 text-sm font-semibold text-text-primary">Título
-                <input required value={form.title} onChange={event => updateField('title', event.target.value)} className={`${inputClass} mt-2`} />
-              </label>
-              <label className="md:col-span-2 text-sm font-semibold text-text-primary">Descripción
-                <textarea value={form.description} onChange={event => updateField('description', event.target.value)} rows={3} className={`${inputClass} mt-2 resize-y`} />
-              </label>
-              <label className="text-sm font-semibold text-text-primary">Módulo
-                <input required disabled={Boolean(editingLesson)} value={form.module_id} onChange={event => updateField('module_id', event.target.value)} className={`${inputClass} mt-2`} />
-              </label>
-              <label className="text-sm font-semibold text-text-primary">Lesson ID
-                <input required disabled={Boolean(editingLesson)} value={form.lesson_id} onChange={event => updateField('lesson_id', event.target.value)} className={`${inputClass} mt-2`} />
-              </label>
-              <label className="text-sm font-semibold text-text-primary">Posición
-                <input required min="0" type="number" value={form.position} onChange={event => updateField('position', event.target.value)} className={`${inputClass} mt-2`} />
-              </label>
-              <label className="text-sm font-semibold text-text-primary">Fecha y hora programada
-                <input type="datetime-local" value={form.scheduled_at} onChange={event => updateField('scheduled_at', event.target.value)} className={`${inputClass} mt-2`} />
-                <span className="mt-1 block text-xs font-normal text-text-secondary">Hora Colombia</span>
-              </label>
-              <label className="md:col-span-2 text-sm font-semibold text-text-primary">Topics
-                <textarea value={form.topics} onChange={event => updateField('topics', event.target.value)} rows={5} placeholder={'Un tema por línea\nEjemplo: Pipeline'} className={`${inputClass} mt-2 resize-y`} />
-                <span className="mt-1 block text-xs font-normal text-text-secondary">Escribe un tema por línea.</span>
-              </label>
-              <label className="md:col-span-2 flex min-h-12 items-center gap-3 rounded-xl border border-border-subtle bg-bg-input px-4 text-sm font-semibold text-text-primary">
-                <input type="checkbox" checked={form.published} onChange={event => updateField('published', event.target.checked)} className="h-5 w-5 accent-accent-coral" /> Publicada
-              </label>
-            </div>
-            {saveError && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{saveError}</div>}
-            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button type="button" onClick={closeForm} disabled={saving} className="min-h-12 w-full rounded-xl bg-bg-input px-5 text-sm font-bold text-text-primary disabled:opacity-50 sm:w-auto">Cancelar</button>
-              <button type="submit" disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto">
-                {saving && <Loader2 size={17} className="animate-spin" />}{saving ? 'Guardando...' : 'Guardar clase'}
-              </button>
-            </div>
-          </form>
-        )}
+        {form && !editingLesson && renderLessonForm()}
 
         {loading ? (
           <div key="admin-academy-loading" className="flex min-h-40 items-center justify-center gap-2 rounded-2xl border border-border-subtle bg-bg-card text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Cargando clases...</div>
@@ -212,6 +216,7 @@ const AdminAcademy = () => {
                 </div>
                 <div className="space-y-3">
                   {moduleLessons.map((lesson) => {
+                    if (editingLessonId === lesson.id) return renderLessonForm(true);
                     const videoState = getVideoState(lesson.video_status);
                     return (
                       <article key={lesson.id} className="rounded-2xl border border-border-subtle bg-bg-card p-4 sm:p-5">
