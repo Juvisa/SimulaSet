@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, CalendarDays, Loader2, Pencil, Plus } from 'lucide-react';
+import { BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { createAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
+import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
 
 const EMPTY_FORM = {
   title: '', description: '', module_id: '', lesson_id: '', position: 1,
@@ -53,6 +53,8 @@ const AdminAcademy = () => {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [deletingLessonId, setDeletingLessonId] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -134,6 +136,24 @@ const AdminAcademy = () => {
     setEditingLesson(null);
   };
 
+  const handleDelete = async (lesson) => {
+    if (editingLesson?.id === lesson.id) return;
+    const confirmed = window.confirm(`¿Eliminar la clase “${lesson.title}”? Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
+
+    setDeletingLessonId(lesson.id);
+    setDeleteError('');
+    const { deletedId, error: queryError } = await deleteAcademyLesson(lesson.id);
+    setDeletingLessonId(null);
+
+    if (queryError || deletedId !== lesson.id) {
+      setDeleteError(`No se pudo eliminar “${lesson.title}”: ${queryError || 'Respuesta inesperada'}`);
+      return;
+    }
+
+    setLessons(current => current.filter(currentLesson => currentLesson.id !== deletedId));
+  };
+
   const lessonsByModule = lessons.reduce((groups, lesson) => {
     if (!groups[lesson.module_id]) groups[lesson.module_id] = [];
     groups[lesson.module_id].push(lesson);
@@ -200,6 +220,8 @@ const AdminAcademy = () => {
 
         {form && !editingLesson && renderLessonForm()}
 
+        {deleteError && <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{deleteError}</div>}
+
         {loading ? (
           <div key="admin-academy-loading" className="flex min-h-40 items-center justify-center gap-2 rounded-2xl border border-border-subtle bg-bg-card text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Cargando clases...</div>
         ) : error ? (
@@ -234,7 +256,13 @@ const AdminAcademy = () => {
                         </div>
                         <div className="mt-4 flex flex-col gap-3 border-t border-border-subtle pt-4 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-start gap-2 text-sm text-text-secondary"><CalendarDays size={15} className="mt-0.5 flex-shrink-0" /><span>{formatScheduledAt(lesson.scheduled_at)}</span></div>
-                          <button type="button" onClick={() => openEdit(lesson)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-bg-input px-4 text-sm font-bold text-text-primary sm:w-auto"><Pencil size={15} /> Editar</button>
+                          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                            <button type="button" onClick={() => openEdit(lesson)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-bg-input px-4 text-sm font-bold text-text-primary sm:w-auto"><Pencil size={15} /> Editar</button>
+                            <button type="button" onClick={() => handleDelete(lesson)} disabled={deletingLessonId === lesson.id || editingLessonId === lesson.id} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 px-4 text-sm font-bold text-red-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+                              {deletingLessonId === lesson.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                              {deletingLessonId === lesson.id ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                          </div>
                         </div>
                       </article>
                     );

@@ -65,3 +65,18 @@ export const updateAcademyLesson = async (id, lesson) => {
     return { lesson: null, error: error instanceof Error ? error.message : 'Error inesperado' };
   }
 };
+
+export const deleteAcademyLesson = async (id) => {
+  try {
+    const { data, error } = await supabase
+      .from('academy_lessons')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+
+    return { deletedId: data?.id || null, error: error?.message || '' };
+  } catch (error) {
+    return { deletedId: null, error: error instanceof Error ? error.message : 'Error inesperado' };
+  }
+};
