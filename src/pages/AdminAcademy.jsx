@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
+import { createMuxDirectUpload, uploadFileToMux } from '../utils/muxUploads';
 
 const EMPTY_FORM = {
   title: '', description: '', module_id: '', lesson_id: '', position: 1,
@@ -75,6 +76,10 @@ const AdminAcademy = () => {
   const [saveError, setSaveError] = useState('');
   const [deletingLessonId, setDeletingLessonId] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [videoFile, setVideoFile] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -95,6 +100,9 @@ const AdminAcademy = () => {
     setEditingLesson(null);
     setForm(EMPTY_FORM);
     setSaveError('');
+    setVideoFile(null);
+    setUploadError('');
+    setUploadProgress(0);
   };
 
   const openEdit = (lesson) => {
@@ -111,6 +119,9 @@ const AdminAcademy = () => {
       published: lesson.published,
     });
     setSaveError('');
+    setVideoFile(null);
+    setUploadError('');
+    setUploadProgress(0);
   };
 
   const closeForm = () => {
@@ -207,6 +218,35 @@ const AdminAcademy = () => {
     setLessons(current => current.filter(currentLesson => currentLesson.id !== deletedId));
   };
 
+  const handleVideoUpload = async () => {
+    if (!editingLesson || !videoFile || uploadingVideo) return;
+    if (videoFile.type !== 'video/mp4' && !videoFile.name.toLowerCase().endsWith('.mp4')) {
+      setUploadError('Selecciona un archivo MP4 válido.');
+      return;
+    }
+
+    setUploadingVideo(true);
+    setUploadProgress(0);
+    setUploadError('');
+    try {
+      const directUpload = await createMuxDirectUpload(editingLesson.id);
+      const pendingLesson = { ...editingLesson, ...directUpload.lesson };
+      setEditingLesson(pendingLesson);
+      setLessons(current => current.map(lesson => lesson.id === pendingLesson.id ? { ...lesson, ...pendingLesson } : lesson));
+
+      await uploadFileToMux(directUpload.uploadUrl, videoFile, setUploadProgress);
+      const processingLesson = { ...pendingLesson, video_status: 'processing' };
+      setEditingLesson(processingLesson);
+      setLessons(current => current.map(lesson => lesson.id === processingLesson.id ? { ...lesson, video_status: 'processing' } : lesson));
+      setVideoFile(null);
+      setUploadProgress(100);
+    } catch (uploadFailure) {
+      setUploadError(uploadFailure instanceof Error ? uploadFailure.message : 'No se pudo subir la grabación.');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
   const lessonsByModule = lessons.reduce((groups, lesson) => {
     if (!groups[lesson.module_id]) groups[lesson.module_id] = [];
     groups[lesson.module_id].push(lesson);
@@ -279,6 +319,24 @@ const AdminAcademy = () => {
             ))}
           </div>
         </div>
+        {editingLesson && (
+          <div className="md:col-span-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 sm:p-4">
+            <h3 className="text-sm font-semibold text-text-primary">Grabación de la clase</h3>
+            <p className="mt-1 text-xs text-text-secondary">El MP4 se sube directamente a Mux y se procesa en segundo plano.</p>
+            <input type="file" accept="video/mp4,.mp4" disabled={uploadingVideo} onChange={event => { setVideoFile(event.target.files?.[0] || null); setUploadError(''); setUploadProgress(0); }} className="mt-4 block min-h-11 w-full text-sm text-text-secondary file:mr-3 file:min-h-11 file:rounded-lg file:border-0 file:bg-bg-input file:px-4 file:text-sm file:font-bold file:text-text-primary" />
+            {uploadingVideo && (
+              <div className="mt-3">
+                <div className="mb-1 flex justify-between text-xs text-text-secondary"><span>Subiendo a Mux...</span><span>{uploadProgress}%</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-bg-input"><div className="h-full rounded-full bg-accent-coral" style={{ width: `${uploadProgress}%` }} /></div>
+              </div>
+            )}
+            {uploadError && <div className="mt-3 rounded-lg bg-red-500/10 p-3 text-xs text-red-400">{uploadError}</div>}
+            {!uploadingVideo && uploadProgress === 100 && <div className="mt-3 rounded-lg bg-green-500/10 p-3 text-xs text-green-400">Archivo enviado. Mux está procesando el video.</div>}
+            <button type="button" onClick={handleVideoUpload} disabled={!videoFile || uploadingVideo || saving} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+              {uploadingVideo && <Loader2 size={17} className="animate-spin" />}{uploadingVideo ? 'Subiendo...' : 'Subir grabación'}
+            </button>
+          </div>
+        )}
         <label className="md:col-span-2 flex min-h-12 items-center gap-3 rounded-xl border border-border-subtle bg-bg-input px-4 text-sm font-semibold text-text-primary">
           <input type="checkbox" checked={form.published} onChange={event => updateField('published', event.target.checked)} className="h-5 w-5 accent-accent-coral" /> Publicada
         </label>

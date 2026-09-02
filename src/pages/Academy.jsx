@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import MuxPlayer from '@mux/mux-player-react';
 import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -62,6 +63,23 @@ const LessonResources = ({ lesson }) => {
           </a>
         ))}
       </div>
+    </div>
+  );
+};
+
+const LessonVideo = ({ lesson }) => {
+  if (lesson.video_status !== 'ready' || !lesson.mux_playback_id) return null;
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl bg-black">
+      <MuxPlayer
+        playbackId={lesson.mux_playback_id}
+        metadataVideoTitle={lesson.title}
+        streamType="on-demand"
+        autoPlay={false}
+        playsInline
+        className="aspect-video w-full"
+        style={{ aspectRatio: '16 / 9', width: '100%' }}
+      />
     </div>
   );
 };
@@ -223,6 +241,7 @@ const Academy = () => {
                   {expanded && (
                     <div className="border-t border-border-subtle px-4 pb-4 pt-4">
                       <p className="mt-2 text-sm leading-relaxed text-text-secondary">{lesson.description}</p>
+                      <LessonVideo lesson={lesson} />
                       {lesson.video_status !== 'ready' && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
                       {Array.isArray(lesson.topics) && lesson.topics.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{lesson.topics.map(topic => <span key={topic} className="max-w-full rounded-full border border-border-subtle bg-bg-input px-3 py-1.5 text-xs text-text-secondary">{topic}</span>)}</div>}
                       <LessonResources lesson={lesson} />
@@ -264,6 +283,7 @@ const Academy = () => {
                     </span>
                   </div>
                   <h2 className="text-lg font-bold text-text-primary min-h-14">{lesson.title}</h2>
+                  <LessonVideo lesson={lesson} />
                   <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
@@ -292,6 +312,7 @@ const Academy = () => {
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-text-primary">{lesson.title}</h3>
+                  <LessonVideo lesson={lesson} />
                   <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
