@@ -207,8 +207,12 @@ const AdminAcademy = () => {
     setLessons(current => sortLessons(editingLesson
       ? current.map(lesson => lesson.id === result.lesson.id ? result.lesson : lesson)
       : [...current, result.lesson]));
-    setForm(null);
-    setEditingLesson(null);
+    if (editingLesson) {
+      setForm(null);
+      setEditingLesson(null);
+    } else {
+      openEdit(result.lesson);
+    }
   };
 
   const handleDelete = async (lesson) => {
