@@ -8,6 +8,7 @@ import { getLessonProgress, setLessonProgress } from '../utils/lessonProgress';
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
 const START_MODULE_ID = 'digital-set-start';
+const WEEK_ORDER = ['week-01', 'week-02', 'week-03', 'week-04'];
 
 const startLessons = [
   {
@@ -30,17 +31,31 @@ const startLessons = [
   },
 ];
 
-const modules = [
-  { week: 'Semana 1', title: 'El terreno y el Método S.E.T.', date: '3 de septiembre', available: true },
-  { week: 'Semana 2', title: 'Conversaciones que agendan y venden', date: '10 de septiembre' },
-  { week: 'Semana 3', title: 'Objeciones y seguimiento', date: '17 de septiembre' },
-  { week: 'Semana 4', title: 'Oportunidades y entrevistas', date: '24 de septiembre' },
+const fallbackWeekGroups = [
+  { moduleId: 'week-01', week: 'Semana 1', lessons: [{ id: 'set-method-foundations', title: 'El terreno y el Método S.E.T.', scheduled_at: '2026-09-04T19:30:00-05:00', video_status: 'ready' }] },
+  { moduleId: 'week-02', week: 'Semana 2', lessons: [{ id: 'conversations-that-book-and-sell', title: 'Conversaciones que agendan y venden', scheduled_at: '2026-09-11T19:30:00-05:00', video_status: 'not_uploaded' }] },
+  { moduleId: 'week-03', week: 'Semana 3', lessons: [{ id: 'objections-and-follow-up', title: 'Objeciones y seguimiento', scheduled_at: '2026-09-18T19:30:00-05:00', video_status: 'not_uploaded' }] },
+  { moduleId: 'week-04', week: 'Semana 4', lessons: [{ id: 'opportunities-and-interviews', title: 'Oportunidades y entrevistas', scheduled_at: '2026-09-25T19:30:00-05:00', video_status: 'not_uploaded' }] },
 ];
+
+const formatScheduledAt = (scheduledAt) => {
+  if (!scheduledAt) return 'Fecha por confirmar';
+  return new Intl.DateTimeFormat('es-CO', {
+    timeZone: 'America/Bogota',
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date(scheduledAt)).replace(' a las ', ', ');
+};
 
 const Academy = () => {
   const { user } = useAuth();
   const isStarter = user.onboarding?.classification === 'starter';
   const [lessons, setLessons] = useState(startLessons);
+  const [weekGroups, setWeekGroups] = useState(fallbackWeekGroups);
+  const [labLessons, setLabLessons] = useState([]);
   const [progress, setProgress] = useState({});
   const [expandedLesson, setExpandedLesson] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
@@ -56,6 +71,24 @@ const Academy = () => {
         .filter(lesson => lesson.module_id === START_MODULE_ID)
         .map(lesson => ({ ...lesson, id: lesson.lesson_id }));
       if (digitalStartLessons.length > 0) setLessons(digitalStartLessons);
+
+      const lessonsByModule = publishedLessons.reduce((groups, lesson) => {
+        if (!groups[lesson.module_id]) groups[lesson.module_id] = [];
+        groups[lesson.module_id].push({ ...lesson, id: lesson.lesson_id, scheduled_at: lesson.scheduled_at });
+        return groups;
+      }, {});
+
+      setWeekGroups(fallbackWeekGroups.map((fallbackGroup) => {
+        const moduleLessons = lessonsByModule[fallbackGroup.moduleId];
+        return moduleLessons?.length > 0
+          ? { ...fallbackGroup, lessons: [...moduleLessons].sort((a, b) => a.position - b.position) }
+          : fallbackGroup;
+      }).sort((a, b) => WEEK_ORDER.indexOf(a.moduleId) - WEEK_ORDER.indexOf(b.moduleId)));
+
+      const practicalLabs = lessonsByModule['practical-labs'];
+      if (practicalLabs?.length > 0) {
+        setLabLessons([...practicalLabs].sort((a, b) => a.position - b.position));
+      }
     });
 
     return () => { active = false; };
@@ -209,22 +242,57 @@ const Academy = () => {
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        {modules.map((module) => (
-          <article key={module.week} className="bg-bg-card border border-border-subtle rounded-2xl p-5 hover:border-accent-coral/30 transition-colors">
-            <div className="flex items-start justify-between gap-4 mb-5">
-              <span className="text-xs font-black uppercase tracking-wider text-accent-coral">{module.week}</span>
-              <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${module.available ? 'text-green-400 bg-green-500/10' : 'text-text-secondary bg-bg-input'}`}>
-                {module.available ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
-                {module.available ? 'Disponible' : 'Próximamente'}
-              </span>
-            </div>
-            <h2 className="text-lg font-bold text-text-primary min-h-14">{module.title}</h2>
-            <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
-              <CalendarDays size={14} /> {module.date}
-            </div>
-          </article>
+        {weekGroups.map((group) => (
+          <div key={group.moduleId} className="space-y-4">
+            {group.lessons.map((lesson) => {
+              const available = lesson.video_status === 'ready';
+              return (
+                <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5 hover:border-accent-coral/30 transition-colors">
+                  <div className="flex items-start justify-between gap-4 mb-5">
+                    <span className="text-xs font-black uppercase tracking-wider text-accent-coral">{group.week}</span>
+                    <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${available ? 'text-green-400 bg-green-500/10' : 'text-text-secondary bg-bg-input'}`}>
+                      {available ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
+                      {available ? 'Disponible' : 'Próximamente'}
+                    </span>
+                  </div>
+                  <h2 className="text-lg font-bold text-text-primary min-h-14">{lesson.title}</h2>
+                  <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
+                    <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
+                  </div>
+                  {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
+                </article>
+              );
+            })}
+          </div>
         ))}
       </div>
+
+      {labLessons.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-4 text-xl font-black text-text-primary">Labs prácticos</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {labLessons.map((lesson) => {
+              const available = lesson.video_status === 'ready';
+              return (
+                <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+                  <div className="flex items-start justify-between gap-4 mb-5">
+                    <span className="text-xs font-black uppercase tracking-wider text-accent-coral">Clase práctica</span>
+                    <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${available ? 'text-green-400 bg-green-500/10' : 'text-text-secondary bg-bg-input'}`}>
+                      {available ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
+                      {available ? 'Disponible' : 'Próximamente'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-text-primary">{lesson.title}</h3>
+                  <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
+                    <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
+                  </div>
+                  {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   </Layout>
   );
