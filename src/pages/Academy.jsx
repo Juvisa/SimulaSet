@@ -10,6 +10,7 @@ const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
 const START_MODULE_ID = 'digital-set-start';
 const WEEK_ORDER = ['week-01', 'week-02', 'week-03', 'week-04'];
+const SPECIAL_MODULE_IDS = new Set([START_MODULE_ID, ...WEEK_ORDER, 'practical-labs']);
 
 const startLessons = [
   {
@@ -90,6 +91,7 @@ const Academy = () => {
   const [lessons, setLessons] = useState(startLessons);
   const [weekGroups, setWeekGroups] = useState(fallbackWeekGroups);
   const [labLessons, setLabLessons] = useState([]);
+  const [additionalModuleGroups, setAdditionalModuleGroups] = useState([]);
   const [progress, setProgress] = useState({});
   const [expandedLesson, setExpandedLesson] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
@@ -123,6 +125,14 @@ const Academy = () => {
       if (practicalLabs?.length > 0) {
         setLabLessons([...practicalLabs].sort((a, b) => a.position - b.position));
       }
+
+      setAdditionalModuleGroups(Object.entries(lessonsByModule)
+        .filter(([moduleId]) => !SPECIAL_MODULE_IDS.has(moduleId))
+        .map(([moduleId, moduleLessons]) => ({
+          moduleId,
+          lessons: [...moduleLessons].sort((a, b) => a.position - b.position || a.lesson_id.localeCompare(b.lesson_id)),
+        }))
+        .sort((a, b) => a.moduleId.localeCompare(b.moduleId, 'es', { numeric: true })));
     });
 
     return () => { active = false; };
@@ -324,6 +334,35 @@ const Academy = () => {
           </div>
         </section>
       )}
+
+      {additionalModuleGroups.map((group) => (
+        <section key={group.moduleId} className="mt-8">
+          <h2 className="mb-4 text-xl font-black text-text-primary">{group.moduleId}</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {group.lessons.map((lesson) => {
+              const available = lesson.video_status === 'ready';
+              return (
+                <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+                  <div className="flex items-start justify-between gap-4 mb-5">
+                    <span className="text-xs font-black uppercase tracking-wider text-accent-coral">{group.moduleId}</span>
+                    <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${available ? 'text-green-400 bg-green-500/10' : 'text-text-secondary bg-bg-input'}`}>
+                      {available ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
+                      {available ? 'Disponible' : 'Próximamente'}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-text-primary">{lesson.title}</h3>
+                  <LessonVideo lesson={lesson} />
+                  <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
+                    <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
+                  </div>
+                  {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
+                  <LessonResources lesson={lesson} />
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   </Layout>
   );
