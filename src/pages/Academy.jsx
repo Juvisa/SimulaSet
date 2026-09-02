@@ -131,9 +131,9 @@ const Academy = () => {
         {progressError && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{progressError}</div>}
 
         {loadingProgress ? (
-          <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Cargando progreso...</div>
+          <div key="progress-loading" className="flex min-h-24 items-center justify-center gap-2 text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Cargando progreso...</div>
         ) : (
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div key="progress-lessons" className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             {startLessons.map((lesson, index) => {
               const completed = progress[lesson.id] === 'completed';
               const expanded = expandedLesson === lesson.id;
