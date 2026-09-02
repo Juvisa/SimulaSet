@@ -70,8 +70,8 @@ export default async function handler(req, res) {
 
   const data = event.data || {};
   const academyLessonId = data.passthrough || data.new_asset_settings?.passthrough || data.meta?.external_id;
-  const uploadId = event.type.startsWith('video.upload.') ? data.id : data.upload_id;
-  if (!UUID_PATTERN.test(academyLessonId || '') || !uploadId) {
+  const isUploadEvent = event.type.startsWith('video.upload.');
+  if (!UUID_PATTERN.test(academyLessonId || '') || !data.id) {
     return res.status(200).json({ received: true, ignored: true });
   }
 
@@ -96,12 +96,16 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: updatedRows, error } = await supabase
+  let updateQuery = supabase
     .from('academy_lessons')
     .update(updates)
-    .eq('id', academyLessonId)
-    .eq('mux_upload_id', uploadId)
-    .select('id');
+    .eq('id', academyLessonId);
+
+  updateQuery = isUploadEvent
+    ? updateQuery.eq('mux_upload_id', data.id)
+    : updateQuery.eq('mux_asset_id', data.id);
+
+  const { data: updatedRows, error } = await updateQuery.select('id');
 
   if (error) return res.status(500).json({ error: 'No se pudo actualizar la clase' });
   return res.status(200).json({ received: true, updated: updatedRows.length === 1 });
