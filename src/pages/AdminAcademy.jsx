@@ -98,7 +98,7 @@ const AdminAcademy = () => {
 
   const openCreate = () => {
     setEditingLesson(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, resources: [] });
     setSaveError('');
     setVideoFile(null);
     setUploadError('');
@@ -152,6 +152,17 @@ const AdminAcademy = () => {
     event.preventDefault();
     setSaveError('');
 
+    const normalizedModuleId = form.module_id.trim();
+    const normalizedLessonId = form.lesson_id.trim();
+
+    if (!editingLesson && lessons.some(lesson => (
+      lesson.module_id.trim() === normalizedModuleId
+      && lesson.lesson_id.trim() === normalizedLessonId
+    ))) {
+      setSaveError('Ya existe una clase con este módulo e ID de lección. Usa identificadores diferentes.');
+      return;
+    }
+
     const invalidResource = form.resources.find(resource => (
       !resource.title.trim()
       || !RESOURCE_TYPES.some(type => type.value === resource.type)
@@ -183,8 +194,8 @@ const AdminAcademy = () => {
       ? await updateAcademyLesson(editingLesson.id, payload)
       : await createAcademyLesson({
         ...payload,
-        module_id: form.module_id.trim(),
-        lesson_id: form.lesson_id.trim(),
+        module_id: normalizedModuleId,
+        lesson_id: normalizedLessonId,
       });
 
     setSaving(false);
