@@ -18,6 +18,7 @@ import RealLeadForm from './pages/RealLeadForm';
 import RealLeadConversation from './pages/RealLeadConversation';
 import Analytics from './pages/Analytics';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminAcademy from './pages/AdminAcademy';
 import Profile from './pages/Profile';
 import Migrate from './pages/Migrate';
 import RestoreData from './pages/RestoreData';
@@ -63,6 +64,7 @@ function App() {
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/setter/:setterId" element={<ProtectedRoute adminOnly><AdminSetterDetail /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
+          <Route path="/admin/academy" element={<ProtectedRoute adminOnly><AdminAcademy /></ProtectedRoute>} />
 
           {/* Utilities */}
           <Route path="/migrate" element={<Migrate />} />
