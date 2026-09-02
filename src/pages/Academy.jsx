@@ -48,6 +48,9 @@ const Academy = () => {
         if (error) setProgressError(`No pudimos cargar tu progreso: ${error}`);
         setProgress(Object.fromEntries(rows.map(row => [row.lesson_id, row.status])));
       })
+      .catch((error) => {
+        if (active) setProgressError(`No pudimos cargar tu progreso: ${error instanceof Error ? error.message : 'Error inesperado'}`);
+      })
       .finally(() => {
         if (active) setLoadingProgress(false);
       });
