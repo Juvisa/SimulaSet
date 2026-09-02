@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import Layout from '../components/Layout';
 import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
 import { createMuxDirectUpload, uploadFileToMux } from '../utils/muxUploads';
@@ -323,7 +323,15 @@ const AdminAcademy = () => {
           <div className="md:col-span-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 sm:p-4">
             <h3 className="text-sm font-semibold text-text-primary">Grabación de la clase</h3>
             <p className="mt-1 text-xs text-text-secondary">El MP4 se sube directamente a Mux y se procesa en segundo plano.</p>
-            <input type="file" accept="video/mp4,.mp4" disabled={uploadingVideo} onChange={event => { setVideoFile(event.target.files?.[0] || null); setUploadError(''); setUploadProgress(0); }} className="mt-4 block min-h-11 w-full text-sm text-text-secondary file:mr-3 file:min-h-11 file:rounded-lg file:border-0 file:bg-bg-input file:px-4 file:text-sm file:font-bold file:text-text-primary" />
+            <input id={`mux-video-file-${editingLesson.id}`} type="file" accept="video/mp4,.mp4" disabled={uploadingVideo} onChange={event => { setVideoFile(event.target.files?.[0] || null); setUploadError(''); setUploadProgress(0); }} className="sr-only" />
+            <label htmlFor={`mux-video-file-${editingLesson.id}`} className={`mt-4 flex min-h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-accent-coral/50 bg-bg-input px-4 py-4 text-center transition-colors hover:border-accent-coral ${uploadingVideo ? 'cursor-not-allowed opacity-50' : ''}`}>
+              <Upload size={22} className="mb-2 text-accent-coral" />
+              <span className="text-sm font-bold text-text-primary">Seleccionar video MP4</span>
+              <span className="mt-1 text-xs text-text-secondary">Haz clic aquí para elegir la grabación</span>
+              <span className={`mt-3 max-w-full break-all text-xs font-semibold ${videoFile ? 'text-accent-coral' : 'text-text-secondary'}`}>
+                {videoFile ? videoFile.name : 'Ningún archivo seleccionado'}
+              </span>
+            </label>
             {uploadingVideo && (
               <div className="mt-3">
                 <div className="mb-1 flex justify-between text-xs text-text-secondary"><span>Subiendo a Mux...</span><span>{uploadProgress}%</span></div>
