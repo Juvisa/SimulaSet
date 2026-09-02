@@ -99,6 +99,15 @@ const Academy = () => {
   const [progressError, setProgressError] = useState('');
 
   useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (!targetId) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     getPublishedAcademyLessons(START_COURSE_ID).then(({ lessons: publishedLessons, error }) => {
@@ -278,7 +287,7 @@ const Academy = () => {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div id="set-academy-main" className="scroll-mt-6 grid md:grid-cols-2 gap-4">
         {weekGroups.map((group) => (
           <div key={group.moduleId} className="space-y-4">
             {group.lessons.map((lesson) => {

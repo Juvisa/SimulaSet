@@ -110,7 +110,7 @@ const Dashboard = () => {
               <h1 className="text-2xl md:text-3xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
               <p className="text-text-secondary text-sm mt-2">{isStarter ? 'Tu ruta comienza con una base clara.' : 'Tu experiencia te permite comenzar directamente en SET Academy.'}</p>
             </div>
-            <button onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
+            <button onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy#set-academy-main')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
               {isStarter ? 'Comenzar DIGITAL SET START' : 'Entrar a SET Academy'} →
             </button>
           </div>
@@ -204,7 +204,7 @@ const Dashboard = () => {
         {isStarter && <p className="text-sm text-text-secondary mt-4">Según tu diagnóstico, te recomendamos comenzar por los fundamentos antes de entrar al entrenamiento.</p>}
         <div className="flex gap-2 mt-4">
           <button
-            onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy')}
+            onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy#set-academy-main')}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white transition-all hover:opacity-90 active:scale-95"
             style={{ backgroundColor: '#E0605E' }}
           >
