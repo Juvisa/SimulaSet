@@ -4,7 +4,7 @@ import { getUsers, getAllSessions, getAllAnalyses, getAllProjects } from '../uti
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
-import { Users, Play, BarChart2, TrendingUp, ChevronRight, Search } from 'lucide-react';
+import { Users, Play, BarChart2, TrendingUp, ChevronRight, Search, BookOpen } from 'lucide-react';
 
 const StatCard = ({ label, value, icon: Icon, color }) => (
   <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -59,6 +59,21 @@ const AdminDashboard = () => {
         <StatCard label="Total sesiones" value={sessions.length} icon={TrendingUp} color="#1D9E75" />
         <StatCard label="Promedio global" value={`${globalAvg}/10`} icon={BarChart2} color="#C9920A" />
       </div>
+
+      <button
+        type="button"
+        onClick={() => navigate('/admin/academy')}
+        className="mb-8 flex min-h-16 w-full items-center gap-4 rounded-2xl border border-border-subtle bg-bg-card p-4 text-left transition-all hover:border-accent-coral/30"
+      >
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent-coral/20 text-accent-coral">
+          <BookOpen size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-text-primary">Gestionar Academy</span>
+          <span className="mt-0.5 block text-xs text-text-secondary">Crear, editar y organizar las clases de SET Academy.</span>
+        </span>
+        <ChevronRight size={18} className="flex-shrink-0 text-text-secondary" />
+      </button>
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4">

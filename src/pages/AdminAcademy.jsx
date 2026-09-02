@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
 
@@ -46,6 +47,7 @@ const getVideoState = (status) => {
 };
 
 const AdminAcademy = () => {
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -209,6 +211,9 @@ const AdminAcademy = () => {
   return (
     <Layout>
       <div className="mx-auto max-w-5xl animate-fade-in">
+        <button type="button" onClick={() => navigate('/admin')} className="mb-5 flex min-h-11 items-center gap-2 text-sm font-semibold text-text-secondary transition-colors hover:text-text-primary">
+          <ArrowLeft size={16} /> Volver al panel Admin
+        </button>
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-accent-coral"><BookOpen size={16} /> Administración</div>
