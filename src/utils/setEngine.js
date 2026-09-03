@@ -7,6 +7,357 @@ const CONFIDENCE_LEVELS = new Set(['baja', 'media', 'alta']);
 const CONVERSATION_STATES = new Set(['sin_contacto', 'apertura', 'exploracion', 'clarificacion', 'evaluacion', 'objecion', 'coordinacion', 'cita_agendada', 'esperando_respuesta', 'reactivacion', 'cerrada']);
 const EVIDENCE_SOURCES = new Set(['mensaje', 'lead', 'project', 'memoria']);
 
+const nullableObject = properties => ({
+  anyOf: [
+    {
+      type: 'object',
+      properties,
+      required: Object.keys(properties),
+      additionalProperties: false,
+    },
+    { type: 'null' },
+  ],
+});
+
+const evidenceSchema = {
+  type: 'object',
+  properties: {
+    fuente: { type: 'string', enum: [...EVIDENCE_SOURCES] },
+    referencia_id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    extracto: { type: 'string' },
+  },
+  required: ['fuente', 'referencia_id', 'extracto'],
+  additionalProperties: false,
+};
+
+const anticipationSchema = nullableObject({
+  accion: { type: 'string', enum: [...ACTIONS] },
+  objetivo: { type: 'string' },
+});
+
+export const SET_ENGINE_V1_SCHEMA = {
+  type: 'object',
+  properties: {
+    version: { type: 'string', enum: ['set_engine_v1'] },
+    modo: { type: 'string', enum: ['analisis'] },
+    diagnostico: {
+      type: 'object',
+      properties: {
+        situacion: {
+          type: 'object',
+          properties: {
+            resumen: { type: 'string' },
+            evidencias: { type: 'array', items: evidenceSchema },
+          },
+          required: ['resumen', 'evidencias'],
+          additionalProperties: false,
+        },
+        emocion: {
+          type: 'object',
+          properties: {
+            inferencia: { type: 'string' },
+            confianza: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+            evidencias: { type: 'array', items: evidenceSchema },
+            condicion_necesaria_para_avanzar: { type: 'string' },
+          },
+          required: ['inferencia', 'confianza', 'evidencias', 'condicion_necesaria_para_avanzar'],
+          additionalProperties: false,
+        },
+        transicion: {
+          type: 'object',
+          properties: {
+            microcompromiso: { type: 'string' },
+            razon: { type: 'string' },
+          },
+          required: ['microcompromiso', 'razon'],
+          additionalProperties: false,
+        },
+      },
+      required: ['situacion', 'emocion', 'transicion'],
+      additionalProperties: false,
+    },
+    decision: {
+      type: 'object',
+      properties: {
+        accion: { type: 'string', enum: [...ACTIONS] },
+        objetivo: { type: 'string' },
+        estrategia: { type: 'string' },
+        respuesta: nullableObject({
+          piezas: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                tipo: { type: 'string', enum: [...PIECE_TYPES] },
+                contenido: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                recurso_id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+              },
+              required: ['tipo', 'contenido', 'recurso_id'],
+              additionalProperties: false,
+            },
+          },
+        }),
+        que_evitar: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['accion', 'objetivo', 'estrategia', 'respuesta', 'que_evitar'],
+      additionalProperties: false,
+    },
+    anticipacion: {
+      type: 'object',
+      properties: {
+        si_avanza: anticipationSchema,
+        si_objeta: anticipationSchema,
+        si_no_responde: nullableObject({
+          accion: { type: 'string', enum: [...ACTIONS] },
+          objetivo: { type: 'string' },
+          esperar_horas: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
+        }),
+      },
+      required: ['si_avanza', 'si_objeta', 'si_no_responde'],
+      additionalProperties: false,
+    },
+    estado_inferido: {
+      type: 'object',
+      properties: {
+        nivel_compromiso: { type: 'string', enum: [...COMMITMENT_LEVELS] },
+        temperatura_ia: { type: 'string', enum: [...AI_TEMPERATURES] },
+        confianza_temperatura: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+        estado_conversacional: { type: 'string', enum: [...CONVERSATION_STATES] },
+        senales: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              tipo: { type: 'string' },
+              descripcion: { type: 'string' },
+              evidencia: evidenceSchema,
+            },
+            required: ['tipo', 'descripcion', 'evidencia'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['nivel_compromiso', 'temperatura_ia', 'confianza_temperatura', 'estado_conversacional', 'senales'],
+      additionalProperties: false,
+    },
+    memoria: {
+      type: 'object',
+      properties: {
+        hechos_confirmados: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { clave: { type: 'string' }, valor: { type: 'string' }, fuente_mensaje_id: { type: 'string' } },
+            required: ['clave', 'valor', 'fuente_mensaje_id'],
+            additionalProperties: false,
+          },
+        },
+        compromisos: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { tipo: { type: 'string' }, detalle: { type: 'string' }, fuente_mensaje_id: { type: 'string' } },
+            required: ['tipo', 'detalle', 'fuente_mensaje_id'],
+            additionalProperties: false,
+          },
+        },
+        preguntas_resueltas: { type: 'array', items: { type: 'string' } },
+        preguntas_abiertas: { type: 'array', items: { type: 'string' } },
+        recursos_entregados: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { recurso_id: { type: 'string' }, fuente_mensaje_id: { type: 'string' } },
+            required: ['recurso_id', 'fuente_mensaje_id'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['hechos_confirmados', 'compromisos', 'preguntas_resueltas', 'preguntas_abiertas', 'recursos_entregados'],
+      additionalProperties: false,
+    },
+    alertas: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['version', 'modo', 'diagnostico', 'decision', 'anticipacion', 'estado_inferido', 'memoria', 'alertas'],
+  additionalProperties: false,
+};
+
+// Anthropic compiles this schema into a grammar. The complete schema above
+// exceeds that grammar's size limit, so generation uses this structural
+// projection and the validator below enforces the full frozen contract.
+export const SET_ENGINE_V1_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    version: { type: 'string', enum: ['set_engine_v1'] },
+    modo: { type: 'string', enum: ['analisis'] },
+    diagnostico: {
+      type: 'object',
+      properties: {
+        situacion: {},
+        emocion: {},
+        transicion: {},
+      },
+      required: ['situacion', 'emocion', 'transicion'],
+      additionalProperties: false,
+    },
+    decision: {
+      type: 'object',
+      properties: {
+        accion: { type: 'string' },
+        objetivo: { type: 'string' },
+        estrategia: { type: 'string' },
+        respuesta: {},
+        que_evitar: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['accion', 'objetivo', 'estrategia', 'respuesta', 'que_evitar'],
+      additionalProperties: false,
+    },
+    anticipacion: {
+      type: 'object',
+      properties: {
+        si_avanza: {},
+        si_objeta: {},
+        si_no_responde: {},
+      },
+      required: ['si_avanza', 'si_objeta', 'si_no_responde'],
+      additionalProperties: false,
+    },
+    estado_inferido: {
+      type: 'object',
+      properties: {
+        nivel_compromiso: { type: 'string' },
+        temperatura_ia: { type: 'string' },
+        confianza_temperatura: { type: 'string' },
+        estado_conversacional: { type: 'string' },
+        senales: { type: 'array' },
+      },
+      required: ['nivel_compromiso', 'temperatura_ia', 'confianza_temperatura', 'estado_conversacional', 'senales'],
+      additionalProperties: false,
+    },
+    memoria: {
+      type: 'object',
+      properties: {
+        hechos_confirmados: { type: 'array' },
+        compromisos: { type: 'array' },
+        preguntas_resueltas: { type: 'array' },
+        preguntas_abiertas: { type: 'array' },
+        recursos_entregados: { type: 'array' },
+      },
+      required: ['hechos_confirmados', 'compromisos', 'preguntas_resueltas', 'preguntas_abiertas', 'recursos_entregados'],
+      additionalProperties: false,
+    },
+    alertas: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['version', 'modo', 'diagnostico', 'decision', 'anticipacion', 'estado_inferido', 'memoria', 'alertas'],
+  additionalProperties: false,
+};
+
+const wireObject = (properties, required = Object.keys(properties)) => ({
+  type: 'object', properties, required, additionalProperties: false,
+});
+const wireStringArray = { type: 'array', items: { type: 'string' } };
+const wireEvidence = wireObject({ f: { type: 'string' }, i: { type: 'string' }, q: { type: 'string' } });
+
+export const SET_ENGINE_V1_WIRE_SCHEMA = wireObject({
+  d: wireObject({
+    s: wireObject({ r: { type: 'string' }, e: { type: 'array', items: wireEvidence } }),
+    e: wireObject({ i: { type: 'string' }, c: { type: 'string' }, e: { type: 'array', items: wireEvidence }, n: { type: 'string' } }),
+    t: wireObject({ m: { type: 'string' }, r: { type: 'string' } }),
+  }),
+  x: wireObject({
+    a: { type: 'string' }, o: { type: 'string' }, s: { type: 'string' },
+    p: { type: 'array', items: wireObject({ t: { type: 'string' }, c: { type: 'string' }, r: { type: 'string' } }) },
+    v: wireStringArray,
+  }),
+  a: wireObject({ v: wireStringArray, o: wireStringArray, n: wireStringArray }),
+  s: wireObject({
+    n: { type: 'string' }, t: { type: 'string' }, c: { type: 'string' }, e: { type: 'string' },
+    g: { type: 'array', items: wireObject({ t: { type: 'string' }, d: { type: 'string' }, e: wireEvidence }) },
+  }),
+  m: wireObject({
+    h: { type: 'array', items: wireObject({ k: { type: 'string' }, v: { type: 'string' }, i: { type: 'string' } }) },
+    c: { type: 'array', items: wireObject({ t: { type: 'string' }, d: { type: 'string' }, i: { type: 'string' } }) },
+    r: wireStringArray,
+    a: wireStringArray,
+    e: { type: 'array', items: wireObject({ r: { type: 'string' }, i: { type: 'string' } }) },
+  }),
+  z: wireStringArray,
+});
+
+export const SET_ENGINE_V1_COMPACT_WIRE_SCHEMA = wireObject({
+  d: wireStringArray,
+  x: wireStringArray,
+  a: wireStringArray,
+  s: wireStringArray,
+  m: wireStringArray,
+  z: wireStringArray,
+});
+
+const WIRE_ACTIONS = { en: 'enviar', es: 'esperar', p: 'preguntar', av: 'aportar_valor', ac: 'aclarar', ca: 'calificar', ag: 'agendar', co: 'confirmar', re: 'reactivar', cc: 'cerrar_conversacion' };
+const WIRE_PIECES = { t: 'texto', ag: 'audio_guion', vg: 'video_guion', r: 'recurso' };
+const WIRE_SOURCES = { m: 'mensaje', l: 'lead', p: 'project', r: 'memoria' };
+const WIRE_COMMITMENT = { nd: 'no_determinado', i: 'incipiente', e: 'explicito', c: 'comprometido' };
+const WIRE_TEMPERATURE = { nd: 'no_determinada', f: 'fria', tb: 'tibia', c: 'caliente' };
+const WIRE_CONFIDENCE = { b: 'baja', m: 'media', a: 'alta' };
+const WIRE_STATES = { sc: 'sin_contacto', ap: 'apertura', ex: 'exploracion', cl: 'clarificacion', ev: 'evaluacion', ob: 'objecion', co: 'coordinacion', ca: 'cita_agendada', er: 'esperando_respuesta', re: 'reactivacion', ce: 'cerrada' };
+
+const expandEvidence = item => ({ fuente: WIRE_SOURCES[item.f], referencia_id: item.i || null, extracto: item.q });
+const expandBranch = (items, withHours = false) => {
+  if (!items.length) return null;
+  const branch = { accion: WIRE_ACTIONS[items[0]], objetivo: items[1] };
+  if (withHours) branch.esperar_horas = items[2] ? Number(items[2]) : null;
+  return branch;
+};
+
+export const parseAndExpandSetEngineWireResponse = text => {
+  let wire;
+  try {
+    wire = JSON.parse(text.trim());
+  } catch {
+    throw new Error('La IA no devolvió JSON wire puro válido. Puedes reintentar.');
+  }
+  const parseField = (value, path) => {
+    try { return JSON.parse(value); } catch { throw new Error(`Wire SET inválido: ${path} no contiene JSON válido.`); }
+  };
+  if (wire.d.length !== 8 || wire.x.length !== 5 || wire.a.length !== 3 || wire.s.length !== 5 || wire.m.length !== 5) {
+    throw new Error('Wire SET inválido: longitud de sección incorrecta.');
+  }
+  const situationEvidence = parseField(wire.d[1], 'd[1]');
+  const emotionEvidence = parseField(wire.d[4], 'd[4]');
+  const wirePieces = parseField(wire.x[3], 'x[3]');
+  const avoid = parseField(wire.x[4], 'x[4]');
+  const anticipation = wire.a.map((value, index) => parseField(value, `a[${index}]`));
+  const signals = parseField(wire.s[4], 's[4]');
+  const memory = wire.m.map((value, index) => parseField(value, `m[${index}]`));
+  const pieces = wirePieces.map(item => ({
+    tipo: WIRE_PIECES[item.t],
+    contenido: item.t === 'r' ? null : item.c,
+    recurso_id: item.t === 'r' ? item.r : null,
+  }));
+  return {
+    version: 'set_engine_v1',
+    modo: 'analisis',
+    diagnostico: {
+      situacion: { resumen: wire.d[0], evidencias: situationEvidence.map(expandEvidence) },
+      emocion: { inferencia: wire.d[2], confianza: WIRE_CONFIDENCE[wire.d[3]], evidencias: emotionEvidence.map(expandEvidence), condicion_necesaria_para_avanzar: wire.d[5] },
+      transicion: { microcompromiso: wire.d[6], razon: wire.d[7] },
+    },
+    decision: { accion: WIRE_ACTIONS[wire.x[0]], objetivo: wire.x[1], estrategia: wire.x[2], respuesta: pieces.length ? { piezas: pieces } : null, que_evitar: avoid },
+    anticipacion: { si_avanza: expandBranch(anticipation[0]), si_objeta: expandBranch(anticipation[1]), si_no_responde: expandBranch(anticipation[2], true) },
+    estado_inferido: {
+      nivel_compromiso: WIRE_COMMITMENT[wire.s[0]], temperatura_ia: WIRE_TEMPERATURE[wire.s[1]], confianza_temperatura: WIRE_CONFIDENCE[wire.s[2]], estado_conversacional: WIRE_STATES[wire.s[3]],
+      senales: signals.map(item => ({ tipo: item.t, descripcion: item.d, evidencia: expandEvidence(item.e) })),
+    },
+    memoria: {
+      hechos_confirmados: memory[0].map(item => ({ clave: item.k, valor: item.v, fuente_mensaje_id: item.i })),
+      compromisos: memory[1].map(item => ({ tipo: item.t, detalle: item.d, fuente_mensaje_id: item.i })),
+      preguntas_resueltas: memory[2], preguntas_abiertas: memory[3],
+      recursos_entregados: memory[4].map(item => ({ recurso_id: item.r, fuente_mensaje_id: item.i })),
+    },
+    alertas: wire.z,
+  };
+};
+
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const requireObject = (value, path) => {
   if (!isObject(value)) throw new Error(`Contrato SET inválido: ${path} debe ser un objeto.`);
