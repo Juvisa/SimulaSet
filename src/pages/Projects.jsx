@@ -30,14 +30,14 @@ const Projects = () => {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Mis Proyectos</h1>
-          <p className="text-text-secondary text-sm mt-1">Cada proyecto es el contexto de un experto o campaña. Puedes crear y gestionar múltiples proyectos.</p>
+          <p className="text-text-secondary text-sm mt-1">Crea y administra los negocios con los que trabajas.</p>
         </div>
         <Link
           to="/projects/new"
-          className="flex items-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl font-medium hover:bg-accent-coral/90 transition-all text-sm"
+          className="flex items-center justify-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl font-medium hover:bg-accent-coral/90 transition-all text-sm"
         >
           <Plus size={16} />
           Nuevo proyecto
@@ -58,7 +58,7 @@ const Projects = () => {
             className="inline-flex items-center gap-2 bg-accent-coral text-white px-5 py-2.5 rounded-xl font-medium hover:bg-accent-coral/90 transition-all"
           >
             <Plus size={16} />
-            Crear primer proyecto
+            Crear mi primer proyecto
           </Link>
         </div>
       ) : (

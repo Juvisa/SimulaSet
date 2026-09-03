@@ -286,9 +286,12 @@ const Dashboard = () => {
 
       {/* Projects quick access */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-text-primary">Mis proyectos</h2>
-          <button onClick={() => navigate('/projects')} className="text-text-secondary hover:text-accent-coral text-sm transition-colors">Ver todos</button>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-bold text-text-primary">Mis Proyectos</h2>
+            <p className="text-text-secondary text-sm mt-1">Crea y administra los negocios con los que trabajas.</p>
+          </div>
+          <button onClick={() => navigate('/projects')} className="w-full sm:w-auto shrink-0 text-left sm:text-right text-accent-coral hover:text-accent-coral/80 text-sm font-medium transition-colors">Ir a Mis Proyectos</button>
         </div>
         {projects.length === 0 ? (
           <div className="bg-bg-card border border-dashed border-border-subtle rounded-2xl p-8 text-center">
