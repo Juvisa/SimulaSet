@@ -85,7 +85,7 @@ const Journey = () => {
             </div>
             <div className="flex items-center justify-between gap-4 pt-4 border-t border-border-subtle">
               <span className="text-sm font-bold text-accent-gold">🏅 Badge First SET</span>
-              <button onClick={() => navigate('/simulate')} className="flex items-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl text-sm font-bold">Comenzar misión <ArrowRight size={14} /></button>
+              <button onClick={() => navigate('/missions/mission_01_conversation_hunt')} className="flex items-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl text-sm font-bold">Comenzar misión <ArrowRight size={14} /></button>
             </div>
           </div>
 

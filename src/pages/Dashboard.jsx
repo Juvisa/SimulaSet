@@ -9,7 +9,7 @@ import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
-import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot } from 'lucide-react';
+import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target } from 'lucide-react';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
 
@@ -134,6 +134,18 @@ const Dashboard = () => {
           <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
           <p className="text-text-secondary text-xs mt-2">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>
         </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-5 md:flex md:items-center md:justify-between md:gap-6">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-accent-gold/10 p-2.5 text-accent-gold"><Target size={20} /></div>
+          <div>
+            <div className="text-xs font-black tracking-[0.18em] text-accent-gold">MISIÓN 01</div>
+            <h2 className="mt-1 text-lg font-black text-text-primary">Caza Conversaciones</h2>
+            <p className="mt-1 text-sm text-text-secondary">Aprende a leer antes de responder.</p>
+          </div>
+        </div>
+        <button onClick={() => navigate('/missions')} className="mt-4 w-full rounded-xl bg-accent-gold px-4 py-2.5 text-sm font-bold text-black md:mt-0 md:w-auto">Ver misión →</button>
       </section>
 
       {/* Seguimientos pendientes */}
