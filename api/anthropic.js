@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-sonnet-4-5';
-const ALLOWED_MAX_TOKENS = new Set([500, 1500, 2000]);
+const ALLOWED_MAX_TOKENS = new Set([500, 1500, 2000, 3000]);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
