@@ -98,14 +98,53 @@ const MissionConversationHunt = () => {
   if (status === 'completed') {
     return (
       <Layout>
-        <div className="mx-auto flex min-h-[65vh] max-w-2xl items-center justify-center animate-fade-in">
-          <section className="w-full rounded-3xl border border-green-500/30 bg-bg-card p-6 text-center md:p-10">
+        <div className="mx-auto max-w-5xl animate-fade-in">
+          <section className="rounded-3xl border border-green-500/30 bg-bg-card p-6 text-center md:p-10">
             <CheckCircle2 size={52} className="mx-auto text-green-400" />
             <div className="mt-6 text-xs font-black tracking-[0.25em] text-green-400">MISIÓN COMPLETADA</div>
             <h1 className="mt-3 text-2xl font-black text-text-primary md:text-4xl">Primera evidencia S.E.T. registrada.</h1>
-            <p className="mx-auto mt-5 max-w-lg text-sm leading-relaxed text-text-secondary">Acabas de hacer algo que muchos vendedores no hacen: pensar antes de responder.</p>
-            <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-text-secondary">Cada conversación tiene una Situación, una Emoción y una Transición posible. Tu trabajo es aprender a detectarlas.</p>
-            <button onClick={() => navigate('/missions')} className="mt-8 w-full rounded-xl bg-accent-coral px-5 py-3 text-sm font-bold text-white sm:w-auto">Ver mi progreso</button>
+            <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-text-secondary">Ahora compara tu razonamiento con el criterio S.E.T.<br />No existe una única respuesta perfecta: observa si identificaste correctamente qué necesitaba la conversación para avanzar.</p>
+          </section>
+
+          <div className="mt-6 space-y-6">
+            {MISSION_01.cases.map((completedCase, index) => (
+              <article key={completedCase.id} className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-6">
+                <div className="text-xs font-black tracking-[0.18em] text-accent-gold">CASO {index + 1} · {completedCase.industry.toUpperCase()}</div>
+                <div className="mt-4 rounded-2xl rounded-tl-sm border border-border-subtle bg-bg-input px-4 py-3 text-sm leading-relaxed text-text-primary">{completedCase.leadMessage}</div>
+
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <section className="rounded-2xl border border-accent-coral/30 bg-accent-coral/5 p-4 md:p-5">
+                    <h2 className="text-xs font-black tracking-[0.18em] text-accent-coral">TU ANÁLISIS</h2>
+                    <div className="mt-5 space-y-5">
+                      {MISSION_FIELDS.map(field => (
+                        <div key={field.key}>
+                          <div className="text-xs font-black text-text-secondary">{field.label}</div>
+                          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{responses[completedCase.id]?.[field.key]}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4 md:p-5">
+                    <h2 className="text-xs font-black tracking-[0.14em] text-green-400">CRITERIO S.E.T. DE REFERENCIA</h2>
+                    <p className="mt-2 text-xs leading-relaxed text-text-secondary">Es una referencia pedagógica, no la única respuesta correcta.</p>
+                    <div className="mt-5 space-y-5">
+                      {MISSION_FIELDS.map(field => (
+                        <div key={field.key}>
+                          <div className="text-xs font-black text-text-secondary">{field.key === 'movimiento' ? 'MOVIMIENTO SUGERIDO' : field.label}</div>
+                          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{completedCase.reference[field.key]}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <section className="mt-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-6 text-center md:p-8">
+            <p className="text-lg font-black leading-relaxed text-text-primary">El objetivo no era adivinar una respuesta.<br />Era aprender a pensar antes de responder.</p>
+            <button onClick={() => navigate('/missions')} className="mt-6 w-full rounded-xl bg-accent-coral px-5 py-3 text-sm font-bold text-white sm:w-auto">Volver a Missions</button>
           </section>
         </div>
       </Layout>
