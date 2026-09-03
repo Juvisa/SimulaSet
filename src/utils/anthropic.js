@@ -27,6 +27,10 @@ export const callClaude = async (systemPrompt, messages) => {
   return JSON.parse(jsonMatch[0]);
 };
 
+export const callClaudeText = async (systemPrompt, messages) => {
+  return requestClaude({ systemPrompt, messages, maxTokens: 3000 });
+};
+
 export const generateProspectProfile = async (project, mode, config) => {
   const prompt = `
 Genera un perfil realista de prospecto para una simulación de ventas.
