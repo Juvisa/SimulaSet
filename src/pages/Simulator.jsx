@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getAllProjects, saveSession, updateUserStats } from '../utils/storage';
+import { saveSession, updateUserStats } from '../utils/storage';
+import { getProjectById } from '../utils/projects';
 import { callClaude, generateProspectProfile } from '../utils/anthropic';
 import {
   buildOutboundSystemPrompt,
@@ -176,12 +177,15 @@ const Simulator = () => {
 
   useEffect(() => {
     if (!mode || !config) { navigate('/simulate'); return; }
-    const allProjects = getAllProjects();
-    const proj = allProjects.find(p => p.id === config.projectId);
-    if (!proj) { navigate('/simulate'); return; }
-    setProject(proj);
-    initSession(proj);
-  }, []);
+    let active = true;
+    getProjectById(config.projectId).then(({ project: proj }) => {
+      if (!active) return;
+      if (!proj) { navigate('/simulate'); return; }
+      setProject(proj);
+      initSession(proj);
+    });
+    return () => { active = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const initSession = async (proj) => {
     setLoading(true);

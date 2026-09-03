@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getProjects, getSessions, getAnalyses, getPendingFeedback, markFeedbackSeen, getRealLeads
+  getSessions, getAnalyses, getPendingFeedback, markFeedbackSeen, getRealLeads
 } from '../utils/storage';
+import { getProjects } from '../utils/projects';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
@@ -11,7 +12,6 @@ import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot } from 'lucide-react';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
-import { getProjects as getAllProjs } from '../utils/storage';
 
 const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
   <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -40,8 +40,8 @@ const Dashboard = () => {
   const refreshFollowUps = () => setFollowUps(verificarSeguimientosPendientes(user.id));
 
   useEffect(() => {
+    getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProjects(getProjects(user.id));
     setSessions(getSessions(user.id));
     setAnalyses(getAnalyses(user.id));
     setPendingFeedback(getPendingFeedback(user.id));
@@ -70,7 +70,7 @@ const Dashboard = () => {
   };
 
   const allLeadsForFollowUp = realLeads;
-  const allProjectsForFollowUp = getAllProjs(user.id);
+  const allProjectsForFollowUp = projects;
 
   const FollowUpCard = ({ fu, urgencia }) => {
     const lead = allLeadsForFollowUp.find(l => l.id === fu.lead_id);

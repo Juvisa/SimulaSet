@@ -1,23 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects, deleteProject } from '../utils/storage';
+import { getProjects, deleteProject } from '../utils/projects';
 import Layout from '../components/Layout';
-import { Plus, Trash2, Edit3, Play, BarChart2, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit3, Play, BarChart2 } from 'lucide-react';
 
 const Projects = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    setProjects(getProjects(user.id));
+    let active = true;
+    getProjects(user.id).then(({ projects: rows, error: queryError, migrationErrors }) => {
+      if (!active) return;
+      setProjects(rows);
+      setError(migrationErrors[0] || queryError || '');
+    });
+    return () => { active = false; };
   }, [user.id]);
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (!window.confirm(`¿Eliminar el proyecto "${name}"?`)) return;
-    deleteProject(id);
-    setProjects(getProjects(user.id));
+    const { deletedId, error: deleteError } = await deleteProject(id);
+    if (deleteError) { setError(deleteError); return; }
+    setProjects(current => current.filter(project => project.id !== deletedId));
   };
 
   return (
@@ -25,7 +33,7 @@ const Projects = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Mis Proyectos</h1>
-          <p className="text-text-secondary text-sm mt-1">Cada proyecto es el contexto de un experto o campaña</p>
+          <p className="text-text-secondary text-sm mt-1">Cada proyecto es el contexto de un experto o campaña. Puedes crear y gestionar múltiples proyectos.</p>
         </div>
         <Link
           to="/projects/new"
@@ -35,6 +43,8 @@ const Projects = () => {
           Nuevo proyecto
         </Link>
       </div>
+
+      {error && <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
 
       {projects.length === 0 ? (
         <div className="bg-bg-card border border-border-subtle rounded-2xl p-12 text-center">

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects, createRealLead } from '../utils/storage';
+import { createRealLead } from '../utils/storage';
+import { getProjects } from '../utils/projects';
 import Layout from '../components/Layout';
-import { ChevronLeft, Save, Zap } from 'lucide-react';
+import { ChevronLeft, Zap } from 'lucide-react';
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-gold transition-colors";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
@@ -22,6 +23,7 @@ const RealLeadForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [projects, setProjects] = useState([]);
+  const [projectError, setProjectError] = useState('');
   const [form, setForm] = useState({
     project_id: location.state?.projectId || '',
     nombre: '',
@@ -36,7 +38,13 @@ const RealLeadForm = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setProjects(getProjects(user.id));
+    let active = true;
+    getProjects(user.id).then(({ projects: rows, error, migrationErrors }) => {
+      if (!active) return;
+      setProjects(rows);
+      setProjectError(migrationErrors[0] || error || '');
+    });
+    return () => { active = false; };
   }, [user.id]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -85,6 +93,7 @@ const RealLeadForm = () => {
 
             <div>
               <label className={LABEL}>Proyecto asociado *</label>
+              {projectError && <div className="mb-2 text-xs text-red-400">{projectError}</div>}
               {projects.length === 0 ? (
                 <div className="bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-secondary text-sm">
                   Sin proyectos — <button type="button" onClick={() => navigate('/projects/new')} className="text-accent-coral hover:underline">crear uno</button>

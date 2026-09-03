@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects, saveProject, getAllProjects } from '../utils/storage';
+import { createProject, getProjectById, updateProject } from '../utils/projects';
 import Layout from '../components/Layout';
 import { Plus, Trash2, ChevronLeft, Save } from 'lucide-react';
 
@@ -47,24 +47,30 @@ const ProjectForm = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let active = true;
     if (isEdit) {
-      const all = getAllProjects();
-      const project = all.find(p => p.id === id && p.userId === user.id);
-      if (!project) { navigate('/projects'); return; }
-      const defaultRecursos = emptyRecursos();
-      setForm({
-        ...project,
-        testimonials: project.testimonials?.length ? project.testimonials : [emptyTestimonial()],
-        resources: project.resources?.length ? project.resources : [emptyResource()],
-        recursos: {
-          guias_pdfs: project.recursos?.guias_pdfs?.length ? project.recursos.guias_pdfs : defaultRecursos.guias_pdfs,
-          videos_testimonios: project.recursos?.videos_testimonios?.length ? project.recursos.videos_testimonios : defaultRecursos.videos_testimonios,
-          vsl_presentacion: project.recursos?.vsl_presentacion ?? defaultRecursos.vsl_presentacion,
-          scripts_apertura: project.recursos?.scripts_apertura ?? defaultRecursos.scripts_apertura,
-        },
+      getProjectById(id).then(({ project, error: queryError }) => {
+        if (!active) return;
+        if (queryError || !project || (project.userId !== user.id && user.role !== 'admin')) {
+          navigate('/projects');
+          return;
+        }
+        const defaultRecursos = emptyRecursos();
+        setForm({
+          ...project,
+          testimonials: project.testimonials?.length ? project.testimonials : [emptyTestimonial()],
+          resources: project.resources?.length ? project.resources : [emptyResource()],
+          recursos: {
+            guias_pdfs: project.recursos?.guias_pdfs?.length ? project.recursos.guias_pdfs : defaultRecursos.guias_pdfs,
+            videos_testimonios: project.recursos?.videos_testimonios?.length ? project.recursos.videos_testimonios : defaultRecursos.videos_testimonios,
+            vsl_presentacion: project.recursos?.vsl_presentacion ?? defaultRecursos.vsl_presentacion,
+            scripts_apertura: project.recursos?.scripts_apertura ?? defaultRecursos.scripts_apertura,
+          },
+        });
       });
     }
-  }, [id, user.id, isEdit, navigate]);
+    return () => { active = false; };
+  }, [id, user.id, user.role, isEdit, navigate]);
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
@@ -93,7 +99,7 @@ const ProjectForm = () => {
   const updateVsl = (field, value) => setForm(f => ({ ...f, recursos: { ...f.recursos, vsl_presentacion: { ...f.recursos.vsl_presentacion, [field]: value } } }));
   const updateScript = (field, value) => setForm(f => ({ ...f, recursos: { ...f.recursos, scripts_apertura: { ...f.recursos.scripts_apertura, [field]: value } } }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!form.name.trim() || !form.expertName.trim() || !form.promise.trim()) {
@@ -125,8 +131,14 @@ ${form.avatarDescription ? 'Detalles adicionales: ' + form.avatarDescription : '
       createdAt: isEdit ? form.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    saveProject(project);
+    const result = isEdit
+      ? await updateProject(id, project)
+      : await createProject(project, user.id);
     setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
     navigate('/projects');
   };
 

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects } from '../utils/storage';
+import { getProjects } from '../utils/projects';
 import Layout from '../components/Layout';
-import { Play, ChevronRight } from 'lucide-react';
+import { Play } from 'lucide-react';
 
 const MODES = [
   {
@@ -45,6 +45,7 @@ const ModeSelector = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [projects, setProjects] = useState([]);
+  const [projectError, setProjectError] = useState('');
   const [selectedMode, setSelectedMode] = useState('outbound');
   const [config, setConfig] = useState({
     projectId: location.state?.projectId || '',
@@ -55,7 +56,13 @@ const ModeSelector = () => {
   });
 
   useEffect(() => {
-    setProjects(getProjects(user.id));
+    let active = true;
+    getProjects(user.id).then(({ projects: rows, error, migrationErrors }) => {
+      if (!active) return;
+      setProjects(rows);
+      setProjectError(migrationErrors[0] || error || '');
+    });
+    return () => { active = false; };
   }, [user.id]);
 
   const setConf = (k, v) => setConfig(c => ({ ...c, [k]: v }));
@@ -117,6 +124,7 @@ const ModeSelector = () => {
 
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Proyecto *</label>
+            {projectError && <div className="mb-2 text-xs text-red-400">{projectError}</div>}
             {projects.length === 0 ? (
               <div className="bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-secondary text-sm">
                 Sin proyectos — <button onClick={() => navigate('/projects/new')} className="text-accent-coral hover:underline">crear uno</button>

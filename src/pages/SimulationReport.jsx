@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getAllProjects } from '../utils/storage';
+import { getProjectById } from '../utils/projects';
 import { callClaude } from '../utils/anthropic';
 import { buildFinalReportPrompt } from '../utils/prompts';
 import Layout from '../components/Layout';
@@ -19,20 +19,21 @@ const SimulationReport = () => {
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [project, setProject] = useState(null);
 
   useEffect(() => {
     if (!session) { navigate('/dashboard'); return; }
+    // eslint-disable-next-line react-hooks/immutability
     generateReport();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generateReport = async () => {
     setLoading(true);
     try {
-      const allProjects = getAllProjects();
-      const found = allProjects.find(p => p.id === session.projectId) || { expertName: 'N/A', niche: 'N/A', avatarDescription: '', commonObjections: '', resources: [], testimonials: [], promise: '', price: '' };
+      const { project: storedProject } = await getProjectById(session.projectId);
+      const found = storedProject || { expertName: 'N/A', niche: 'N/A', avatarDescription: '', commonObjections: '', resources: [], testimonials: [], promise: '', price: '' };
       setProject(found);
       const project = found;
       const prompt = buildFinalReportPrompt(

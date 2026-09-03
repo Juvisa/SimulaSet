@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getRealLeadById, saveRealLead, getAllProjects } from '../utils/storage';
+import { getRealLeadById, saveRealLead } from '../utils/storage';
+import { getProjectById } from '../utils/projects';
 import { callClaude } from '../utils/anthropic';
 import {
   buildRealLeadAnalysisPrompt,
   buildBreakTheIcePrompt,
   buildReactivacionRealPrompt,
 } from '../utils/prompts';
-import { ChevronLeft, Zap, Copy, Check, AlertTriangle, Loader2, ChevronDown, ChevronUp, Clock, Edit3, X, FileText, Bell } from 'lucide-react';
+import { ChevronLeft, Zap, Copy, Check, AlertTriangle, Loader2, ChevronUp, Clock, Edit3, X, FileText } from 'lucide-react';
 import BriefingModal from '../components/BriefingModal';
 import ScheduleFollowUpModal from '../components/ScheduleFollowUpModal';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
@@ -220,13 +221,17 @@ const RealLeadConversation = () => {
   const [pendingFollowUps, setPendingFollowUps] = useState([]);
 
   useEffect(() => {
+    let active = true;
     const l = getRealLeadById(leadId);
     if (!l) { navigate('/leads-reales'); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLead(l);
-    const allProjects = getAllProjects();
-    setProject(allProjects.find(p => p.id === l.project_id) || null);
+    getProjectById(l.project_id).then(({ project: linkedProject }) => {
+      if (active) setProject(linkedProject);
+    });
     if (l.estado === 'agendado' && !l.briefing) setShowAgendadoBanner(true);
     setPendingFollowUps(getPendingFollowUpsForLead(leadId));
+    return () => { active = false; };
   }, [leadId, navigate]);
 
   useEffect(() => {

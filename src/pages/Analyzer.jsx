@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects, saveAnalysis } from '../utils/storage';
+import { saveAnalysis } from '../utils/storage';
+import { getProjects } from '../utils/projects';
 import { callClaude, extractConversationText } from '../utils/anthropic';
 import { buildAnalyzerPrompt } from '../utils/prompts';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
-import FomoBar from '../components/FomoBar';
 import { BarChart2, Upload, FileText, Loader2, Copy, Check, AlertTriangle, CheckCircle, Target, Lightbulb } from 'lucide-react';
 
 const SELECT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary text-sm focus:border-accent-coral transition-colors";
@@ -51,13 +51,18 @@ const Analyzer = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadedProjects = getProjects(user.id);
-    setProjects(loadedProjects);
-    if (loadedProjects.length === 1) {
-      setForm(current => current.projectId
-        ? current
-        : { ...current, projectId: loadedProjects[0].id });
-    }
+    let active = true;
+    getProjects(user.id).then(({ projects: loadedProjects, error: queryError, migrationErrors }) => {
+      if (!active) return;
+      setProjects(loadedProjects);
+      if (migrationErrors[0] || queryError) setError(migrationErrors[0] || queryError);
+      if (loadedProjects.length === 1) {
+        setForm(current => current.projectId
+          ? current
+          : { ...current, projectId: loadedProjects[0].id });
+      }
+    });
+    return () => { active = false; };
   }, [user.id]);
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
