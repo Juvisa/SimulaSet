@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Copy, Check, Loader2, RefreshCw, ExternalLink, ChevronRight } from 'lucide-react';
 import { callClaude } from '../utils/anthropic';
 import { buildFollowUpPrompt } from '../utils/prompts';
 import { updateFollowUpEstado } from '../utils/followUps';
+import { saveRealLead } from '../utils/storage';
 import { useNavigate } from 'react-router-dom';
 
 const TIPO_LABELS = {
@@ -30,18 +31,16 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [markedIdx, setMarkedIdx] = useState(null);
+  const [openedAt] = useState(() => Date.now());
+  const sentRef = useRef(false);
 
-  useEffect(() => {
-    if (isOpen && !result) generate();
-  }, [isOpen]);
-
-  const generate = async () => {
+  const generate = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const ultimos = (lead?.conversacion || [])
         .slice(-6)
-        .map(m => `${m.role === 'setter' ? 'Setter' : lead.nombre}: ${m.content}`)
+        .map(m => `${m.tipo === 'setter_enviado' ? 'Setter' : lead.nombre}: ${m.mensaje}`)
         .join('\n');
 
       const prompt = buildFollowUpPrompt({ project, lead, followUp, ultimos3Mensajes: ultimos });
@@ -50,26 +49,57 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
         [{ role: 'user', content: prompt }]
       );
       setResult(res);
+      updateFollowUpEstado(followUp.id, followUp.estado, { mensaje_generado: res });
     } catch (err) {
       setError(err.message);
     }
     setLoading(false);
-  };
+  }, [followUp, lead, project]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isOpen && !result) generate();
+  }, [generate, isOpen, result]);
 
   const handleSent = (opcion) => {
+    if (sentRef.current || markedIdx !== null) return;
+    sentRef.current = true;
     setMarkedIdx(opcion.numero);
     updateFollowUpEstado(followUp.id, 'enviado', {
       mensaje_enviado: opcion.texto,
       opcion_elegida: opcion.numero,
       enviado_en: new Date().toISOString(),
+      resultado: 'enviado',
     });
-    setTimeout(() => onSent?.(), 1500);
+
+    const alreadyAdded = (lead.conversacion || []).some(message => message.follow_up_id === followUp.id);
+    const updatedLead = alreadyAdded ? lead : saveRealLead({
+      ...lead,
+      ultimo_contacto: new Date().toISOString(),
+      conversacion: [
+        ...(lead.conversacion || []),
+        {
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          turno: (lead.conversacion?.length || 0) + 1,
+          tipo: 'setter_enviado',
+          mensaje: opcion.texto,
+          follow_up_id: followUp.id,
+          opcion_elegida: opcion.numero,
+        },
+      ],
+      metricas: {
+        ...lead.metricas,
+        total_turnos: alreadyAdded ? (lead.conversacion?.length || 0) : (lead.conversacion?.length || 0) + 1,
+      },
+    });
+    setTimeout(() => onSent?.(updatedLead), 1500);
   };
 
   if (!isOpen) return null;
 
   const vencidoText = followUp?.estado === 'vencido'
-    ? `Vencido hace ${Math.round((Date.now() - new Date(followUp.programado_para)) / 3600000)}h`
+    ? `Vencido hace ${Math.round((openedAt - new Date(followUp.programado_para)) / 3600000)}h`
     : new Date(followUp?.programado_para).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   return (

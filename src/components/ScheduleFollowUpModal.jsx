@@ -37,7 +37,7 @@ const ScheduleFollowUpModal = ({ isOpen, onClose, lead, project, setterId, onSch
     const programado = calcFecha();
     if (!programado) return;
 
-    const ultimaInteraccion = lead.conversacion?.slice(-1)[0]?.content || '';
+    const ultimaInteraccion = lead.conversacion?.slice(-1)[0]?.mensaje || '';
     const diasSinResp = lead.horas_sin_respuesta ? Math.floor(lead.horas_sin_respuesta / 24) : 0;
 
     createFollowUp({

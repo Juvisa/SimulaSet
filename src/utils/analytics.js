@@ -56,7 +56,6 @@ function calcularMetricasSimulador(sesiones) {
   if (!sesiones.length) return null;
 
   const scores = sesiones.map(sessionScore);
-  const now = Date.now();
   const last7 = sesiones.filter(s => daysAgo(s.createdAt) <= 7).map(sessionScore);
 
   const porModo = ['outbound', 'inbound', 'reactivacion'].reduce((acc, mode) => {
@@ -160,8 +159,8 @@ function calcularMetricasLeads(leads) {
 
   // Average close time (days from createdAt to agendado)
   const tiemposCierre = agendados
-    .filter(l => l.createdAt && l.briefing?.generado_en)
-    .map(l => (new Date(l.briefing.generado_en) - new Date(l.createdAt)) / 86400000);
+    .filter(l => (l.created_at || l.createdAt) && l.briefing?.generado_en)
+    .map(l => (new Date(l.briefing.generado_en) - new Date(l.created_at || l.createdAt)) / 86400000);
 
   return {
     trabajados: leads.length,

@@ -200,6 +200,7 @@ const RealLeadConversation = () => {
   const { leadId } = useParams();
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const suggestionSentRef = useRef(false);
 
   const [lead, setLead] = useState(null);
   const [project, setProject] = useState(null);
@@ -207,6 +208,7 @@ const RealLeadConversation = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [currentSuggestions, setCurrentSuggestions] = useState(null);
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
   const [mode, setMode] = useState('chat'); // chat | breakice | reactivacion
   const [panelVisible, setPanelVisible] = useState(false);
   const [editingEstado, setEditingEstado] = useState(false);
@@ -248,10 +250,51 @@ const RealLeadConversation = () => {
 
   // ── Analyze message ──────────────────────────────────────────────────────
 
-  const handleAnalyze = async () => {
-    if (!leadInput.trim() || !project) return;
+  const analyzeLeadMessage = async (message, leadSnapshot) => {
+    if (!project) return;
     setAnalyzing(true);
     setPanelVisible(true);
+    setAnalysisError(null);
+
+    const messageIndex = (leadSnapshot.conversacion || []).findIndex(entry => entry.id === message.id);
+    const historialReciente = (leadSnapshot.conversacion || [])
+      .slice(Math.max(0, messageIndex - 6), messageIndex)
+      .map(m => `${m.tipo === 'lead' ? lead.nombre : 'Setter'}: ${m.mensaje}`)
+      .join('\n');
+
+    try {
+      const prompt = buildRealLeadAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje);
+      const result = await callClaude('Eres un coach experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+
+      setLead(prev => {
+        const newConversacion = (prev.conversacion || []).map(entry =>
+          entry.id === message.id ? { ...entry, analisis_ia: result.analisis_mensaje } : entry
+        );
+        return saveRealLead({
+          ...prev,
+          conversacion: newConversacion,
+          temperatura: result.analisis_mensaje?.temperatura_actualizada || prev.temperatura,
+          metricas: {
+            ...prev.metricas,
+            total_turnos: newConversacion.length,
+            nivel_interes_actual: result.analisis_mensaje?.nivel_interes || prev.metricas?.nivel_interes_actual || 0,
+            etapa_set_actual: result.analisis_mensaje?.etapa_set_detectada || prev.metricas?.etapa_set_actual || 'S',
+          },
+        });
+      });
+
+      setCurrentAnalysis(result.analisis_mensaje);
+      setCurrentSuggestions(result.sugerencias);
+      suggestionSentRef.current = false;
+      setMode('chat');
+    } catch (err) {
+      setAnalysisError({ messageId: message.id, message: err.message });
+    }
+    setAnalyzing(false);
+  };
+
+  const handleAnalyze = async () => {
+    if (!leadInput.trim() || !project) return;
 
     const msgEntry = {
       id: crypto.randomUUID(),
@@ -261,44 +304,24 @@ const RealLeadConversation = () => {
       mensaje: leadInput.trim(),
       analisis_ia: null,
     };
+    const newConversacion = [...(lead.conversacion || []), msgEntry];
+    const leadWithMessage = saveRealLead({
+      ...lead,
+      conversacion: newConversacion,
+      ultimo_contacto: new Date().toISOString(),
+      metricas: { ...lead.metricas, total_turnos: newConversacion.length },
+    });
 
-    const historialReciente = (lead.conversacion || [])
-      .slice(-6)
-      .map(m => `${m.tipo === 'lead' ? lead.nombre : 'Setter'}: ${m.mensaje}`)
-      .join('\n');
-
-    try {
-      const prompt = buildRealLeadAnalysisPrompt(project, lead, historialReciente, leadInput.trim());
-      const result = await callClaude('Eres un coach experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
-
-      msgEntry.analisis_ia = result.analisis_mensaje;
-
-      const newConversacion = [...(lead.conversacion || []), msgEntry];
-      persistLead({
-        conversacion: newConversacion,
-        ultimo_contacto: new Date().toISOString(),
-        temperatura: result.analisis_mensaje?.temperatura_actualizada || lead.temperatura,
-        metricas: {
-          ...lead.metricas,
-          total_turnos: newConversacion.length,
-          nivel_interes_actual: result.analisis_mensaje?.nivel_interes || lead.metricas?.nivel_interes_actual || 0,
-          etapa_set_actual: result.analisis_mensaje?.etapa_set_detectada || lead.metricas?.etapa_set_actual || 'S',
-        },
-      });
-
-      setCurrentAnalysis(result.analisis_mensaje);
-      setCurrentSuggestions(result.sugerencias);
-      setMode('chat');
-    } catch (err) {
-      alert('Error al analizar: ' + err.message);
-    }
+    setLead(leadWithMessage);
     setLeadInput('');
-    setAnalyzing(false);
+    await analyzeLeadMessage(msgEntry, leadWithMessage);
   };
 
   // ── Send suggestion ─────────────────────────────────────────────────────
 
   const handleSendSuggestion = (sug, allSugs) => {
+    if (suggestionSentRef.current) return;
+    suggestionSentRef.current = true;
     const entries = allSugs.map(s => ({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
@@ -313,7 +336,15 @@ const RealLeadConversation = () => {
     persistLead({
       conversacion: newConversacion,
       ultimo_contacto: new Date().toISOString(),
-      metricas: { ...lead.metricas, total_turnos: newConversacion.length },
+      estado: mode === 'reactivacion' ? 'fantasma' : lead.estado,
+      alerta_fantasma: mode === 'reactivacion' ? true : lead.alerta_fantasma,
+      metricas: {
+        ...lead.metricas,
+        total_turnos: newConversacion.length,
+        reactivaciones_enviadas: mode === 'reactivacion'
+          ? (lead.metricas?.reactivaciones_enviadas || 0) + 1
+          : (lead.metricas?.reactivaciones_enviadas || 0),
+      },
     });
 
     setCurrentSuggestions(null);
@@ -332,6 +363,7 @@ const RealLeadConversation = () => {
       const prompt = buildBreakTheIcePrompt(project, lead);
       const result = await callClaude('Eres un experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
       setCurrentSuggestions(result.aperturas);
+      suggestionSentRef.current = false;
       persistLead({ metricas: { ...lead.metricas, apertura_generada: true } });
     } catch (err) {
       alert('Error: ' + err.message);
@@ -354,11 +386,7 @@ const RealLeadConversation = () => {
       const prompt = buildReactivacionRealPrompt(project, { ...lead, tiempo_sin_respuesta: ghostTime }, ultimos3);
       const result = await callClaude('Eres experto en reactivación de leads. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
       setCurrentSuggestions(result.reactivaciones);
-      persistLead({
-        estado: 'fantasma',
-        alerta_fantasma: true,
-        metricas: { ...lead.metricas, reactivaciones_enviadas: (lead.metricas?.reactivaciones_enviadas || 0) + 1 },
-      });
+      suggestionSentRef.current = false;
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -599,6 +627,18 @@ const RealLeadConversation = () => {
                       </span>
                     </div>
                   )}
+                  {msg.tipo === 'lead' && analysisError?.messageId === msg.id && (
+                    <div className="mt-2 px-1 text-xs text-red-400">
+                      <span>No se pudo analizar: {analysisError.message}</span>
+                      <button
+                        onClick={() => analyzeLeadMessage(msg, lead)}
+                        disabled={analyzing || !project}
+                        className="ml-2 font-semibold text-accent-gold disabled:opacity-40"
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -740,7 +780,7 @@ const RealLeadConversation = () => {
           followUp={activeFollowUp}
           lead={lead}
           project={project}
-          onSent={() => { setFollowUpPanelOpen(false); setActiveFollowUp(null); setPendingFollowUps(getPendingFollowUpsForLead(leadId)); }}
+          onSent={(updatedLead) => { if (updatedLead) setLead(updatedLead); setFollowUpPanelOpen(false); setActiveFollowUp(null); setPendingFollowUps(getPendingFollowUpsForLead(leadId)); }}
         />
       )}
 
