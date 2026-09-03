@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getRealLeadById, saveRealLead } from '../utils/storage';
 import { getProjectById } from '../utils/projects';
-import { callClaude, callClaudeText } from '../utils/anthropic';
-import { findProjectResource, parseAndValidateSetEngineResponse } from '../utils/setEngine';
+import { callClaude, callSetEngine } from '../utils/anthropic';
+import { findProjectResource } from '../utils/setEngine';
 import {
   buildSetEngineAnalysisPrompt,
   buildBreakTheIcePrompt,
@@ -389,8 +389,7 @@ const RealLeadConversation = () => {
 
     try {
       const prompt = buildSetEngineAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje, memoriaAnterior);
-      const rawResult = await callClaudeText('Eres SET Conversation Engine v1. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }]);
-      const result = parseAndValidateSetEngineResponse(rawResult, project);
+      const result = await callSetEngine('Eres SET Conversation Engine v1. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }], project);
 
       setLead(prev => {
         const newConversacion = (prev.conversacion || []).map(entry =>

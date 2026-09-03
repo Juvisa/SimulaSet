@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { SET_ENGINE_V1_COMPACT_WIRE_SCHEMA } from '../src/utils/setEngine.js';
 
 const MODEL = 'claude-sonnet-4-5';
 const ALLOWED_MAX_TOKENS = new Set([500, 1500, 2000, 3000]);
@@ -35,14 +34,6 @@ export default async function handler(req, res) {
     };
 
     if (systemPrompt !== undefined) params.system = systemPrompt;
-    if (mode === 'set_engine') {
-      params.output_config = {
-        format: {
-          type: 'json_schema',
-          schema: SET_ENGINE_V1_COMPACT_WIRE_SCHEMA,
-        },
-      };
-    }
 
     const response = await anthropic.messages.create(params);
     const text = response.content.find((block) => block.type === 'text')?.text || '';

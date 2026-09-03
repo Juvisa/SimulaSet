@@ -1,17 +1,12 @@
-const MAX_TOKENS = 1500;
+import { parseAndValidateSetEngineResponse, SET_ENGINE_ERROR_CODES, SetEngineError } from './setEngine.js';
 
-const SET_ENGINE_WIRE_INSTRUCTIONS = `
-FORMATO DE TRANSPORTE OBLIGATORIO: devuelve {"d":[],"x":[],"a":[],"s":[],"m":[],"z":[]}.
-d tiene 8 strings: [resumen_situacion, evidencias_situacion_json, inferencia_emocion, confianza, evidencias_emocion_json, condicion_necesaria, microcompromiso, razon].
-x tiene 5 strings: [accion, objetivo, estrategia, piezas_json, que_evitar_json].
-a tiene 3 strings JSON: si_avanza, si_objeta, si_no_responde. Usa "[]" para null; ramas [accion,objetivo] y no_responde [accion,objetivo,esperar_horas_o_string_vacio].
-s tiene 5 strings: [nivel_compromiso, temperatura_ia, confianza_temperatura, estado_conversacional, senales_json].
-m tiene 5 strings JSON: [hechos, compromisos, preguntas_resueltas, preguntas_abiertas, recursos_entregados]. z es el arreglo de alertas.
-Códigos: acciones en/es/p/av/ac/ca/ag/co/re/cc; piezas t/ag/vg/r; fuentes m/l/p/r; compromiso nd/i/e/c; temperatura nd/f/tb/c; confianza b/m/a; estado sc/ap/ex/cl/ev/ob/co/ca/er/re/ce.
-Evidencia JSON: {"f":"m","i":"id o vacío","q":"extracto"}. Pieza: {"t":"t","c":"contenido o vacío","r":"recurso_id o vacío"}. Señal: {"t":"tipo","d":"descripción","e":evidencia}.
-Hecho: {"k":"clave","v":"valor","i":"mensaje_id"}. Compromiso: {"t":"tipo","d":"detalle","i":"mensaje_id"}. Recurso entregado: {"r":"recurso_id","i":"mensaje_id"}.
-Todos los valores de d, x, a, s y m deben ser strings. Las colecciones internas van serializadas como strings JSON válidos.
-`;
+const MAX_TOKENS = 1500;
+const SET_ENGINE_RETRY_INSTRUCTION = 'La respuesta anterior no cumplió el formato. Genera nuevamente la respuesta completa siguiendo exactamente el contrato JSON. Devuelve únicamente JSON puro, sin markdown ni texto adicional.';
+const RETRYABLE_SET_ERRORS = new Set([
+  SET_ENGINE_ERROR_CODES.FORMAT,
+  SET_ENGINE_ERROR_CODES.CONTRACT,
+  SET_ENGINE_ERROR_CODES.MAX_TOKENS,
+]);
 
 const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
   const payload = { systemPrompt, messages, maxTokens };
@@ -42,13 +37,33 @@ export const callClaude = async (systemPrompt, messages) => {
   return JSON.parse(jsonMatch[0]);
 };
 
-export const callClaudeText = async (systemPrompt, messages) => {
-  const result = await requestClaude({ systemPrompt: `${systemPrompt}\n${SET_ENGINE_WIRE_INSTRUCTIONS}`, messages, maxTokens: 3000, mode: 'set_engine' });
+const runSetEngineAttempt = async (request, systemPrompt, messages, project) => {
+  const result = await request({ systemPrompt, messages, maxTokens: 3000, mode: 'set_engine' });
   if (result.stop_reason === 'max_tokens') {
-    throw new Error('La respuesta de la IA se truncó por límite de tokens. Puedes reintentar.');
+    throw new SetEngineError(SET_ENGINE_ERROR_CODES.MAX_TOKENS, 'La respuesta de la IA se truncó por límite de tokens.');
   }
-  return JSON.stringify(parseAndExpandSetEngineWireResponse(result.text || ''));
+  return parseAndValidateSetEngineResponse(result.text || '', project);
 };
+
+export const createSetEngineCaller = request => async (systemPrompt, messages, project) => {
+  try {
+    return await runSetEngineAttempt(request, systemPrompt, messages, project);
+  } catch (error) {
+    if (!RETRYABLE_SET_ERRORS.has(error?.code)) throw error;
+  }
+
+  try {
+    return await runSetEngineAttempt(request, `${systemPrompt}\n${SET_ENGINE_RETRY_INSTRUCTION}`, messages, project);
+  } catch (error) {
+    if (!RETRYABLE_SET_ERRORS.has(error?.code)) throw error;
+    throw new SetEngineError(
+      SET_ENGINE_ERROR_CODES.RETRY_EXHAUSTED,
+      'La IA no pudo generar un análisis válido después de dos intentos. Puedes reintentar.',
+    );
+  }
+};
+
+export const callSetEngine = createSetEngineCaller(requestClaude);
 
 export const generateProspectProfile = async (project, mode, config) => {
   const prompt = `
@@ -86,4 +101,3 @@ RESPONDE EN JSON (sin markdown):
 export const extractConversationText = async (messages) => {
   return requestClaude({ messages, maxTokens: 2000 });
 };
-import { parseAndExpandSetEngineWireResponse } from './setEngine';
