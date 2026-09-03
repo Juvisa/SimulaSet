@@ -333,11 +333,11 @@ RESPONDE EN ESTE JSON (JSON puro, sin markdown):
 }
 `;
 
-export const buildSetEngineAnalysisPrompt = (project, lead, historialReciente, mensajeLead, memoriaAnterior) => `
-Eres SET Conversation Engine v1. Analiza una conversación real de appointment setting.
+export const buildSetEngineAnalysisPrompt = (project, lead, historialReciente, mensajeLead) => `
+Eres SET Core v1 Beta. Analiza una conversación real de appointment setting.
 
 RAZONA INTERNAMENTE EN ESTE ORDEN:
-DETECTAR -> INTERPRETAR -> DECIDIR -> CONSTRUIR -> ANTICIPAR.
+DETECTAR -> INTERPRETAR -> DECIDIR -> CONSTRUIR.
 La decisión ocurre antes de construir una respuesta.
 
 S.E.T. SON DIMENSIONES SIMULTÁNEAS, NO ETAPAS:
@@ -354,9 +354,6 @@ ${JSON.stringify({ nombre: lead?.nombre, origen: lead?.origen, canal: lead?.cana
 HISTORIAL REAL NORMALIZADO ANTERIOR AL MENSAJE ACTUAL:
 ${JSON.stringify(historialReciente || [], null, 2)}
 
-MEMORIA DEL ÚLTIMO ANÁLISIS V1, SI EXISTE:
-${JSON.stringify(memoriaAnterior || null, null, 2)}
-
 MENSAJE ACTUAL:
 ${JSON.stringify(mensajeLead)}
 
@@ -368,10 +365,12 @@ REGLAS CRÍTICAS:
 - No preguntes algo respondido ni vuelvas a explorar dolor si el siguiente movimiento ya se consiguió.
 - No empujes siempre hacia una cita. Prioriza el siguiente microcompromiso.
 - No inventes contexto, recursos, testimonios, beneficios, escasez ni información del Project.
-- Una pieza recurso solo puede usar el id exacto de un recurso activo del Project.
-- No conviertas inferencias emocionales en hechos. Usa lenguaje probable y evidencia literal breve.
-- nivel_compromiso nunca es porcentaje y requiere señales observables.
-- Cada rama de anticipación puede ser null. Complétala solo si tiene utilidad operacional.
+- Una respuesta de tipo recurso solo puede usar el id exacto de un recurso activo del Project.
+- No conviertas inferencias emocionales en hechos. Usa lenguaje probable y susténtala en la conversación.
+- nivel_compromiso nunca es porcentaje.
+- Si accion es esperar o cerrar_conversacion, respuesta puede ser null.
+- Para cualquier otra accion, respuesta es obligatoria.
+- Si la respuesta es texto, audio_guion o video_guion, su contenido puede contener como máximo una pregunta.
 - Devuelve JSON puro completo, sin markdown ni texto adicional.
 
 ENUMS:
@@ -379,33 +378,25 @@ ENUMS:
 - pieza: texto | audio_guion | video_guion | recurso
 - nivel_compromiso: no_determinado | incipiente | explicito | comprometido
 - temperatura_ia: no_determinada | fria | tibia | caliente
-- confianza: baja | media | alta
-- estado_conversacional: sin_contacto | apertura | exploracion | clarificacion | evaluacion | objecion | coordinacion | cita_agendada | esperando_respuesta | reactivacion | cerrada
-- fuente: mensaje | lead | project | memoria
 
-CONTRATO EXACTO:
+CONTRATO CORE EXACTO:
 {
-  "version": "set_engine_v1",
-  "modo": "analisis",
+  "version": "set_core_v1_beta",
   "diagnostico": {
-    "situacion": { "resumen": "texto", "evidencias": [{ "fuente": "mensaje", "referencia_id": "mensaje_actual", "extracto": "texto literal" }] },
-    "emocion": { "inferencia": "texto prudente", "confianza": "baja", "evidencias": [], "condicion_necesaria_para_avanzar": "texto" },
+    "situacion": { "resumen": "texto" },
+    "emocion": { "inferencia": "texto prudente", "condicion_necesaria_para_avanzar": "texto" },
     "transicion": { "microcompromiso": "texto", "razon": "texto" }
   },
   "decision": {
     "accion": "preguntar",
     "objetivo": "texto",
     "estrategia": "texto",
-    "respuesta": { "piezas": [{ "tipo": "texto", "contenido": "mensaje", "recurso_id": null }] },
+    "respuesta": { "tipo": "texto", "contenido": "mensaje", "recurso_id": null },
     "que_evitar": []
   },
-  "anticipacion": { "si_avanza": null, "si_objeta": null, "si_no_responde": null },
-  "estado_inferido": { "nivel_compromiso": "no_determinado", "temperatura_ia": "no_determinada", "confianza_temperatura": "baja", "estado_conversacional": "apertura", "senales": [] },
-  "memoria": { "hechos_confirmados": [], "compromisos": [], "preguntas_resueltas": [], "preguntas_abiertas": [], "recursos_entregados": [] },
-  "alertas": []
+  "estado": { "nivel_compromiso": "no_determinado", "temperatura_ia": "no_determinada" }
 }
 
-Si una rama de anticipación existe usa { "accion": enum, "objetivo": "texto" }; si es si_no_responde añade "esperar_horas": entero positivo o null.
 Para texto/audio_guion/video_guion: contenido no vacío y recurso_id null.
 Para recurso: contenido null y recurso_id activo exacto del Project.
 `;

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { getRealLeadById, saveRealLead } from '../utils/storage';
 import { getProjectById } from '../utils/projects';
 import { callClaude, callSetEngine } from '../utils/anthropic';
-import { findProjectResource } from '../utils/setEngine';
+import { findProjectResource, getSetDecisionView } from '../utils/setEngine';
 import {
   buildSetEngineAnalysisPrompt,
   buildBreakTheIcePrompt,
@@ -82,13 +82,8 @@ const PIECE_LABELS = {
 };
 
 const DecisionCard = ({ contract, project, onSend }) => {
-  const { diagnostico, decision, anticipacion, estado_inferido: estado } = contract;
-  const pieces = decision.respuesta?.piezas || [];
-  const branches = [
-    ['Si avanza', anticipacion.si_avanza],
-    ['Si objeta', anticipacion.si_objeta],
-    ['Si no responde', anticipacion.si_no_responde],
-  ].filter(([, branch]) => branch !== null);
+  const { diagnostico, decision } = contract;
+  const { estado, pieces, branches } = getSetDecisionView(contract);
 
   const pieceText = piece => {
     if (piece.tipo !== 'recurso') return piece.contenido;
@@ -121,6 +116,7 @@ const DecisionCard = ({ contract, project, onSend }) => {
       <section>
         <div className="text-xs font-black text-green-400 uppercase">Transición</div>
         <p className="text-sm text-text-primary mt-1">{diagnostico.transicion.microcompromiso}</p>
+        <p className="text-xs text-text-secondary mt-1">{diagnostico.transicion.razon}</p>
       </section>
 
       <section className="border-t border-border-subtle pt-3">
@@ -270,8 +266,10 @@ const AnalysisPanel = ({ analysis }) => {
 
 const MetricsPanel = ({ lead }) => {
   const m = lead.metricas || {};
-  const latestV1 = [...(lead.conversacion || [])].reverse().find(message => message.analisis_ia?.version === 'set_engine_v1')?.analisis_ia;
-  const inferred = latestV1?.estado_inferido;
+  const latestSet = [...(lead.conversacion || [])].reverse().find(message =>
+    ['set_engine_v1', 'set_core_v1_beta'].includes(message.analisis_ia?.version)
+  )?.analisis_ia;
+  const inferred = latestSet?.estado || latestSet?.estado_inferido;
   return (
     <div className="bg-bg-card border border-border-subtle rounded-2xl p-4 space-y-3">
       <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">Métricas en tiempo real</h3>
@@ -381,15 +379,9 @@ const RealLeadConversation = () => {
     const historialReciente = (leadSnapshot.conversacion || [])
       .slice(Math.max(0, messageIndex - 6), messageIndex)
       .map(m => ({ id: m.id, tipo: m.tipo, mensaje: m.mensaje }));
-    const memoriaAnterior = [...(leadSnapshot.conversacion || [])]
-      .slice(0, messageIndex)
-      .reverse()
-      .find(entry => entry.analisis_ia?.version === 'set_engine_v1')
-      ?.analisis_ia?.memoria || null;
-
     try {
-      const prompt = buildSetEngineAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje, memoriaAnterior);
-      const result = await callSetEngine('Eres SET Conversation Engine v1. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }], project);
+      const prompt = buildSetEngineAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje);
+      const result = await callSetEngine('Eres SET Core v1 Beta. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }], project);
 
       setLead(prev => {
         const newConversacion = (prev.conversacion || []).map(entry =>
@@ -774,10 +766,10 @@ const RealLeadConversation = () => {
                   {/* S.E.T. tag below lead message */}
                   {msg.tipo === 'lead' && msg.analisis_ia && (
                     <div className="mt-1 px-1">
-                      {msg.analisis_ia.version === 'set_engine_v1' ? (
+                      {['set_engine_v1', 'set_core_v1_beta'].includes(msg.analisis_ia.version) ? (
                         <span className="text-xs text-text-secondary">
-                          Compromiso: <span className="font-semibold text-accent-gold">{COMMITMENT_LABELS[msg.analisis_ia.estado_inferido?.nivel_compromiso] || 'No determinado'}</span>
-                          {' · '}Temperatura IA: {AI_TEMPERATURE_LABELS[msg.analisis_ia.estado_inferido?.temperatura_ia] || 'No determinada'}
+                          Compromiso: <span className="font-semibold text-accent-gold">{COMMITMENT_LABELS[(msg.analisis_ia.estado || msg.analisis_ia.estado_inferido)?.nivel_compromiso] || 'No determinado'}</span>
+                          {' · '}Temperatura IA: {AI_TEMPERATURE_LABELS[(msg.analisis_ia.estado || msg.analisis_ia.estado_inferido)?.temperatura_ia] || 'No determinada'}
                         </span>
                       ) : (
                         <span className="text-xs text-text-secondary">
