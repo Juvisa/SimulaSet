@@ -58,7 +58,15 @@ const Navbar = () => {
               </Link>
             ))}
           </div>
-          <span className="text-sm text-text-secondary">{user?.name}</span>
+          <div className="flex items-center gap-3">
+            <span
+              title="Opera a diario con el Copilot para mantener tu racha activa"
+              className="flex items-center gap-1.5 text-xs font-semibold text-accent-gold bg-bg-primary border border-accent-gold/40 rounded-full px-3 py-1 cursor-default"
+            >
+              🔥 1 Día en Racha · 50 XP
+            </span>
+            <span className="text-sm text-text-secondary">{user?.name}</span>
+          </div>
         </div>
 
         {/* Mobile */}
