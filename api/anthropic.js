@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-sonnet-4-5';
-const ALLOWED_MAX_TOKENS = new Set([500, 1500, 2000]);
+const ALLOWED_MAX_TOKENS = new Set([500, 1500, 2000, 3000]);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  const { systemPrompt, messages, maxTokens } = req.body || {};
+  const { systemPrompt, messages, maxTokens, mode } = req.body || {};
 
   if (
     (systemPrompt !== undefined && typeof systemPrompt !== 'string') ||
@@ -37,6 +37,9 @@ export default async function handler(req, res) {
 
     const response = await anthropic.messages.create(params);
     const text = response.content.find((block) => block.type === 'text')?.text || '';
+    if (mode === 'set_engine') {
+      return res.status(200).json({ text, stop_reason: response.stop_reason });
+    }
     return res.status(200).json({ text });
   } catch {
     return res.status(502).json({ error: 'No se pudo completar la solicitud de IA' });

@@ -3,9 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getRealLeadById, saveRealLead } from '../utils/storage';
 import { getProjectById } from '../utils/projects';
-import { callClaude } from '../utils/anthropic';
+import { callClaude, callSetEngine } from '../utils/anthropic';
+import { findProjectResource, getSetDecisionView } from '../utils/setEngine';
 import {
-  buildRealLeadAnalysisPrompt,
+  buildSetEngineAnalysisPrompt,
   buildBreakTheIcePrompt,
   buildReactivacionRealPrompt,
 } from '../utils/prompts';
@@ -56,6 +57,124 @@ const CopyBtn = ({ text, label = 'Copiar' }) => {
       {done ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
       {done ? '¡Copiado!' : label}
     </button>
+  );
+};
+
+const COMMITMENT_LABELS = {
+  no_determinado: 'No determinado',
+  incipiente: 'Incipiente',
+  explicito: 'Explícito',
+  comprometido: 'Comprometido',
+};
+
+const AI_TEMPERATURE_LABELS = {
+  no_determinada: 'No determinada',
+  fria: 'Fría',
+  tibia: 'Tibia',
+  caliente: 'Caliente',
+};
+
+const PIECE_LABELS = {
+  texto: 'Texto',
+  audio_guion: 'Guion para audio',
+  video_guion: 'Guion para video',
+  recurso: 'Recurso del Project',
+};
+
+const DecisionCard = ({ contract, project, onSend }) => {
+  const { diagnostico, decision } = contract;
+  const { estado, pieces, branches } = getSetDecisionView(contract);
+
+  const pieceText = piece => {
+    if (piece.tipo !== 'recurso') return piece.contenido;
+    const resource = findProjectResource(project, piece.recurso_id);
+    return [resource?.nombre || resource?.name, resource?.link].filter(Boolean).join('\n');
+  };
+
+  return (
+    <div className="bg-bg-primary border border-border-subtle rounded-2xl p-4 space-y-4">
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="bg-bg-card rounded-lg p-2">
+          <div className="text-text-secondary">Nivel de compromiso</div>
+          <div className="font-bold text-accent-gold">{COMMITMENT_LABELS[estado.nivel_compromiso]}</div>
+        </div>
+        <div className="bg-bg-card rounded-lg p-2">
+          <div className="text-text-secondary">Temperatura IA</div>
+          <div className="font-bold text-text-primary">{AI_TEMPERATURE_LABELS[estado.temperatura_ia]}</div>
+        </div>
+      </div>
+
+      <section>
+        <div className="text-xs font-black text-blue-400 uppercase">Situación</div>
+        <p className="text-sm text-text-primary mt-1">{diagnostico.situacion.resumen}</p>
+      </section>
+      <section>
+        <div className="text-xs font-black text-amber-400 uppercase">Emoción</div>
+        <p className="text-sm text-text-primary mt-1">{diagnostico.emocion.inferencia}</p>
+        <p className="text-xs text-text-secondary mt-1">Necesario para avanzar: {diagnostico.emocion.condicion_necesaria_para_avanzar}</p>
+      </section>
+      <section>
+        <div className="text-xs font-black text-green-400 uppercase">Transición</div>
+        <p className="text-sm text-text-primary mt-1">{diagnostico.transicion.microcompromiso}</p>
+        <p className="text-xs text-text-secondary mt-1">{diagnostico.transicion.razon}</p>
+      </section>
+
+      <section className="border-t border-border-subtle pt-3">
+        <div className="text-xs font-black text-accent-gold uppercase">Movimiento recomendado</div>
+        <div className="text-sm font-bold text-text-primary mt-1 capitalize">{decision.accion.replaceAll('_', ' ')}</div>
+        <p className="text-sm text-text-secondary mt-1">{decision.objetivo}</p>
+      </section>
+      <section>
+        <div className="text-xs font-black text-text-secondary uppercase">Estrategia</div>
+        <p className="text-sm text-text-primary mt-1">{decision.estrategia}</p>
+      </section>
+
+      <section>
+        <div className="text-xs font-black text-text-secondary uppercase mb-2">Qué enviar ahora</div>
+        {decision.respuesta === null ? (
+          <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm font-semibold text-green-400">
+            Ahora no necesitas enviar nada.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {pieces.map((piece, index) => (
+              <div key={`${piece.tipo}-${index}`} className="bg-bg-card border border-border-subtle rounded-xl p-3">
+                <div className="text-xs font-bold text-accent-gold mb-2">{PIECE_LABELS[piece.tipo]}</div>
+                <p className="text-sm text-text-primary whitespace-pre-wrap">{pieceText(piece)}</p>
+                <div className="mt-2"><CopyBtn text={pieceText(piece)} /></div>
+              </div>
+            ))}
+            <button onClick={() => onSend(pieces)} className="w-full flex items-center justify-center gap-1 text-xs bg-accent-gold/10 hover:bg-accent-gold/20 text-accent-gold border border-accent-gold/20 px-3 py-2 rounded-lg font-medium transition-all">
+              <Check size={12} /> Marcar como enviado
+            </button>
+          </div>
+        )}
+      </section>
+
+      {decision.que_evitar.length > 0 && (
+        <section>
+          <div className="text-xs font-black text-red-400 uppercase mb-1">Evita</div>
+          <ul className="space-y-1 text-xs text-text-secondary">
+            {decision.que_evitar.map((item, index) => <li key={index}>• {item}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {branches.length > 0 && (
+        <section>
+          <div className="text-xs font-black text-text-secondary uppercase mb-1">Anticipación</div>
+          <div className="space-y-2">
+            {branches.map(([label, branch]) => (
+              <div key={label} className="text-xs bg-bg-card rounded-lg p-2">
+                <span className="font-bold text-text-primary">{label}: </span>
+                <span className="text-text-secondary">{branch.objetivo}</span>
+                {branch.esperar_horas ? <span className="text-text-secondary"> · esperar {branch.esperar_horas}h</span> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
   );
 };
 
@@ -147,29 +266,25 @@ const AnalysisPanel = ({ analysis }) => {
 
 const MetricsPanel = ({ lead }) => {
   const m = lead.metricas || {};
-  const etapaColor = { S: '#2563EB', E: '#C9920A', T: '#1D9E75' };
-  const etapaColor2 = etapaColor[m.etapa_set_actual] || '#9A9A9A';
+  const latestSet = [...(lead.conversacion || [])].reverse().find(message =>
+    ['set_engine_v1', 'set_core_v1_beta'].includes(message.analisis_ia?.version)
+  )?.analisis_ia;
+  const inferred = latestSet?.estado || latestSet?.estado_inferido;
   return (
     <div className="bg-bg-card border border-border-subtle rounded-2xl p-4 space-y-3">
       <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">Métricas en tiempo real</h3>
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-text-secondary">Etapa S.E.T.</span>
-          <span className="font-bold" style={{ color: etapaColor2 }}>{m.etapa_set_actual || 'S'}</span>
-        </div>
-        <div>
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-text-secondary">Nivel de interés</span>
-            <span className="font-bold text-accent-gold">{m.nivel_interes_actual || 0}%</span>
-          </div>
-          <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-            <div className="h-full bg-accent-gold rounded-full transition-all duration-700"
-              style={{ width: `${m.nivel_interes_actual || 0}%` }} />
-          </div>
+          <span className="text-text-secondary">Temperatura manual</span>
+          <span className="font-medium text-text-primary">{TEMP_ICON[lead.temperatura]} {lead.temperatura}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-text-secondary">Temperatura</span>
-          <span className="font-medium text-text-primary">{TEMP_ICON[lead.temperatura]} {lead.temperatura}</span>
+          <span className="text-text-secondary">Temperatura IA</span>
+          <span className="font-medium text-text-primary">{AI_TEMPERATURE_LABELS[inferred?.temperatura_ia] || 'No determinada'}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-text-secondary">Compromiso</span>
+          <span className="font-medium text-accent-gold">{COMMITMENT_LABELS[inferred?.nivel_compromiso] || 'No determinado'}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-text-secondary">Turnos</span>
@@ -208,6 +323,7 @@ const RealLeadConversation = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [currentSuggestions, setCurrentSuggestions] = useState(null);
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
+  const [currentDecision, setCurrentDecision] = useState(null);
   const [analysisError, setAnalysisError] = useState(null);
   const [mode, setMode] = useState('chat'); // chat | breakice | reactivacion
   const [panelVisible, setPanelVisible] = useState(false);
@@ -255,42 +371,69 @@ const RealLeadConversation = () => {
     setAnalyzing(true);
     setPanelVisible(true);
     setAnalysisError(null);
+    setCurrentDecision(null);
+    setCurrentSuggestions(null);
+    setCurrentAnalysis(null);
 
     const messageIndex = (leadSnapshot.conversacion || []).findIndex(entry => entry.id === message.id);
     const historialReciente = (leadSnapshot.conversacion || [])
       .slice(Math.max(0, messageIndex - 6), messageIndex)
-      .map(m => `${m.tipo === 'lead' ? lead.nombre : 'Setter'}: ${m.mensaje}`)
-      .join('\n');
-
+      .map(m => ({ id: m.id, tipo: m.tipo, mensaje: m.mensaje }));
     try {
-      const prompt = buildRealLeadAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje);
-      const result = await callClaude('Eres un coach experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+      const prompt = buildSetEngineAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje);
+      const result = await callSetEngine('Eres SET Core v1 Beta. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }], project);
 
       setLead(prev => {
         const newConversacion = (prev.conversacion || []).map(entry =>
-          entry.id === message.id ? { ...entry, analisis_ia: result.analisis_mensaje } : entry
+          entry.id === message.id ? { ...entry, analisis_ia: result } : entry
         );
         return saveRealLead({
           ...prev,
           conversacion: newConversacion,
-          temperatura: result.analisis_mensaje?.temperatura_actualizada || prev.temperatura,
           metricas: {
             ...prev.metricas,
             total_turnos: newConversacion.length,
-            nivel_interes_actual: result.analisis_mensaje?.nivel_interes || prev.metricas?.nivel_interes_actual || 0,
-            etapa_set_actual: result.analisis_mensaje?.etapa_set_detectada || prev.metricas?.etapa_set_actual || 'S',
           },
         });
       });
 
-      setCurrentAnalysis(result.analisis_mensaje);
-      setCurrentSuggestions(result.sugerencias);
+      setCurrentDecision(result);
+      setCurrentAnalysis(null);
+      setCurrentSuggestions(null);
       suggestionSentRef.current = false;
       setMode('chat');
     } catch (err) {
       setAnalysisError({ messageId: message.id, message: err.message });
     }
     setAnalyzing(false);
+  };
+
+  const handleSendDecision = (pieces) => {
+    if (suggestionSentRef.current || !pieces.length) return;
+    suggestionSentRef.current = true;
+    const timestamp = new Date().toISOString();
+    const entries = pieces.map((piece, index) => {
+      const resource = piece.tipo === 'recurso' ? findProjectResource(project, piece.recurso_id) : null;
+      return {
+        id: crypto.randomUUID(),
+        timestamp,
+        turno: (lead.conversacion?.length || 0) + index + 1,
+        tipo: 'setter_enviado',
+        mensaje: piece.tipo === 'recurso'
+          ? [resource?.nombre || resource?.name, resource?.link].filter(Boolean).join('\n')
+          : piece.contenido,
+        formato: piece.tipo,
+        recurso_id: piece.recurso_id,
+      };
+    });
+    const newConversacion = [...(lead.conversacion || []), ...entries];
+    persistLead({
+      conversacion: newConversacion,
+      ultimo_contacto: timestamp,
+      metricas: { ...lead.metricas, total_turnos: newConversacion.length },
+    });
+    setCurrentDecision(null);
+    setPanelVisible(false);
   };
 
   const handleAnalyze = async () => {
@@ -358,6 +501,7 @@ const RealLeadConversation = () => {
     if (!project) return;
     setLoading(true);
     setMode('breakice');
+    setCurrentDecision(null);
     setPanelVisible(true);
     try {
       const prompt = buildBreakTheIcePrompt(project, lead);
@@ -377,6 +521,7 @@ const RealLeadConversation = () => {
     if (!project) return;
     setLoading(true);
     setMode('reactivacion');
+    setCurrentDecision(null);
     setPanelVisible(true);
     const ultimos3 = (lead.conversacion || [])
       .slice(-3)
@@ -422,7 +567,7 @@ const RealLeadConversation = () => {
 
   const estadoCfg = ESTADO_CONFIG[lead.estado] || ESTADO_CONFIG.activo;
   const hasMessages = lead.conversacion?.length > 0;
-  const panelTitle = mode === 'breakice' ? '🔥 Break the Ice' : mode === 'reactivacion' ? '⚡ Reactivación' : '💡 Sugerencias';
+  const panelTitle = mode === 'breakice' ? '🔥 Break the Ice' : mode === 'reactivacion' ? '⚡ Reactivación' : 'SET Copilot · Decisión';
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col">
@@ -621,10 +766,17 @@ const RealLeadConversation = () => {
                   {/* S.E.T. tag below lead message */}
                   {msg.tipo === 'lead' && msg.analisis_ia && (
                     <div className="mt-1 px-1">
-                      <span className="text-xs text-text-secondary">
-                        Etapa: <span className="font-semibold text-accent-gold">{msg.analisis_ia.etapa_set_detectada}</span>
-                        {' · '}Interés: {msg.analisis_ia.nivel_interes}%
-                      </span>
+                      {['set_engine_v1', 'set_core_v1_beta'].includes(msg.analisis_ia.version) ? (
+                        <span className="text-xs text-text-secondary">
+                          Compromiso: <span className="font-semibold text-accent-gold">{COMMITMENT_LABELS[(msg.analisis_ia.estado || msg.analisis_ia.estado_inferido)?.nivel_compromiso] || 'No determinado'}</span>
+                          {' · '}Temperatura IA: {AI_TEMPERATURE_LABELS[(msg.analisis_ia.estado || msg.analisis_ia.estado_inferido)?.temperatura_ia] || 'No determinada'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-text-secondary">
+                          Etapa: <span className="font-semibold text-accent-gold">{msg.analisis_ia.etapa_set_detectada || '—'}</span>
+                          {typeof msg.analisis_ia.nivel_interes === 'number' ? ` · Interés: ${msg.analisis_ia.nivel_interes}%` : ''}
+                        </span>
+                      )}
                     </div>
                   )}
                   {msg.tipo === 'lead' && analysisError?.messageId === msg.id && (
@@ -687,12 +839,12 @@ const RealLeadConversation = () => {
         {/* Desktop side panel */}
         <div className="hidden md:flex flex-col w-80 flex-shrink-0 p-4 gap-4">
           {/* Suggestions */}
-          {(currentSuggestions || analyzing || loading) && (
+          {(currentDecision || currentSuggestions || analyzing || loading) && (
             <div className="bg-bg-card border border-border-subtle rounded-2xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle"
                 style={{ borderTopColor: '#C9920A', borderTopWidth: 2 }}>
                 <span className="font-bold text-text-primary text-sm">{panelTitle}</span>
-                <button onClick={() => { setCurrentSuggestions(null); setCurrentAnalysis(null); }} className="text-text-secondary hover:text-text-primary">
+                <button onClick={() => { setCurrentDecision(null); setCurrentSuggestions(null); setCurrentAnalysis(null); }} className="text-text-secondary hover:text-text-primary">
                   <X size={16} />
                 </button>
               </div>
@@ -704,6 +856,7 @@ const RealLeadConversation = () => {
                   </div>
                 )}
                 {currentAnalysis && <AnalysisPanel analysis={currentAnalysis} />}
+                {currentDecision && <DecisionCard contract={currentDecision} project={project} onSend={handleSendDecision} />}
                 {currentSuggestions?.map(sug => (
                   <SuggestionCard
                     key={sug.opcion}
@@ -722,7 +875,7 @@ const RealLeadConversation = () => {
       </div>
 
       {/* Mobile panel drawer */}
-      {panelVisible && (currentSuggestions || analyzing || loading) && (
+      {panelVisible && (currentDecision || currentSuggestions || analyzing || loading) && (
         <div className="md:hidden fixed inset-x-0 bottom-24 z-40 bg-bg-card border-t-2 border-accent-gold rounded-t-2xl"
           style={{ maxHeight: '55vh', overflowY: 'auto' }}>
           <div className="flex items-center justify-between px-4 py-3 sticky top-0 bg-bg-card border-b border-border-subtle">
@@ -739,6 +892,7 @@ const RealLeadConversation = () => {
               </div>
             )}
             {currentAnalysis && <AnalysisPanel analysis={currentAnalysis} />}
+            {currentDecision && <DecisionCard contract={currentDecision} project={project} onSend={handleSendDecision} />}
             {currentSuggestions?.map(sug => (
               <SuggestionCard
                 key={sug.opcion}
@@ -752,7 +906,7 @@ const RealLeadConversation = () => {
       )}
 
       {/* Mobile panel toggle */}
-      {!panelVisible && currentSuggestions && (
+      {!panelVisible && (currentDecision || currentSuggestions) && (
         <button
           onClick={() => setPanelVisible(true)}
           className="md:hidden fixed bottom-28 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg font-bold text-black"
