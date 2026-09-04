@@ -53,6 +53,9 @@ const MissionConversationHunt = () => {
       const missionStillComplete = isMissionComplete(savedResponses);
       setResponses(savedResponses);
       setStatus(result.status === 'completed' && missionStillComplete ? 'completed' : 'in_progress');
+      if (savedResponses?._evaluation?.version === MISSION_01.version && savedResponses?._evaluation?.data) {
+        setEvaluation(savedResponses._evaluation.data);
+      }
       const firstIncomplete = MISSION_01.cases.findIndex(missionCase => !isMissionCaseComplete(savedResponses[missionCase.id]));
       setCurrentCaseIndex(firstIncomplete === -1 ? MISSION_01.cases.length - 1 : firstIncomplete);
     };
@@ -76,14 +79,22 @@ const MissionConversationHunt = () => {
         const data = await response.json();
         if (!response.ok || !data?.text) throw new Error(data?.error || 'No se pudo evaluar la misión');
         const parsed = parseEvaluatorJson(data.text);
-        if (active) setEvaluation(parsed);
+        if (active) {
+          const persistedResponses = {
+            ...responses,
+            _evaluation: { version: MISSION_01.version, data: parsed, generatedAt: new Date().toISOString() },
+          };
+          setEvaluation(parsed);
+          setResponses(persistedResponses);
+          await saveMissionProgress({ userId: user.id, missionId: MISSION_01.id, responses: persistedResponses, status: 'completed' });
+        }
       } catch (caught) {
         if (active) setEvaluationError(caught?.name === 'AbortError' ? 'La evaluación tardó demasiado. Inténtalo de nuevo.' : (caught instanceof Error ? caught.message : 'No se pudo generar tu evaluación'));
       } finally { if (active) setEvaluating(false); }
     };
     evaluate();
     return () => { active = false; controller.abort(); };
-  }, [status, responses, evaluation, evaluationError, evaluationAttempt]);
+  }, [status, responses, evaluation, evaluationError, evaluationAttempt, user.id]);
 
   const missionCase = MISSION_01.cases[currentCaseIndex];
   const currentResponse = useMemo(() => ({ ...EMPTY_RESPONSE, ...(responses[missionCase?.id] || {}) }), [missionCase?.id, responses]);
@@ -91,7 +102,9 @@ const MissionConversationHunt = () => {
 
   const saveAndContinue = async () => {
     if (!isMissionCaseComplete(currentResponse)) { setError('Completa los cuatro campos de este caso antes de continuar.'); return; }
-    const updatedResponses = { ...responses, [missionCase.id]: currentResponse };
+    const { _evaluation: previousEvaluation, ...responseCases } = responses;
+    void previousEvaluation;
+    const updatedResponses = { ...responseCases, [missionCase.id]: currentResponse };
     const completed = isMissionComplete(updatedResponses);
     setSaving(true); setError('');
     const { progress, error: saveError } = await saveMissionProgress({ userId: user.id, missionId: MISSION_01.id, responses: updatedResponses, status: completed ? 'completed' : 'in_progress' });
