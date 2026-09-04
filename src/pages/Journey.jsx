@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { ArrowRight, BriefcaseBusiness, CalendarCheck, Check, CircleDollarSign, Flame, LockKeyhole, Medal, Mic2, Sparkles, Target, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { MISSION_01 } from '../data/missions';
+import { getMissionProgress } from '../utils/missionProgress';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 
@@ -31,6 +34,21 @@ const Journey = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isStarter = user.onboarding?.classification === 'starter';
+  const [setScore, setSetScore] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    getMissionProgress({ userId: user.id, missionId: MISSION_01.id }).then(({ progress }) => {
+      if (!active) return;
+      const savedEvaluation = progress?.responses?._evaluation;
+      const score = savedEvaluation?.version === MISSION_01.version ? savedEvaluation?.data?.setScore : null;
+      setSetScore(Number.isFinite(score) ? score : null);
+    });
+    return () => { active = false; };
+  }, [user.id]);
+
+  const scoreLabel = setScore ?? 0;
+  const missionCompleted = setScore !== null;
 
   return (
     <Layout>
@@ -68,11 +86,11 @@ const Journey = () => {
         <section className="bg-bg-card border border-accent-coral/20 rounded-2xl p-6 md:p-8">
           <div className="grid md:grid-cols-3 gap-5 mb-6">
             <div><div className="text-xs text-text-secondary uppercase tracking-wider">Nivel actual</div><div className="text-xl font-black mt-1">SET Rookie 🌱</div></div>
-            <div><div className="text-xs text-text-secondary uppercase tracking-wider">SET Score</div><div className="text-xl font-black text-accent-coral mt-1">0</div></div>
+            <div><div className="text-xs text-text-secondary uppercase tracking-wider">SET Score</div><div className="text-xl font-black text-accent-coral mt-1">{scoreLabel}</div></div>
             <div><div className="text-xs text-text-secondary uppercase tracking-wider">Próximo nivel</div><div className="text-xl font-black mt-1">SET Operator ⚡</div></div>
           </div>
-          <div className="h-2.5 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
-          <p className="text-sm text-text-secondary mt-3">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>
+          <div className="h-2.5 bg-bg-input rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-accent-coral to-accent-gold rounded-full transition-all" style={{ width: `${Math.max(8, scoreLabel)}%` }} /></div>
+          <p className="text-sm text-text-secondary mt-3">{missionCompleted ? `Tu primera evidencia S.E.T. ya está registrada: ${setScore}/100.` : 'Completa tu primera misión para registrar tu SET Score.'}</p>
         </section>
 
         <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-5">
@@ -81,11 +99,11 @@ const Journey = () => {
             <div className="text-xs font-black tracking-widest text-text-secondary">MISIÓN #01</div>
             <h2 className="text-2xl font-black text-text-primary mt-1">First SET</h2>
             <div className="space-y-3 my-6">
-              {missionItems.map(item => <div key={item} className="flex items-center gap-3 text-sm text-text-secondary"><span className="w-5 h-5 rounded-md border border-border-subtle flex items-center justify-center"><Check size={12} className="opacity-20" /></span>{item}</div>)}
+              {missionItems.map(item => <div key={item} className="flex items-center gap-3 text-sm text-text-secondary"><span className="w-5 h-5 rounded-md border border-border-subtle flex items-center justify-center"><Check size={12} className={missionCompleted ? 'text-green-400' : 'opacity-20'} /></span>{item}</div>)}
             </div>
             <div className="flex items-center justify-between gap-4 pt-4 border-t border-border-subtle">
               <span className="text-sm font-bold text-accent-gold">🏅 Badge First SET</span>
-              <button onClick={() => navigate('/missions/mission_01_conversation_hunt')} className="flex items-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl text-sm font-bold">Comenzar misión <ArrowRight size={14} /></button>
+              <button onClick={() => navigate('/missions/mission_01_conversation_hunt')} className="flex items-center gap-2 bg-accent-coral text-white px-4 py-2.5 rounded-xl text-sm font-bold">{missionCompleted ? 'Ver resultado' : 'Comenzar misión'} <ArrowRight size={14} /></button>
             </div>
           </div>
 
@@ -96,7 +114,7 @@ const Journey = () => {
             <h2 className="text-xl font-black mt-4">Este lugar todavía está disponible.</h2>
             <p className="text-text-secondary text-sm mt-2">¿Será tu nombre el primero en aparecer aquí?</p>
             <p className="text-text-secondary text-xs mt-4">Aquí reconocemos a quienes convierten entrenamiento en resultados.</p>
-            <div className="grid grid-cols-2 gap-2 mt-6">{spotlightMetrics.map(metric => <div key={metric} className="bg-bg-input rounded-xl p-3"><div className="text-xs text-text-secondary">{metric}</div><div className="font-black mt-1">—</div></div>)}</div>
+            <div className="grid grid-cols-2 gap-2 mt-6">{spotlightMetrics.map(metric => <div key={metric} className="bg-bg-input rounded-xl p-3"><div className="text-xs text-text-secondary">{metric}</div><div className="font-black mt-1">{metric === 'SET Score' && missionCompleted ? setScore : '—'}</div></div>)}</div>
           </div>
         </section>
 
