@@ -12,6 +12,8 @@ import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target } from 'lucide-react';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
+import { MISSION_01 } from '../data/missions';
+import { getMissionProgress } from '../utils/missionProgress';
 
 const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
   <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -36,11 +38,21 @@ const Dashboard = () => {
   const [realLeads, setRealLeads] = useState([]);
   const [followUps, setFollowUps] = useState({ vencidos: [], hoy: [], proximos: [], total_activos: 0 });
   const [openFollowUp, setOpenFollowUp] = useState(null);
+  const [setScore, setSetScore] = useState(null);
 
   const refreshFollowUps = () => setFollowUps(verificarSeguimientosPendientes(user.id));
 
   useEffect(() => {
     getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
+    getMissionProgress({ userId: user.id, missionId: MISSION_01.id })
+      .then(({ progress: missionProgress }) => {
+        const savedEvaluation = missionProgress?.responses?._evaluation;
+        const score = savedEvaluation?.version === MISSION_01.version
+          ? savedEvaluation?.data?.setScore
+          : null;
+        setSetScore(Number.isFinite(score) ? score : null);
+      })
+      .catch(() => setSetScore(null));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(getSessions(user.id));
     setAnalyses(getAnalyses(user.id));
@@ -128,7 +140,7 @@ const Dashboard = () => {
           </div>
           <div className="grid grid-cols-3 gap-3 mt-7 mb-4">
             <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1">SET Rookie 🌱</div></div>
-            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1">0</div></div>
+            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1">{setScore ?? '—'}</div></div>
             <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Próximo nivel</div><div className="text-sm md:text-lg font-black mt-1">SET Operator ⚡</div></div>
           </div>
           <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
