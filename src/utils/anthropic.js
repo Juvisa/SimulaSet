@@ -8,7 +8,42 @@ const RETRYABLE_SET_ERRORS = new Set([
   SET_ENGINE_ERROR_CODES.MAX_TOKENS,
 ]);
 
+const DIRECT_MODEL = 'claude-sonnet-4-5';
+const DIRECT_ANTHROPIC_VERSION = '2023-06-01';
+const devApiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+const useDirectAnthropicCall = import.meta.env.DEV && !!devApiKey;
+
+const requestClaudeDirect = async ({ systemPrompt, messages, maxTokens, mode }) => {
+  const body = { model: DIRECT_MODEL, max_tokens: maxTokens, messages };
+  if (systemPrompt !== undefined) body.system = systemPrompt;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': devApiKey,
+      'anthropic-version': DIRECT_ANTHROPIC_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.find((block) => block.type === 'text')?.text || '';
+  return mode === 'set_engine' ? { text, stop_reason: data.stop_reason } : { text };
+};
+
 const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
+  if (useDirectAnthropicCall) {
+    const { text, stop_reason } = await requestClaudeDirect({ systemPrompt, messages, maxTokens, mode });
+    return mode === 'set_engine' ? { text, stop_reason } : text;
+  }
+
   const payload = { systemPrompt, messages, maxTokens };
   if (mode !== undefined) payload.mode = mode;
   const response = await fetch('/api/anthropic', {

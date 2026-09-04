@@ -62,10 +62,15 @@ const validateQuestionLimit = (content, path) => {
   }
 };
 
+const stripMarkdownFence = text => {
+  const fenced = text.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenced ? fenced[1] : text.trim();
+};
+
 export const parseAndValidateSetEngineResponse = (text, project) => {
   let contract;
   try {
-    contract = JSON.parse(text.trim());
+    contract = JSON.parse(stripMarkdownFence(text));
   } catch {
     throw new SetEngineError(SET_ENGINE_ERROR_CODES.FORMAT, 'La IA no devolvió JSON puro válido. Puedes reintentar.');
   }

@@ -106,6 +106,7 @@ const ProjectForm = () => {
       setError('Completa los campos obligatorios: nombre, experto y promesa');
       return;
     }
+
     setSaving(true);
     const avatarDescription = `
 Tipo de negocio: ${form.avatarBusiness}
