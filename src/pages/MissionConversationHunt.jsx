@@ -31,8 +31,9 @@ const MissionConversationHunt = () => {
       if (!active) return;
 
       const savedResponses = result.responses || {};
+      const missionStillComplete = isMissionComplete(savedResponses);
       setResponses(savedResponses);
-      setStatus(result.status);
+      setStatus(result.status === 'completed' && missionStillComplete ? 'completed' : 'in_progress');
       const firstIncomplete = MISSION_01.cases.findIndex(missionCase => !isMissionCaseComplete(savedResponses[missionCase.id]));
       setCurrentCaseIndex(firstIncomplete === -1 ? MISSION_01.cases.length - 1 : firstIncomplete);
     };
@@ -95,7 +96,7 @@ const MissionConversationHunt = () => {
     return <Layout><div className="flex min-h-[60vh] items-center justify-center gap-2 text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Preparando misión...</div></Layout>;
   }
 
-  if (status === 'completed') {
+  if (status === 'completed' && isMissionComplete(responses)) {
     return (
       <Layout>
         <div className="mx-auto max-w-5xl animate-fade-in">
@@ -103,13 +104,14 @@ const MissionConversationHunt = () => {
             <CheckCircle2 size={52} className="mx-auto text-green-400" />
             <div className="mt-6 text-xs font-black tracking-[0.25em] text-green-400">MISIÓN COMPLETADA</div>
             <h1 className="mt-3 text-2xl font-black text-text-primary md:text-4xl">Primera evidencia S.E.T. registrada.</h1>
-            <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-text-secondary">Ahora compara tu razonamiento con el criterio S.E.T.<br />No existe una única respuesta perfecta: observa si identificaste correctamente qué necesitaba la conversación para avanzar.</p>
+            <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-text-secondary">Ahora compara tu razonamiento con el criterio S.E.T.<br />No existe una única respuesta perfecta: observa qué viste bien, qué asumiste y si tu movimiento corresponde al momento real de la conversación.</p>
           </section>
 
           <div className="mt-6 space-y-6">
             {MISSION_01.cases.map((completedCase, index) => (
               <article key={completedCase.id} className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-6">
                 <div className="text-xs font-black tracking-[0.18em] text-accent-gold">CASO {index + 1} · {completedCase.industry.toUpperCase()}</div>
+                {completedCase.context && <div className="mt-2 text-xs font-bold text-text-secondary">CONTEXTO · {completedCase.context}</div>}
                 <div className="mt-4 rounded-2xl rounded-tl-sm border border-border-subtle bg-bg-input px-4 py-3 text-sm leading-relaxed text-text-primary">{completedCase.leadMessage}</div>
 
                 <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -127,7 +129,7 @@ const MissionConversationHunt = () => {
 
                   <section className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4 md:p-5">
                     <h2 className="text-xs font-black tracking-[0.14em] text-green-400">CRITERIO S.E.T. DE REFERENCIA</h2>
-                    <p className="mt-2 text-xs leading-relaxed text-text-secondary">Es una referencia pedagógica, no la única respuesta correcta.</p>
+                    <p className="mt-2 text-xs leading-relaxed text-text-secondary">No es una respuesta para copiar. Es una referencia para contrastar tu criterio.</p>
                     <div className="mt-5 space-y-5">
                       {MISSION_FIELDS.map(field => (
                         <div key={field.key}>
@@ -138,6 +140,19 @@ const MissionConversationHunt = () => {
                     </div>
                   </section>
                 </div>
+
+                <section className="mt-4 rounded-2xl border border-accent-gold/30 bg-accent-gold/5 p-4 md:p-5">
+                  <div className="text-xs font-black tracking-[0.16em] text-accent-gold">AUTOEVALUACIÓN GUIADA</div>
+                  <p className="mt-2 text-xs leading-relaxed text-text-secondary">No busques coincidir palabra por palabra. Revisa la calidad de tu razonamiento.</p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {MISSION_FIELDS.map(field => (
+                      <div key={field.key} className="rounded-xl border border-border-subtle bg-bg-input/60 p-3">
+                        <div className="text-xs font-black text-text-primary">{field.label}</div>
+                        <p className="mt-1 text-xs leading-relaxed text-text-secondary">{completedCase.reflection?.[field.key]}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </article>
             ))}
           </div>
@@ -171,6 +186,7 @@ const MissionConversationHunt = () => {
 
         <section className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-6">
           <div className="text-xs font-black uppercase tracking-wider text-accent-gold">{missionCase.industry}</div>
+          {missionCase.context && <div className="mt-2 text-xs font-bold text-text-secondary">CONTEXTO · {missionCase.context}</div>}
           <div className="mt-4 rounded-2xl rounded-tl-sm border border-border-subtle bg-bg-input px-4 py-3 text-sm leading-relaxed text-text-primary">
             {missionCase.leadMessage}
           </div>
