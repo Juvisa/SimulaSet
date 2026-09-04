@@ -1,12 +1,40 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { MISSION_01, MISSION_FIELDS, isMissionCaseComplete, isMissionComplete } from '../data/missions';
 import { getMissionProgress, saveMissionProgress, startMissionProgress } from '../utils/missionProgress';
 
 const EMPTY_RESPONSE = Object.fromEntries(MISSION_FIELDS.map(field => [field.key, '']));
+
+const buildEvaluatorPayload = responses => MISSION_01.cases.map(missionCase => ({
+  id: missionCase.id,
+  industry: missionCase.industry,
+  context: missionCase.context,
+  leadMessage: missionCase.leadMessage,
+  student: responses[missionCase.id],
+  reference: missionCase.reference,
+}));
+
+const parseEvaluatorJson = text => {
+  const cleaned = String(text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+  const parsed = JSON.parse(cleaned);
+  const keys = ['situacion', 'emocion', 'transicion', 'movimiento'];
+  if (!Number.isFinite(parsed?.setScore) || !parsed?.dimensions || !parsed?.mainOpportunity) throw new Error('Formato incompleto');
+  keys.forEach(key => {
+    if (!Number.isFinite(parsed.dimensions[key]?.score) || typeof parsed.dimensions[key]?.feedback !== 'string') throw new Error('Formato de dimensión incompleto');
+  });
+  return {
+    setScore: Math.max(0, Math.min(100, Math.round(parsed.setScore))),
+    level: typeof parsed.level === 'string' ? parsed.level : '',
+    mainOpportunity: String(parsed.mainOpportunity),
+    dimensions: Object.fromEntries(keys.map(key => [key, {
+      score: Math.max(0, Math.min(100, Math.round(parsed.dimensions[key].score))),
+      feedback: parsed.dimensions[key].feedback.trim(),
+    }])),
+  };
+};
 
 const MissionConversationHunt = () => {
   const { user } = useAuth();
@@ -17,6 +45,9 @@ const MissionConversationHunt = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [evaluation, setEvaluation] = useState(null);
+  const [evaluating, setEvaluating] = useState(false);
+  const [evaluationError, setEvaluationError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -48,6 +79,44 @@ const MissionConversationHunt = () => {
 
     return () => { active = false; };
   }, [user.id]);
+
+  useEffect(() => {
+    if (status !== 'completed' || !isMissionComplete(responses) || evaluation || evaluating || evaluationError) return;
+
+    let active = true;
+    const evaluate = async () => {
+      setEvaluating(true);
+      setEvaluationError('');
+      try {
+        const systemPrompt = `Eres el evaluador pedagógico oficial del Método S.E.T. de DIGITAL SET. Evalúas razonamiento comercial, no coincidencia literal con una referencia.\n\nS = Situación: distinguir hechos de interpretaciones, usar contexto del funnel y momento de conversación.\nE = Emoción: formular hipótesis razonables a partir de señales, sin leer la mente ni afirmar certezas no sustentadas.\nT = Transición: elegir el próximo microcompromiso lógico según el nivel real de avance del lead.\nMovimiento = ejecutar esa transición con un mensaje claro, natural, relevante y sin presión innecesaria.\n\nEvalúa el desempeño global del alumno a través de los 3 casos. Sé exigente pero pedagógico. Reconoce aciertos concretos y señala omisiones concretas. No penalices diferencias de estilo si el razonamiento es correcto. No inventes contexto.\n\nDevuelve SOLO JSON válido, sin markdown, exactamente con esta forma:\n{\n  "setScore": 0,\n  "level": "EN DESARROLLO",\n  "mainOpportunity": "...",\n  "dimensions": {\n    "situacion": {"score": 0, "feedback": "..."},\n    "emocion": {"score": 0, "feedback": "..."},\n    "transicion": {"score": 0, "feedback": "..."},\n    "movimiento": {"score": 0, "feedback": "..."}\n  }\n}\n\nTodos los scores deben ser enteros de 0 a 100. El feedback de cada dimensión debe ser breve, específico y en español, máximo 2 frases. level debe ser uno de: INICIAL, EN DESARROLLO, BIEN ENCAMINADO, SÓLIDO.`;
+
+        const response = await fetch('/api/anthropic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemPrompt,
+            maxTokens: 1500,
+            messages: [{
+              role: 'user',
+              content: `Evalúa estas respuestas del alumno. La referencia es pedagógica y no debe tratarse como única respuesta correcta.\n\n${JSON.stringify(buildEvaluatorPayload(responses), null, 2)}`,
+            }],
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data?.text) throw new Error(data?.error || 'No se pudo evaluar la misión');
+        const parsed = parseEvaluatorJson(data.text);
+        if (active) setEvaluation(parsed);
+      } catch (caught) {
+        if (active) setEvaluationError(caught instanceof Error ? caught.message : 'No se pudo generar tu evaluación');
+      } finally {
+        if (active) setEvaluating(false);
+      }
+    };
+
+    evaluate();
+    return () => { active = false; };
+  }, [status, responses, evaluation, evaluating, evaluationError]);
 
   const missionCase = MISSION_01.cases[currentCaseIndex];
   const currentResponse = useMemo(() => ({
@@ -89,6 +158,8 @@ const MissionConversationHunt = () => {
 
     setResponses(progress.responses || updatedResponses);
     setStatus(progress.status);
+    setEvaluation(null);
+    setEvaluationError('');
     if (!completed) setCurrentCaseIndex(index => Math.min(index + 1, MISSION_01.cases.length - 1));
   };
 
@@ -97,6 +168,13 @@ const MissionConversationHunt = () => {
   }
 
   if (status === 'completed' && isMissionComplete(responses)) {
+    const dimensionMeta = [
+      ['situacion', 'S · SITUACIÓN'],
+      ['emocion', 'E · EMOCIÓN'],
+      ['transicion', 'T · TRANSICIÓN'],
+      ['movimiento', 'TU MOVIMIENTO'],
+    ];
+
     return (
       <Layout>
         <div className="mx-auto max-w-5xl animate-fade-in">
@@ -104,7 +182,51 @@ const MissionConversationHunt = () => {
             <CheckCircle2 size={52} className="mx-auto text-green-400" />
             <div className="mt-6 text-xs font-black tracking-[0.25em] text-green-400">MISIÓN COMPLETADA</div>
             <h1 className="mt-3 text-2xl font-black text-text-primary md:text-4xl">Primera evidencia S.E.T. registrada.</h1>
-            <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-text-secondary">Ahora compara tu razonamiento con el criterio S.E.T.<br />No existe una única respuesta perfecta: observa qué viste bien, qué asumiste y si tu movimiento corresponde al momento real de la conversación.</p>
+            <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-text-secondary">Ahora sí vamos a evaluar tu razonamiento, no a buscar una frase idéntica a la referencia.</p>
+          </section>
+
+          <section className="mt-6 rounded-3xl border border-accent-coral/30 bg-bg-card p-5 md:p-8">
+            <div className="flex items-center gap-2 text-xs font-black tracking-[0.18em] text-accent-coral"><Sparkles size={16} /> SET EVALUATOR</div>
+            {evaluating && (
+              <div className="mt-6 flex items-center gap-3 rounded-2xl border border-border-subtle bg-bg-input/50 p-5 text-sm text-text-secondary">
+                <Loader2 size={18} className="animate-spin" /> Analizando tu criterio S.E.T. en los tres casos...
+              </div>
+            )}
+            {evaluationError && !evaluation && (
+              <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-300">
+                No pudimos generar el SET Score en este momento. Tus respuestas y la referencia siguen disponibles abajo.
+                <button onClick={() => setEvaluationError('')} className="ml-2 font-bold underline">Reintentar</button>
+              </div>
+            )}
+            {evaluation && (
+              <>
+                <div className="mt-6 grid gap-5 lg:grid-cols-[220px_1fr]">
+                  <div className="rounded-2xl border border-accent-coral/30 bg-accent-coral/5 p-6 text-center">
+                    <div className="text-xs font-black tracking-[0.16em] text-text-secondary">SET SCORE</div>
+                    <div className="mt-2 text-6xl font-black text-accent-coral">{evaluation.setScore}</div>
+                    <div className="text-sm font-bold text-text-secondary">/100</div>
+                    {evaluation.level && <div className="mt-4 rounded-full border border-border-subtle bg-bg-input px-3 py-2 text-xs font-black text-text-primary">{evaluation.level}</div>}
+                  </div>
+                  <div className="rounded-2xl border border-accent-gold/30 bg-accent-gold/5 p-5 md:p-6">
+                    <div className="text-xs font-black tracking-[0.15em] text-accent-gold">TU PRINCIPAL OPORTUNIDAD</div>
+                    <p className="mt-3 text-base font-bold leading-relaxed text-text-primary">{evaluation.mainOpportunity}</p>
+                    <p className="mt-4 text-xs leading-relaxed text-text-secondary">Este score evalúa la calidad de tu razonamiento en esta misión. No mide tu valor profesional ni pretende que copies una respuesta modelo.</p>
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {dimensionMeta.map(([key, label]) => (
+                    <div key={key} className="rounded-2xl border border-border-subtle bg-bg-input/50 p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs font-black text-text-primary">{label}</div>
+                        <div className="text-xl font-black text-accent-coral">{evaluation.dimensions[key].score}<span className="text-xs text-text-secondary">/100</span></div>
+                      </div>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-primary"><div className="h-full rounded-full bg-accent-coral" style={{ width: `${evaluation.dimensions[key].score}%` }} /></div>
+                      <p className="mt-4 text-sm leading-relaxed text-text-secondary">{evaluation.dimensions[key].feedback}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
 
           <div className="mt-6 space-y-6">
