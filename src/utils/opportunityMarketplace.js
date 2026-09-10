@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { MISSION_01 } from '../data/missions';
 
 const VACANCY_SELECT = 'id, company_name, industry_niche, role_needed, offer_ticket_range, compensation_type, compensation_details, min_set_score, spots, status, contact_link, created_at';
 const PROFILE_SELECT = 'user_id, role_type, primary_niche, ticket_experience, monthly_lead_capacity, bio_pitch, verified_status, created_at';
@@ -103,6 +104,24 @@ export const getVacancyApplicants = async (vacancyId) => {
     })),
     error: undefined,
   };
+};
+
+// Reporte técnico del setter: reutiliza la evaluación IA de "Caza Conversaciones"
+// (mission_progress, MISSION_01) como fuente real de fortalezas/feedback cualitativo
+// para el Centro de Auditoría Comercial. Admin puede leer mission_progress de
+// cualquier usuario (RLS: user_id = auth.uid() or is_admin()).
+export const getSetEvaluationSummary = async (userId) => {
+  const { data, error } = await supabase
+    .from('mission_progress')
+    .select('responses')
+    .eq('user_id', userId)
+    .eq('mission_id', MISSION_01.id)
+    .maybeSingle();
+
+  if (error) return { evaluation: null, error: error.message };
+  const evaluation = data?.responses?._evaluation;
+  if (evaluation?.version !== MISSION_01.version || !evaluation?.data) return { evaluation: null, error: undefined };
+  return { evaluation: evaluation.data, error: undefined };
 };
 
 export const createVacancy = async (payload) => {

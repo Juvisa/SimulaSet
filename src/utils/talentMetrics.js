@@ -25,20 +25,32 @@ export const getVictoryCount = async (userId) => {
   return { count: count || 0, error: error?.message };
 };
 
+export const getCriterionCompletedCount = async (userId) => {
+  const { count, error } = await supabase
+    .from('daily_mission_progress')
+    .select('mission_date', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('criterion_correct', true);
+
+  return { count: count || 0, error: error?.message };
+};
+
 // Usada por el admin para ver el SET Score de CUALQUIER candidato en la bandeja de
 // talento (antes usaba daily_mission_progress como proxy; ahora lee la misma columna
 // profiles.set_score que usa el propio alumno, unificando la fuente de verdad).
 export const getAdminVisibleMetrics = async (userId) => {
-  const [{ setScore }, { streak }, { count: victoryCount }] = await Promise.all([
+  const [{ setScore }, { streak }, { count: victoryCount }, { count: criterionCompletedCount }] = await Promise.all([
     getMySetScore(userId),
     getUserStreak(userId),
     getVictoryCount(userId),
+    getCriterionCompletedCount(userId),
   ]);
 
   return {
     avgSetScore: setScore,
     currentStreak: streak?.current_streak || 0,
     victoryCount,
+    criterionCompletedCount,
   };
 };
 

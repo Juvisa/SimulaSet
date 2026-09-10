@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Briefcase, Sparkles, Lock, Flame, Trophy, Target, X, Check, Loader2, Rocket, Users,
   Heart, SkipForward, PartyPopper, MessageCircle, BadgeCheck, Edit3, ThumbsDown,
+  ClipboardList, ShieldCheck, CheckCircle2,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +11,17 @@ import { getUserTalentMetrics, getAdminVisibleMetrics } from '../utils/talentMet
 import {
   getOpenVacancies, getMyCommercialProfile, upsertCommercialProfile,
   getMyMatches, requestMatch, createVacancy, updateMatchStatus, getVacancyApplicants,
+  getSetEvaluationSummary,
 } from '../utils/opportunityMarketplace';
 
 const ROLE_LABELS = { setter: 'Setter', closer: 'Closer', sales_leader: 'Líder Comercial' };
+const LEVEL_BADGES = { setter: 'SET Operator', closer: 'SET Closer', sales_leader: 'SET Commander' };
+const DIMENSION_LABELS = {
+  situacion: 'Sintonía con el lead (Situación)',
+  emocion: 'Manejo emocional',
+  transicion: 'Manejo de objeción / Transición',
+  movimiento: 'Cierre a llamada / Movimiento',
+};
 const COMP_LABELS = { base_plus_comm: 'Base + Comisión', comm_only: 'Solo Comisión', fixed: 'Fijo' };
 const MATCH_STATUS_LABELS = {
   matched: 'Solicitud enviada · En evaluación',
@@ -20,9 +29,15 @@ const MATCH_STATUS_LABELS = {
   accepted: '🎉 ¡Es un Match! Aceptado',
   declined: 'La empresa no continuó con este match',
 };
+const OPERATIONAL_TIPS = [
+  '💡 Tip Operativo: Los setters con SET Score > 75 agendan hasta un 40% más de llamadas cualificadas al respetar el filtro de dolor antes del precio.',
+  '💡 Tip Operativo: Una racha activa de 5+ días predice mejor consistencia operativa que un solo simulacro perfecto.',
+  '💡 Tip Operativo: Los candidatos que completan sus Retos de Criterio muestran mejor manejo de objeciones en conversaciones reales.',
+  '💡 Tip Operativo: La mayoría de conversaciones perdidas fallan en la Transición, no en el cierre — revisa esa dimensión en el reporte técnico.',
+];
 
 const matchColor = (score) => (score >= 75 ? '#1D9E75' : score >= 50 ? '#C9920A' : '#E0605E');
-const getInitials = (name) => (name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const scoreColor = (score) => (score > 80 ? '#1D9E75' : score > 70 ? '#C9920A' : '#E0605E');
 
 const ProfileSetupForm = ({ userId, initialProfile, onSaved, onCancel }) => {
   const [roleType, setRoleType] = useState(initialProfile?.role_type || 'setter');
@@ -341,48 +356,168 @@ const VacancyForm = ({ isAdmin, onSubmitted }) => {
   );
 };
 
-const ApplicantCard = ({ applicant, metrics, acting, onMatch, onDiscard }) => (
-  <article className="rounded-2xl border border-border-subtle bg-bg-card p-4">
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-input text-sm font-bold text-text-primary">{getInitials(applicant.name)}</div>
-        <div>
-          <div className="flex items-center gap-1.5 text-sm font-bold text-text-primary">
-            {applicant.name}
-            {applicant.commercialProfile?.verified_status && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent-gold/15 px-2 py-0.5 text-[10px] font-black text-accent-gold"><BadgeCheck size={11} /> Verificado SimulaSet</span>
-            )}
+const ScoreRing = ({ score }) => {
+  const color = scoreColor(score);
+  const radius = 26;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(100, Math.max(0, score)) / 100) * circumference;
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+        <circle cx="32" cy="32" r={radius} fill="none" stroke="#242424" strokeWidth="6" />
+        <circle cx="32" cy="32" r={radius} fill="none" stroke={color} strokeWidth="6" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-black" style={{ color }}>{score}</span>
+      </div>
+    </div>
+  );
+};
+
+const AuditHeader = () => {
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTipIndex((i) => (i + 1) % OPERATIONAL_TIPS.length), 7000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="mb-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-black text-text-primary">Centro de Auditoría Comercial</h2>
+        <span className="inline-flex items-center gap-1 rounded-full bg-accent-gold/15 px-2.5 py-1 text-[10px] font-black text-accent-gold">
+          <ShieldCheck size={11} /> Talento Auditado por Simulación IA
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-text-secondary">Candidatos entrenados bajo presión conversacional antes de tocar tus leads.</p>
+      <div className="mt-3 rounded-xl border border-border-subtle bg-bg-primary px-4 py-2.5 text-xs text-text-secondary">
+        {OPERATIONAL_TIPS[tipIndex]}
+      </div>
+    </div>
+  );
+};
+
+const AuditModal = ({ applicant, metrics, evaluation, loadingEvaluation, onClose }) => {
+  const dimensionEntries = evaluation
+    ? Object.entries(evaluation.dimensions).sort((a, b) => b[1].score - a[1].score).slice(0, 2)
+    : [];
+  const score = metrics?.avgSetScore ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border-subtle bg-bg-card p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-wide text-accent-coral">Reporte Técnico del Setter</div>
+            <h3 className="mt-1 text-lg font-black text-text-primary">{applicant.name}</h3>
           </div>
-          <div className="text-xs text-text-secondary">{ROLE_LABELS[applicant.commercialProfile?.role_type] || '—'}</div>
+          <button onClick={onClose} className="text-text-secondary hover:text-text-primary"><X size={18} /></button>
+        </div>
+
+        <div className="mt-4 rounded-2xl border p-4 text-center" style={{ borderColor: `${scoreColor(score)}4D`, backgroundColor: `${scoreColor(score)}0D` }}>
+          <div className="text-xs font-bold text-text-secondary">PROMEDIO DE PRECISIÓN MÉTODO S.E.T.</div>
+          <div className="mt-1 text-4xl font-black" style={{ color: scoreColor(score) }}>{score}<span className="text-lg text-text-secondary">/100</span></div>
+        </div>
+
+        {loadingEvaluation ? (
+          <div className="mt-4 flex items-center gap-2 text-sm text-text-secondary"><Loader2 size={16} className="animate-spin" /> Cargando evaluación...</div>
+        ) : evaluation ? (
+          <>
+            <div className="mt-5">
+              <div className="text-xs font-black uppercase tracking-wide text-text-secondary">Fortalezas detectadas</div>
+              <div className="mt-2 space-y-2">
+                {dimensionEntries.map(([key, dim]) => (
+                  <div key={key} className="rounded-xl border border-green-500/30 bg-green-500/5 p-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-green-400">
+                      <span>{DIMENSION_LABELS[key] || key}</span><span>{dim.score}/100</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-text-secondary">{dim.feedback}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 rounded-xl border border-accent-gold/30 bg-accent-gold/5 p-4">
+              <div className="text-xs font-black uppercase tracking-wide text-accent-gold">Retroalimentación IA</div>
+              <p className="mt-1.5 text-sm italic leading-relaxed text-text-primary">"{evaluation.mainOpportunity}"</p>
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 rounded-xl border border-border-subtle bg-bg-input/40 p-4 text-xs leading-relaxed text-text-secondary">
+            Este candidato aún no completó su evaluación de criterio S.E.T. (Caza Conversaciones), así que no hay fortalezas ni feedback de IA que mostrar todavía.
+          </p>
+        )}
+
+        <button onClick={onClose} className="mt-5 w-full rounded-xl border border-border-subtle px-4 py-2.5 text-sm font-bold text-text-secondary hover:text-text-primary">Cerrar</button>
+      </div>
+    </div>
+  );
+};
+
+const TalentCard = ({ applicant, metrics, acting, onMatch, onDiscard, onAudit }) => {
+  const score = metrics?.avgSetScore ?? 0;
+  const highDemand = applicant.match_score >= 70 || (metrics?.currentStreak || 0) >= 3;
+
+  return (
+    <article className="relative overflow-hidden rounded-2xl border border-border-subtle bg-bg-card p-4">
+      <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: scoreColor(score) }} />
+      <div className="flex items-start gap-3">
+        <ScoreRing score={score} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-sm font-bold text-text-primary">{applicant.name}</span>
+            {applicant.commercialProfile?.verified_status && <BadgeCheck size={14} className="shrink-0 text-accent-gold" />}
+          </div>
+          <span className="mt-1 inline-block rounded-full bg-accent-coral/10 px-2 py-0.5 text-[10px] font-black text-accent-coral">
+            {LEVEL_BADGES[applicant.commercialProfile?.role_type] || 'SET Talent'}
+          </span>
+          {applicant.commercialProfile?.primary_niche && (
+            <div className="mt-1 truncate text-[11px] text-text-secondary">Especialidad: {applicant.commercialProfile.primary_niche}</div>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white" style={{ backgroundColor: matchColor(applicant.match_score) }}>{applicant.match_score}%</span>
+      </div>
+
+      {highDemand && (
+        <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[10px] font-black text-red-400">
+          ⚡ Alta Demanda: Activo en procesos de selección
+        </span>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 text-center text-xs">
+        <div>
+          <div className="flex items-center justify-center gap-1 font-black text-accent-gold"><Flame size={12} /> {metrics ? metrics.currentStreak : '—'}</div>
+          <div className="text-text-secondary">Racha activa</div>
+        </div>
+        <div>
+          <div className="flex items-center justify-center gap-1 font-black text-green-400"><CheckCircle2 size={12} /> {metrics ? metrics.criterionCompletedCount : '—'}</div>
+          <div className="text-text-secondary">Retos de criterio</div>
         </div>
       </div>
-      <span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white" style={{ backgroundColor: matchColor(applicant.match_score) }}>{applicant.match_score}%</span>
-    </div>
 
-    <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 text-center text-xs">
-      <div><div className="font-black text-accent-coral">{metrics ? metrics.avgSetScore : '—'}</div><div className="text-text-secondary">SET Score</div></div>
-      <div><div className="font-black text-accent-gold">{metrics ? metrics.currentStreak : '—'}</div><div className="text-text-secondary">Racha</div></div>
-      <div><div className="font-black text-green-400">{metrics ? metrics.victoryCount : '—'}</div><div className="text-text-secondary">Victorias</div></div>
-    </div>
+      {applicant.commercialProfile?.bio_pitch && <p className="mt-3 text-xs leading-relaxed text-text-secondary">{applicant.commercialProfile.bio_pitch}</p>}
 
-    {applicant.commercialProfile?.bio_pitch && <p className="mt-3 text-xs leading-relaxed text-text-secondary">{applicant.commercialProfile.bio_pitch}</p>}
-
-    {applicant.status === 'matched' ? (
-      <div className="mt-4 flex gap-2">
-        <button onClick={() => onDiscard(applicant)} disabled={acting} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border-subtle px-4 py-2.5 text-xs font-bold text-text-secondary disabled:opacity-50">
-          <ThumbsDown size={14} /> Descartar
+      <div className="mt-4 space-y-2">
+        <button onClick={() => onAudit(applicant)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-border-subtle px-4 py-2 text-xs font-bold text-text-secondary hover:text-text-primary">
+          <ClipboardList size={13} /> Auditar Perfil Completo
         </button>
-        <button onClick={() => onMatch(applicant)} disabled={acting} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
-          {acting ? <Loader2 size={14} className="animate-spin" /> : <Heart size={14} />} Dar Match / Solicitar Entrevista
-        </button>
+        {applicant.status === 'matched' ? (
+          <div className="flex gap-2">
+            <button onClick={() => onDiscard(applicant)} disabled={acting} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border-subtle px-4 py-2.5 text-xs font-bold text-text-secondary disabled:opacity-50">
+              <ThumbsDown size={14} /> Descartar
+            </button>
+            <button onClick={() => onMatch(applicant)} disabled={acting} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">
+              {acting ? <Loader2 size={14} className="animate-spin" /> : <Heart size={14} />} Aceptar Match / Desbloquear
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-bg-input px-4 py-2.5 text-center text-xs font-bold text-text-secondary">
+            {MATCH_STATUS_LABELS[applicant.status] || applicant.status}
+          </div>
+        )}
       </div>
-    ) : (
-      <div className="mt-4 rounded-xl bg-bg-input px-4 py-2.5 text-center text-xs font-bold text-text-secondary">
-        {MATCH_STATUS_LABELS[applicant.status] || applicant.status}
-      </div>
-    )}
-  </article>
-);
+    </article>
+  );
+};
 
 const TalentInbox = ({ vacancies, isAdmin }) => {
   const [selectedId, setSelectedId] = useState('');
@@ -392,6 +527,18 @@ const TalentInbox = ({ vacancies, isAdmin }) => {
   const [acting, setActing] = useState('');
   const [error, setError] = useState('');
   const [celebration, setCelebration] = useState(null);
+  const [auditingApplicant, setAuditingApplicant] = useState(null);
+  const [auditEvaluation, setAuditEvaluation] = useState(null);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  const handleAudit = async (applicant) => {
+    setAuditingApplicant(applicant);
+    setAuditEvaluation(null);
+    setLoadingAudit(true);
+    const { evaluation } = await getSetEvaluationSummary(applicant.user_id);
+    setLoadingAudit(false);
+    setAuditEvaluation(evaluation);
+  };
 
   useEffect(() => {
     if (!selectedId) return undefined;
@@ -443,8 +590,9 @@ const TalentInbox = ({ vacancies, isAdmin }) => {
 
   return (
     <div className="mt-6">
-      <h2 className="text-base font-black text-text-primary">Bandeja de Talento Calificado</h2>
-      <select value={selectedId} onChange={(e) => handleSelectVacancy(e.target.value)} className="mt-3 w-full rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-coral">
+      <AuditHeader />
+
+      <select value={selectedId} onChange={(e) => handleSelectVacancy(e.target.value)} className="w-full rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-coral">
         <option value="">Selecciona una vacante para ver candidatos...</option>
         {vacancies.map((v) => <option key={v.id} value={v.id}>{v.company_name} · {ROLE_LABELS[v.role_needed] || v.role_needed}</option>)}
       </select>
@@ -454,23 +602,35 @@ const TalentInbox = ({ vacancies, isAdmin }) => {
       {loading ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-text-secondary"><Loader2 size={16} className="animate-spin" /> Cargando candidatos...</div>
       ) : selectedId && applicants.length === 0 ? (
-        <p className="mt-4 text-sm text-text-secondary">Aún no hay candidatos para esta vacante.</p>
+        <p className="mt-4 rounded-xl border border-border-subtle bg-bg-input/40 px-4 py-3 text-sm text-text-secondary">
+          Aún no tienes postulantes en esta vacante. Nuestro algoritmo está notificando a los mejores perfiles.
+        </p>
       ) : (
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {applicants.map((applicant) => (
-            <ApplicantCard
+            <TalentCard
               key={applicant.id}
               applicant={applicant}
               metrics={metricsByUser[applicant.user_id]}
               acting={acting === applicant.id}
               onMatch={handleMatch}
               onDiscard={handleDiscard}
+              onAudit={handleAudit}
             />
           ))}
         </div>
       )}
 
       {celebration && <MatchCelebrationModal vacancy={celebration} onClose={() => setCelebration(null)} />}
+      {auditingApplicant && (
+        <AuditModal
+          applicant={auditingApplicant}
+          metrics={metricsByUser[auditingApplicant.user_id]}
+          evaluation={auditEvaluation}
+          loadingEvaluation={loadingAudit}
+          onClose={() => setAuditingApplicant(null)}
+        />
+      )}
     </div>
   );
 };
