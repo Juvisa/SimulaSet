@@ -1,10 +1,12 @@
-import { supabase } from '../lib/supabase';
+﻿import { supabase } from '../lib/supabase';
 import { getSessions } from './storage';
 import { getUserStreak } from './xp';
 
 export { getUserStreak };
 
 const VALID_STATUSES = new Set(['pending', 'in_progress', 'in_review', 'completed']);
+
+const PROGRESS_SELECT = 'mission_date, mission_id, status, set_score_achieved, evidence_url, evidence_note, criterion_answer, criterion_correct, criterion_completed_at, submitted_at, completed_at, updated_at';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -67,7 +69,7 @@ export const getBestSimulatorScoreForDate = (userId, isoDate) => {
 export const getWeekMissionProgress = async ({ userId, isoDates }) => {
   const { data, error } = await supabase
     .from('daily_mission_progress')
-    .select('mission_date, mission_id, status, set_score_achieved, evidence_url, evidence_note, submitted_at, completed_at, updated_at')
+    .select(PROGRESS_SELECT)
     .eq('user_id', userId)
     .in('mission_date', isoDates);
 
@@ -79,7 +81,7 @@ export const getWeekMissionProgress = async ({ userId, isoDates }) => {
 export const getDailyMissionProgress = async ({ userId, isoDate }) => {
   const { data, error } = await supabase
     .from('daily_mission_progress')
-    .select('mission_date, mission_id, status, set_score_achieved, evidence_url, evidence_note, submitted_at, completed_at, updated_at')
+    .select(PROGRESS_SELECT)
     .eq('user_id', userId)
     .eq('mission_date', isoDate)
     .maybeSingle();
@@ -98,7 +100,7 @@ export const markMissionInProgress = async ({ userId, isoDate, missionId }) => {
   const { data, error } = await supabase
     .from('daily_mission_progress')
     .upsert(payload, { onConflict: 'user_id,mission_date', ignoreDuplicates: true })
-    .select('mission_date, mission_id, status, set_score_achieved, evidence_url, evidence_note, submitted_at, completed_at, updated_at')
+    .select(PROGRESS_SELECT)
     .maybeSingle();
 
   if (error) return { progress: null, error: error.message };
@@ -157,7 +159,7 @@ export const submitDailyMissionEvidence = async ({
   const { data, error } = await supabase
     .from('daily_mission_progress')
     .upsert(payload, { onConflict: 'user_id,mission_date' })
-    .select('mission_date, mission_id, status, set_score_achieved, evidence_url, evidence_note, submitted_at, completed_at, updated_at')
+    .select(PROGRESS_SELECT)
     .single();
 
   if (error || !data) return { progress: null, streak: null, error: error?.message || 'No pudimos guardar tu evidencia.' };
@@ -173,6 +175,25 @@ export const submitDailyMissionEvidence = async ({
   return { progress: data, streak, error: streakError };
 };
 
+export const submitCriterionAnswer = async ({ userId, isoDate, missionId, answerId, correct }) => {
+  const payload = {
+    user_id: userId,
+    mission_date: isoDate,
+    mission_id: missionId,
+    criterion_answer: answerId,
+    criterion_correct: correct,
+    criterion_completed_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('daily_mission_progress')
+    .upsert(payload, { onConflict: 'user_id,mission_date' })
+    .select(PROGRESS_SELECT)
+    .single();
+
+  return { progress: data || null, error: error?.message };
+};
+
 const sanitizeFileName = (name) => name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
 
 export const uploadMissionEvidenceFile = async ({ userId, isoDate, file }) => {
@@ -185,3 +206,4 @@ export const uploadMissionEvidenceFile = async ({ userId, isoDate, file }) => {
 };
 
 export const isValidDailyMissionStatus = (status) => VALID_STATUSES.has(status);
+

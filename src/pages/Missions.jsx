@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Flame, Link as LinkIcon, Loader2, Target, Upload } from 'lucide-react';
+import { ArrowRight, Brain, CheckCircle2, Flame, Link as LinkIcon, Loader2, Target, Upload, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getDailyMissionByIsoWeekday } from '../data/dailyMissions';
+import { getCriterionChallengeByMissionId } from '../data/criterionChallenges';
 import {
   getWeekDays,
   getBestSimulatorScoreForDate,
   getWeekMissionProgress,
   markMissionInProgress,
   submitDailyMissionEvidence,
+  submitCriterionAnswer,
   uploadMissionEvidenceFile,
   getUserStreak,
 } from '../utils/dailyMissions';
@@ -23,7 +25,89 @@ const STATUS_META = {
   completed: { label: 'Completada', className: 'bg-green-500/10 text-green-400' },
 };
 
-const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, submitting, userId, isoDate, onSubmit }) => {
+const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initialCorrect, userId, isoDate, onAnswered }) => {
+  const [selected, setSelected] = useState(initialAnswer || null);
+  const [correct, setCorrect] = useState(initialCorrect ?? null);
+  const [revealed, setRevealed] = useState(Boolean(initialAnswer));
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!selected) return;
+    setSubmitting(true);
+    setLocalError('');
+    const isCorrect = selected === challenge.correctId;
+    const { progress, error } = await submitCriterionAnswer({ userId, isoDate, missionId, answerId: selected, correct: isCorrect });
+    setSubmitting(false);
+    if (error) { setLocalError(error); return; }
+    setCorrect(isCorrect);
+    setRevealed(true);
+    onAnswered(progress);
+  };
+
+  const handleRetry = () => {
+    setSelected(null);
+    setCorrect(null);
+    setRevealed(false);
+  };
+
+  return (
+    <section className="mb-6 rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
+      <div className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-text-primary">
+        <Brain size={15} className="text-accent-coral" /> RETO DE CRITERIO S.E.T. · {challenge.label.toUpperCase()}
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-text-primary">{challenge.prompt}</p>
+
+      <div className="mt-4 space-y-2">
+        {challenge.options.map((option) => {
+          const isSelected = selected === option.id;
+          const showResult = revealed;
+          const isCorrectOption = option.id === challenge.correctId;
+          let optionClass = 'border-border-subtle bg-bg-input text-text-primary hover:border-accent-coral/40';
+          if (showResult && isCorrectOption) optionClass = 'border-green-500/50 bg-green-500/10 text-green-400';
+          else if (showResult && isSelected && !isCorrectOption) optionClass = 'border-red-500/50 bg-red-500/10 text-red-400';
+          else if (isSelected) optionClass = 'border-accent-coral bg-accent-coral/10 text-text-primary';
+
+          return (
+            <button
+              key={option.id}
+              onClick={() => !revealed && canAct && setSelected(option.id)}
+              disabled={revealed || !canAct}
+              className={`flex w-full items-start gap-2 rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:cursor-default ${optionClass}`}
+            >
+              {showResult && isCorrectOption && <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-green-400" />}
+              {showResult && isSelected && !isCorrectOption && <XCircle size={16} className="mt-0.5 shrink-0 text-red-400" />}
+              <span>{option.text}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {localError && <p className="mt-3 text-xs text-red-400">{localError}</p>}
+
+      {revealed ? (
+        <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card/70 p-3">
+          <p className="text-xs font-bold text-text-primary">{correct ? '✓ ¡Correcto!' : '✗ No era esa. La respuesta correcta era otra.'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">{challenge.explanation}</p>
+          {!correct && canAct && (
+            <button onClick={handleRetry} className="mt-2 text-xs font-bold text-accent-coral hover:underline">Intentar de nuevo</button>
+          )}
+        </div>
+      ) : canAct ? (
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !selected}
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-2.5 text-xs font-black text-white disabled:opacity-40"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
+          {submitting ? 'Enviando...' : 'Responder'}
+        </button>
+      ) : null}
+    </section>
+  );
+};
+
+const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, criterionCorrect, submitting, userId, isoDate, onSubmit }) => {
   const [url, setUrl] = useState(initialUrl);
   const [note, setNote] = useState(initialNote);
   const [uploading, setUploading] = useState(false);
@@ -45,6 +129,9 @@ const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, submitt
       <h3 className="text-xs font-black tracking-[0.16em] text-text-primary">ENTREGA DE EVIDENCIA</h3>
       {!scoreQualifies && canAct && (
         <p className="mt-2 text-xs text-text-secondary">Alcanza el SET Score mínimo en el simulador para poder enviar tu evidencia.</p>
+      )}
+      {scoreQualifies && !criterionCorrect && canAct && (
+        <p className="mt-2 text-xs text-text-secondary">Responde correctamente el Reto de Criterio de arriba para poder enviar tu evidencia.</p>
       )}
       {localError && <p className="mt-2 text-xs text-red-400">{localError}</p>}
 
@@ -86,7 +173,7 @@ const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, submitt
         {canAct && (
           <button
             onClick={() => onSubmit(url, note)}
-            disabled={submitting || uploading || !scoreQualifies || !url.trim() || !note.trim()}
+            disabled={submitting || uploading || !scoreQualifies || !criterionCorrect || !url.trim() || !note.trim()}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white transition-opacity disabled:opacity-40 sm:w-auto"
           >
             {submitting ? <><Loader2 size={16} className="animate-spin" /> Enviando...</> : 'Enviar evidencia y completar misión'}
@@ -143,6 +230,12 @@ const Missions = () => {
   const scoreQualifies = Number.isFinite(bestScoreToday) && bestScoreToday >= mission.minSetScore;
   const canAct = selectedDay.isToday && !completed;
   const modeColor = MODE_COLORS[mission.mode] || '#E0605E';
+  const challenge = getCriterionChallengeByMissionId(mission.id);
+  const criterionCorrect = progress?.criterion_correct === true;
+
+  const handleCriterionAnswered = (savedProgress) => {
+    if (savedProgress) setProgressByDate((prev) => ({ ...prev, [selectedDay.isoDate]: savedProgress }));
+  };
 
   const selectDay = (index) => {
     setSelectedIndex(index);
@@ -274,12 +367,27 @@ const Missions = () => {
               </p>
             )}
 
+            {challenge && (
+              <CriterionChallenge
+                key={`challenge-${selectedDay.isoDate}`}
+                challenge={challenge}
+                missionId={mission.id}
+                canAct={canAct}
+                initialAnswer={progress?.criterion_answer || null}
+                initialCorrect={progress?.criterion_correct ?? null}
+                userId={user.id}
+                isoDate={selectedDay.isoDate}
+                onAnswered={handleCriterionAnswered}
+              />
+            )}
+
             <EvidenceForm
               key={selectedDay.isoDate}
               initialUrl={progress?.evidence_url || ''}
               initialNote={progress?.evidence_note || ''}
               canAct={canAct}
               scoreQualifies={scoreQualifies}
+              criterionCorrect={criterionCorrect}
               submitting={submitting}
               userId={user.id}
               isoDate={selectedDay.isoDate}

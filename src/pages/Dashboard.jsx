@@ -157,7 +157,7 @@ const Dashboard = () => {
             <p className="mt-1 text-sm text-text-secondary">Aprende a leer antes de responder.</p>
           </div>
         </div>
-        <button onClick={() => navigate('/missions')} className="mt-4 w-full rounded-xl bg-accent-gold px-4 py-2.5 text-sm font-bold text-black md:mt-0 md:w-auto">Ver misión →</button>
+        <button onClick={() => navigate('/missions/mission_01_conversation_hunt')} className="mt-4 w-full rounded-xl bg-accent-gold px-4 py-2.5 text-sm font-bold text-black md:mt-0 md:w-auto">Ver misión →</button>
       </section>
 
       {/* Seguimientos pendientes */}
