@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, X, Loader2 } from 'lucide-react';
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors outline-none";
 
@@ -20,10 +20,28 @@ const Login = () => {
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
 
-  const { login, register, authError } = useAuth();
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetError, setResetError] = useState('');
+
+  const { login, register, requestPasswordReset, authError } = useAuth();
   const navigate = useNavigate();
 
   const switchMode = (m) => { setMode(m); setError(''); };
+
+  const closeReset = () => { setShowReset(false); setResetEmail(''); setResetSent(false); setResetError(''); };
+
+  const handleRequestReset = async (e) => {
+    e.preventDefault();
+    setResetError('');
+    setResetLoading(true);
+    const { error: resetErrorMsg } = await requestPasswordReset(resetEmail.trim());
+    setResetLoading(false);
+    if (resetErrorMsg) { setResetError(resetErrorMsg); return; }
+    setResetSent(true);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -102,6 +120,9 @@ const Login = () => {
                     {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <button type="button" onClick={() => setShowReset(true)} className="mt-1.5 text-xs font-medium text-text-secondary hover:text-accent-coral">
+                  ¿Olvidaste tu contraseña?
+                </button>
               </div>
               <button type="submit" disabled={loading} className="w-full bg-accent-coral hover:bg-accent-coral/90 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 mt-2">
                 {loading ? 'Entrando...' : 'Entrar →'}
@@ -142,6 +163,33 @@ const Login = () => {
           )}
         </div>
       </div>
+
+      {showReset && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" onClick={closeReset}>
+          <div className="w-full max-w-sm rounded-2xl border border-border-subtle bg-bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-lg font-black text-text-primary">Recuperar contraseña</h2>
+              <button onClick={closeReset} className="text-text-secondary hover:text-text-primary"><X size={18} /></button>
+            </div>
+
+            {resetSent ? (
+              <p className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+                Te enviamos un enlace de recuperación. Revisa tu bandeja de entrada y la carpeta de spam.
+              </p>
+            ) : (
+              <form onSubmit={handleRequestReset} className="mt-4 space-y-3">
+                <p className="text-sm text-text-secondary">Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.</p>
+                <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} className={INPUT} placeholder="tu@email.com" required />
+                {resetError && <p className="text-xs text-red-400">{resetError}</p>}
+                <button type="submit" disabled={resetLoading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral py-3 text-sm font-bold text-white transition-all hover:bg-accent-coral/90 disabled:opacity-50">
+                  {resetLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {resetLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -139,6 +139,14 @@ export const AuthProvider = ({ children }) => {
     return { error: error?.message };
   };
 
+  const requestPasswordReset = async (email) => {
+    if (!supabase) return { error: 'Supabase no está configurado.' };
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error: error?.message };
+  };
+
   const completeOnboarding = async (answers) => {
     if (!supabase || !user) return { error: 'No se pudo guardar el onboarding.' };
 
@@ -175,7 +183,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updatePassword, completeOnboarding, loading, authError }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updatePassword, requestPasswordReset, completeOnboarding, loading, authError }}>
       {children}
     </AuthContext.Provider>
   );
