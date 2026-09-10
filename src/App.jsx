@@ -29,6 +29,9 @@ import Journey from './pages/Journey';
 import Onboarding from './pages/Onboarding';
 import Missions from './pages/Missions';
 import MissionConversationHunt from './pages/MissionConversationHunt';
+import SetWins from './pages/SetWins';
+import Rewards from './pages/Rewards';
+import OpportunityHub from './pages/OpportunityHub';
 
 function App() {
   return (
@@ -55,6 +58,9 @@ function App() {
           <Route path="/journey" element={<ProtectedRoute><Journey /></ProtectedRoute>} />
           <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
           <Route path="/missions/mission_01_conversation_hunt" element={<ProtectedRoute><MissionConversationHunt /></ProtectedRoute>} />
+          <Route path="/set-wins" element={<ProtectedRoute><SetWins /></ProtectedRoute>} />
+          <Route path="/recompensas" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
+          <Route path="/oportunidades" element={<ProtectedRoute><OpportunityHub /></ProtectedRoute>} />
 
           {/* Copiloto en Vivo / Leads Reales */}
           <Route path="/leads-reales" element={<ProtectedRoute><RealLeads /></ProtectedRoute>} />

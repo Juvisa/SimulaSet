@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MuxPlayer from '@mux/mux-player-react';
-import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2 } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2, Rocket, Sparkles } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getPublishedAcademyLessons } from '../utils/academyLessons';
-import { getLessonProgress, setLessonProgress } from '../utils/lessonProgress';
+import { getLessonProgressForCourse, setLessonProgress } from '../utils/lessonProgress';
+import { addXp } from '../utils/xp';
+import LessonInteractionPanel from '../components/LessonInteractionPanel';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
@@ -52,21 +55,33 @@ const formatScheduledAt = (scheduledAt) => {
   }).format(new Date(scheduledAt)).replace(' a las ', ', ');
 };
 
-const LessonResources = ({ lesson }) => {
-  if (!Array.isArray(lesson.resources) || lesson.resources.length === 0) return null;
-  return (
-    <div className="mt-4 border-t border-border-subtle pt-4">
-      <h3 className="mb-3 text-sm font-bold text-text-primary">Recursos de la clase</h3>
-      <div className="space-y-2">
-        {lesson.resources.map((resource, resourceIndex) => (
-          <a key={resource.id || `${lesson.id}-resource-${resourceIndex}`} href={resource.url} target="_blank" rel="noreferrer" className="flex min-h-11 w-full items-center rounded-xl border border-border-subtle bg-bg-input px-4 py-2.5 text-sm font-semibold text-text-primary">
-            {resource.title || 'Abrir recurso'}
-          </a>
-        ))}
-      </div>
+const PracticeCta = ({ available = true, completed, marking, onGoSimulate, onMarkComplete }) => (
+  <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-accent-coral/25 bg-accent-coral/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-accent-coral"><Sparkles size={13} /> Aplica lo aprendido</div>
+      <p className="mt-1 text-xs text-text-secondary">
+        {available ? 'Lleva esta técnica al simulador y consolida tu progreso.' : 'Se desbloquea al finalizar la sesión en vivo.'}
+      </p>
     </div>
-  );
-};
+    <div className="flex flex-col gap-2 lg:flex-row">
+      <button
+        onClick={onGoSimulate}
+        disabled={!available}
+        className={`flex items-center justify-center gap-2 rounded-xl border border-accent-coral/40 px-4 py-3 text-xs font-bold text-accent-coral transition-colors ${available ? 'hover:bg-accent-coral/10' : 'cursor-not-allowed opacity-50'}`}
+      >
+        <Rocket size={14} /> Abrir en el Simulador IA
+      </button>
+      <button
+        onClick={onMarkComplete}
+        disabled={!available || marking}
+        className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${completed ? 'bg-bg-input text-text-primary' : 'bg-accent-coral text-white'}`}
+      >
+        {marking ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+        {completed ? 'Completada' : 'Marcar como completada (+25 XP)'}
+      </button>
+    </div>
+  </div>
+);
 
 const LessonVideo = ({ lesson }) => {
   if (lesson.video_status !== 'ready' || !lesson.mux_playback_id) return null;
@@ -85,8 +100,11 @@ const LessonVideo = ({ lesson }) => {
   );
 };
 
+const progressKey = (moduleId, lessonId) => `${moduleId}:${lessonId}`;
+
 const Academy = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isStarter = user.onboarding?.classification === 'starter';
   const [lessons, setLessons] = useState(startLessons);
   const [weekGroups, setWeekGroups] = useState(fallbackWeekGroups);
@@ -97,6 +115,7 @@ const Academy = () => {
   const [loadingProgress, setLoadingProgress] = useState(true);
   const [updatingLesson, setUpdatingLesson] = useState('');
   const [progressError, setProgressError] = useState('');
+  const [xpToast, setXpToast] = useState('');
 
   useEffect(() => {
     const targetId = window.location.hash.slice(1);
@@ -150,11 +169,11 @@ const Academy = () => {
   useEffect(() => {
     let active = true;
 
-    getLessonProgress({ userId: user.id, courseId: START_COURSE_ID, moduleId: START_MODULE_ID })
+    getLessonProgressForCourse({ userId: user.id, courseId: START_COURSE_ID })
       .then(({ progress: rows, error }) => {
         if (!active) return;
         if (error) setProgressError(`No pudimos cargar tu progreso: ${error}`);
-        setProgress(Object.fromEntries(rows.map(row => [row.lesson_id, row.status])));
+        setProgress(Object.fromEntries(rows.map(row => [progressKey(row.module_id, row.lesson_id), row.status])));
       })
       .catch((error) => {
         if (active) setProgressError(`No pudimos cargar tu progreso: ${error instanceof Error ? error.message : 'Error inesperado'}`);
@@ -166,18 +185,20 @@ const Academy = () => {
     return () => { active = false; };
   }, [user.id]);
 
-  const completedCount = lessons.filter(lesson => progress[lesson.id] === 'completed').length;
+  const completedCount = lessons.filter(lesson => progress[progressKey(START_MODULE_ID, lesson.id)] === 'completed').length;
   const startProgressPercent = Math.round((completedCount / lessons.length) * 100);
   const startCompleted = completedCount === lessons.length;
 
-  const toggleLessonStatus = async (lessonId) => {
-    const status = progress[lessonId] === 'completed' ? 'pending' : 'completed';
-    setUpdatingLesson(lessonId);
+  const handleMarkComplete = async (moduleId, lessonId) => {
+    const key = progressKey(moduleId, lessonId);
+    const wasCompleted = progress[key] === 'completed';
+    const status = wasCompleted ? 'pending' : 'completed';
+    setUpdatingLesson(key);
     setProgressError('');
     const { progress: savedProgress, error } = await setLessonProgress({
       userId: user.id,
       courseId: START_COURSE_ID,
-      moduleId: START_MODULE_ID,
+      moduleId,
       lessonId,
       status,
     });
@@ -187,7 +208,13 @@ const Academy = () => {
       setProgressError(`No pudimos actualizar la clase: ${error}`);
       return;
     }
-    setProgress(current => ({ ...current, [savedProgress.lesson_id]: savedProgress.status }));
+    setProgress(current => ({ ...current, [progressKey(moduleId, savedProgress.lesson_id)]: savedProgress.status }));
+
+    if (!wasCompleted && status === 'completed') {
+      await addXp({ userId: user.id, amount: 25 });
+      setXpToast('¡Clase completada! +25 XP');
+      setTimeout(() => setXpToast(''), 4000);
+    }
   };
 
   return (
@@ -200,6 +227,8 @@ const Academy = () => {
         <h1 className="text-3xl md:text-4xl font-black text-text-primary">Tu ruta DIGITAL SET</h1>
         <p className="text-text-secondary mt-2">Aprende. Entrena. Aplica.</p>
       </div>
+
+      {xpToast && <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">{xpToast}</div>}
 
       <div className="overflow-x-auto snap-x snap-mandatory mb-6 pb-2">
         <div className="flex min-w-max gap-2 md:grid md:min-w-0 md:grid-cols-5">
@@ -243,9 +272,9 @@ const Academy = () => {
         ) : (
           <div key="progress-lessons" className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             {lessons.map((lesson, index) => {
-              const completed = progress[lesson.id] === 'completed';
+              const completed = progress[progressKey(START_MODULE_ID, lesson.id)] === 'completed';
               const expanded = expandedLesson === lesson.id;
-              const updating = updatingLesson === lesson.id;
+              const updating = updatingLesson === progressKey(START_MODULE_ID, lesson.id);
               return (
                 <section key={lesson.id} className={`overflow-hidden rounded-2xl border bg-bg-card ${completed ? 'border-green-500/30' : 'border-border-subtle'}`}>
                   <button type="button" onClick={() => setExpandedLesson(current => current === lesson.id ? null : lesson.id)} aria-expanded={expanded} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left">
@@ -263,11 +292,13 @@ const Academy = () => {
                       <LessonVideo lesson={lesson} />
                       {lesson.video_status !== 'ready' && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
                       {Array.isArray(lesson.topics) && lesson.topics.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{lesson.topics.map(topic => <span key={topic} className="max-w-full rounded-full border border-border-subtle bg-bg-input px-3 py-1.5 text-xs text-text-secondary">{topic}</span>)}</div>}
-                      <LessonResources lesson={lesson} />
-                      <button type="button" onClick={() => toggleLessonStatus(lesson.id)} disabled={updating} className={`mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold disabled:opacity-50 ${completed ? 'bg-bg-input text-text-primary' : 'bg-accent-coral text-white'}`}>
-                        {updating ? <Loader2 size={17} className="animate-spin" /> : completed ? <Clock3 size={17} /> : <Check size={17} />}
-                        {updating ? 'Guardando...' : completed ? 'Marcar como pendiente' : 'Marcar como completada'}
-                      </button>
+                      <PracticeCta
+                        completed={completed}
+                        marking={updating}
+                        onGoSimulate={() => navigate('/simulate')}
+                        onMarkComplete={() => handleMarkComplete(START_MODULE_ID, lesson.id)}
+                      />
+                      <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
                     </div>
                   )}
                 </section>
@@ -292,6 +323,8 @@ const Academy = () => {
           <div key={group.moduleId} className="space-y-4">
             {group.lessons.map((lesson) => {
               const available = lesson.video_status === 'ready';
+              const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
+              const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5 hover:border-accent-coral/30 transition-colors">
                   <div className="flex items-start justify-between gap-4 mb-5">
@@ -307,7 +340,14 @@ const Academy = () => {
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
-                  <LessonResources lesson={lesson} />
+                  <PracticeCta
+                    available={available}
+                    completed={completed}
+                    marking={updating}
+                    onGoSimulate={() => navigate('/simulate')}
+                    onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}
+                  />
+                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
                 </article>
               );
             })}
@@ -321,6 +361,8 @@ const Academy = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {labLessons.map((lesson) => {
               const available = lesson.video_status === 'ready';
+              const completed = progress[progressKey('practical-labs', lesson.id)] === 'completed';
+              const updating = updatingLesson === progressKey('practical-labs', lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
                   <div className="flex items-start justify-between gap-4 mb-5">
@@ -336,7 +378,14 @@ const Academy = () => {
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
-                  <LessonResources lesson={lesson} />
+                  <PracticeCta
+                    available={available}
+                    completed={completed}
+                    marking={updating}
+                    onGoSimulate={() => navigate('/simulate')}
+                    onMarkComplete={() => handleMarkComplete('practical-labs', lesson.id)}
+                  />
+                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
                 </article>
               );
             })}
@@ -350,6 +399,8 @@ const Academy = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {group.lessons.map((lesson) => {
               const available = lesson.video_status === 'ready';
+              const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
+              const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
                   <div className="flex items-start justify-between gap-4 mb-5">
@@ -365,7 +416,14 @@ const Academy = () => {
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
-                  <LessonResources lesson={lesson} />
+                  <PracticeCta
+                    available={available}
+                    completed={completed}
+                    marking={updating}
+                    onGoSimulate={() => navigate('/simulate')}
+                    onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}
+                  />
+                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
                 </article>
               );
             })}

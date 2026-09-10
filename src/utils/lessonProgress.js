@@ -13,6 +13,16 @@ export const getLessonProgress = async ({ userId, courseId, moduleId }) => {
   return { progress: data || [], error: error?.message };
 };
 
+export const getLessonProgressForCourse = async ({ userId, courseId }) => {
+  const { data, error } = await supabase
+    .from('lesson_progress')
+    .select('module_id, lesson_id, status, completed_at')
+    .eq('user_id', userId)
+    .eq('course_id', courseId);
+
+  return { progress: data || [], error: error?.message };
+};
+
 export const setLessonProgress = async ({ userId, courseId, moduleId, lessonId, status }) => {
   if (!VALID_STATUSES.has(status)) return { error: 'Estado de lección inválido.' };
 
