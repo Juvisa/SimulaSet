@@ -1,18 +1,18 @@
 import { supabase } from '../lib/supabase';
-import { getSessions } from './storage';
 import { getUserStreak } from './xp';
 
-export const getAverageSetScore = (userId) => {
-  const sessions = getSessions(userId);
-  if (sessions.length === 0) return 0;
+// Fuente única de verdad del SET Score: profiles.set_score (Supabase), recalculada
+// automáticamente por un trigger cada vez que se guarda una sesión en
+// simulator_sessions. Tanto "Soy Comercial" como "Soy Empresa" leen de aquí — ya no
+// hay ninguna dependencia de localStorage para este cálculo.
+export const getMySetScore = async (userId) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('set_score')
+    .eq('id', userId)
+    .maybeSingle();
 
-  const scores = sessions.map((session) => {
-    if (!Array.isArray(session.scores) || session.scores.length === 0) return 0;
-    const avg = session.scores.reduce((a, b) => a + b, 0) / session.scores.length;
-    return Math.round(avg * 10);
-  });
-
-  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  return { setScore: data?.set_score ?? 0, error: error?.message };
 };
 
 export const getVictoryCount = async (userId) => {
@@ -25,42 +25,35 @@ export const getVictoryCount = async (userId) => {
   return { count: count || 0, error: error?.message };
 };
 
-// A diferencia de getAverageSetScore (localStorage, solo accesible para el propio
-// usuario en su navegador), esta función solo usa datos de Supabase, por lo que un
-// admin puede consultarla para CUALQUIER candidato en la bandeja de talento.
+// Usada por el admin para ver el SET Score de CUALQUIER candidato en la bandeja de
+// talento (antes usaba daily_mission_progress como proxy; ahora lee la misma columna
+// profiles.set_score que usa el propio alumno, unificando la fuente de verdad).
 export const getAdminVisibleMetrics = async (userId) => {
-  const [{ streak }, { count: victoryCount }, { data: dailyRows }] = await Promise.all([
+  const [{ setScore }, { streak }, { count: victoryCount }] = await Promise.all([
+    getMySetScore(userId),
     getUserStreak(userId),
     getVictoryCount(userId),
-    supabase
-      .from('daily_mission_progress')
-      .select('set_score_achieved')
-      .eq('user_id', userId)
-      .not('set_score_achieved', 'is', null),
   ]);
 
-  const scores = (dailyRows || []).map((row) => row.set_score_achieved).filter(Number.isFinite);
-  const avgSetScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-
   return {
-    avgSetScore,
+    avgSetScore: setScore,
     currentStreak: streak?.current_streak || 0,
     victoryCount,
   };
 };
 
 export const getUserTalentMetrics = async ({ userId, level }) => {
-  const avgSetScore = getAverageSetScore(userId);
-  const [{ streak }, { count: victoryCount, error: victoryError }] = await Promise.all([
+  const [{ setScore, error: scoreError }, { streak }, { count: victoryCount, error: victoryError }] = await Promise.all([
+    getMySetScore(userId),
     getUserStreak(userId),
     getVictoryCount(userId),
   ]);
 
   return {
-    avgSetScore,
+    avgSetScore: setScore,
     currentStreak: streak?.current_streak || 0,
     level: level || 1,
     victoryCount,
-    error: victoryError,
+    error: scoreError || victoryError,
   };
 };

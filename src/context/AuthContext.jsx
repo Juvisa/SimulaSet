@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext(null);
-const PROFILE_FIELDS = 'id, email, name, role, level, active, created_at';
+const PROFILE_FIELDS = 'id, email, name, role, level, set_score, active, created_at';
 
 const fetchProfile = async (userId) => supabase
   .from('profiles')
