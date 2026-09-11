@@ -77,7 +77,7 @@ const Rewards = () => {
     setRedeeming(true);
     setError('');
     setSuccessMsg('');
-    const { streak: updated, error: redeemError } = await redeemReward({ userId: user.id, reward: pendingReward });
+    const { streak: updated, error: redeemError } = await redeemReward({ reward: pendingReward });
     setRedeeming(false);
     setPendingReward(null);
     if (redeemError) { setError(redeemError); return; }

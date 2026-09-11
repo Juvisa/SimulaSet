@@ -37,26 +37,3 @@ export const addXp = async ({ userId, amount }) => {
 
   return { streak: data || null, error: error?.message };
 };
-
-export const spendXp = async ({ userId, amount }) => {
-  const { streak: current, error: readError } = await getUserStreak(userId);
-  if (readError) return { streak: null, error: readError };
-  if ((current.total_xp || 0) < amount) return { streak: null, error: 'No tienes suficiente XP disponible para canjear.' };
-
-  const payload = {
-    user_id: userId,
-    current_streak: current.current_streak || 0,
-    longest_streak: current.longest_streak || 0,
-    total_xp: current.total_xp - amount,
-    lifetime_xp: current.lifetime_xp || 0,
-    last_completed_date: current.last_completed_date,
-  };
-
-  const { data, error } = await supabase
-    .from('user_streaks')
-    .upsert(payload, { onConflict: 'user_id' })
-    .select(STREAK_SELECT)
-    .single();
-
-  return { streak: data || null, error: error?.message };
-};
