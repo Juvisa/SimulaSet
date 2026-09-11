@@ -34,21 +34,20 @@ const Journey = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isStarter = user.onboarding?.classification === 'starter';
-  const [setScore, setSetScore] = useState(null);
+  const [missionCompleted, setMissionCompleted] = useState(false);
 
   useEffect(() => {
     let active = true;
     getMissionProgress({ userId: user.id, missionId: MISSION_01.id }).then(({ progress }) => {
       if (!active) return;
-      const savedEvaluation = progress?.responses?._evaluation;
-      const score = savedEvaluation?.version === MISSION_01.version ? savedEvaluation?.data?.setScore : null;
-      setSetScore(Number.isFinite(score) ? score : null);
+      setMissionCompleted(progress?.status === 'completed');
     });
     return () => { active = false; };
   }, [user.id]);
 
-  const scoreLabel = setScore ?? 0;
-  const missionCompleted = setScore !== null;
+  // Fuente única de verdad del SET Score: profiles.set_score (promedio de
+  // simulator_sessions, recalculado automáticamente por un trigger en Supabase).
+  const scoreLabel = user.set_score ?? 0;
 
   return (
     <Layout>
@@ -90,7 +89,7 @@ const Journey = () => {
             <div><div className="text-xs text-text-secondary uppercase tracking-wider">Próximo nivel</div><div className="text-xl font-black mt-1">SET Operator ⚡</div></div>
           </div>
           <div className="h-2.5 bg-bg-input rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-accent-coral to-accent-gold rounded-full transition-all" style={{ width: `${Math.max(8, scoreLabel)}%` }} /></div>
-          <p className="text-sm text-text-secondary mt-3">{missionCompleted ? `Tu primera evidencia S.E.T. ya está registrada: ${setScore}/100.` : 'Completa tu primera misión para registrar tu SET Score.'}</p>
+          <p className="text-sm text-text-secondary mt-3">{missionCompleted ? `Tu primera evidencia S.E.T. ya está registrada. Tu SET Score actual: ${scoreLabel}/100.` : 'Completa tu primera misión para registrar tu evidencia S.E.T.'}</p>
         </section>
 
         <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-5">
@@ -114,7 +113,7 @@ const Journey = () => {
             <h2 className="text-xl font-black mt-4">Este lugar todavía está disponible.</h2>
             <p className="text-text-secondary text-sm mt-2">¿Será tu nombre el primero en aparecer aquí?</p>
             <p className="text-text-secondary text-xs mt-4">Aquí reconocemos a quienes convierten entrenamiento en resultados.</p>
-            <div className="grid grid-cols-2 gap-2 mt-6">{spotlightMetrics.map(metric => <div key={metric} className="bg-bg-input rounded-xl p-3"><div className="text-xs text-text-secondary">{metric}</div><div className="font-black mt-1">{metric === 'SET Score' && missionCompleted ? setScore : '—'}</div></div>)}</div>
+            <div className="grid grid-cols-2 gap-2 mt-6">{spotlightMetrics.map(metric => <div key={metric} className="bg-bg-input rounded-xl p-3"><div className="text-xs text-text-secondary">{metric}</div><div className="font-black mt-1">{metric === 'SET Score' && scoreLabel > 0 ? scoreLabel : '—'}</div></div>)}</div>
           </div>
         </section>
 
