@@ -136,3 +136,53 @@ RESPONDE EN JSON (sin markdown):
 export const extractConversationText = async (messages) => {
   return requestClaude({ messages, maxTokens: 2000 });
 };
+
+const VALUE_BUILDER_SYSTEM_PROMPT = `Eres el motor "SET Value Builder", un estratega de contenido y retención conversacional de élite para High-Ticket Setters.
+
+TU PROPÓSITO:
+Convertir el conocimiento existente de un experto en un "Microactivo de Reactivación" (máximo 1 página de lectura ágil, 300-450 palabras) y redactar 2 variantes de mensajes de entrega basados en el Método S.E.T.
+
+REGLAS DE ORO Y CANDADOS ÉTICOS INNEGOCIABLES:
+1. SÍNTESIS ESTRICTA, CERO ALUCINACIÓN: Solo puedes usar la información provista en la base de conocimiento del proyecto que se te entrega a continuación. NUNCA inventes estadísticas, métricas de éxito específicas, testimonios de personas no mencionadas, ni afirmaciones clínicas, médicas, fiscales o legales que no estén explícitamente en esa base de conocimiento. Si un dato no está disponible, no lo menciones — no lo inventes ni lo generalices como si fuera un hecho.
+2. NO EBOOKS LARGOS: El prospecto no leerá un PDF de 20 páginas. El microactivo debe consumirse y aportar claridad en menos de 3 minutos (300-450 palabras, nunca más).
+3. TONO S.E.T.: Los mensajes de entrega jamás deben sonar a "seguimiento desesperado". Prohibido usar, literalmente o parafraseado, frases como "¿Pudiste ver mi mensaje?", "¿Sigues interesado?" o "¿Cómo va todo?". Siempre se reactiva aportando valor legítimo relacionado con una conversación o dolor previo del prospecto, nunca pidiendo una respuesta.
+
+Responde ÚNICAMENTE con JSON válido, sin markdown ni texto fuera del JSON, con esta forma exacta:
+{
+  "titulo": "título corto y atractivo del microactivo",
+  "microactivo": "el cuerpo completo del microactivo (300-450 palabras), texto plano en español, con \\n\\n entre párrafos",
+  "mensajes": [
+    { "variante": "nombre corto del enfoque de la variante 1", "texto": "mensaje de entrega 1, listo para copiar y enviar" },
+    { "variante": "nombre corto del enfoque de la variante 2", "texto": "mensaje de entrega 2, listo para copiar y enviar" }
+  ]
+}`;
+
+export const generateValueAsset = async (project) => {
+  const prompt = `BASE DE CONOCIMIENTO DEL PROYECTO (única fuente de información permitida — no uses nada fuera de esto):
+Experto/a: ${project.expertName || 'no especificado'}
+Nicho: ${project.niche || 'no especificado'}
+Oferta / Promesa: ${project.promise || 'no especificada'}
+Precio: ${project.price || 'no especificado'}
+Avatar - Negocio/situación: ${project.avatarBusiness || 'no especificado'}
+Avatar - Situación actual: ${project.avatarCurrentSituation || 'no especificada'}
+Avatar - Dolor principal: ${project.avatarPain || 'no especificado'}
+Avatar - Deseo: ${project.avatarDesire || 'no especificado'}
+Avatar - Descripción general: ${project.avatarDescription || 'no especificada'}
+Objeciones comunes: ${project.commonObjections || 'no especificadas'}
+
+Genera el Microactivo de Reactivación y los 2 mensajes de entrega siguiendo exactamente tus reglas de oro y candados éticos.`;
+
+  const text = await requestClaude({
+    systemPrompt: VALUE_BUILDER_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+    maxTokens: 1500,
+  });
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No pudimos generar el microactivo. Inténtalo de nuevo.');
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed?.microactivo || !Array.isArray(parsed?.mensajes) || parsed.mensajes.length < 2) {
+    throw new Error('La respuesta no tuvo el formato esperado. Inténtalo de nuevo.');
+  }
+  return parsed;
+};

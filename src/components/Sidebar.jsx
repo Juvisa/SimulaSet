@@ -5,7 +5,7 @@ import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
-  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap,
+  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles,
 } from 'lucide-react';
 
 const isPathActive = (pathname, to) => pathname === to || pathname.startsWith(to + '/');
@@ -89,6 +89,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Panel / Inicio' },
     { to: '/simulate', icon: Dumbbell, label: 'Simulador IA' },
     { to: '/leads-reales', icon: Zap, label: 'SET Copilot', badge: pendingFollowUpCount },
+    { to: '/value-builder', icon: Sparkles, label: 'SET Value Builder' },
     { to: '/academy', icon: BookOpen, label: 'SET Academy' },
   ];
 
