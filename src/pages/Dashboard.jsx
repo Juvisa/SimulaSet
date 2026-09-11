@@ -27,10 +27,34 @@ const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 
 const RANK_META = [
-  { medal: '🥇', border: 'border-accent-gold/50', bg: 'bg-accent-gold/10' },
-  { medal: '🥈', border: 'border-border-subtle', bg: 'bg-bg-input/60' },
-  { medal: '🥉', border: 'border-orange-500/30', bg: 'bg-orange-500/5' },
+  { medal: '🥇', border: 'border-accent-gold/50', bg: 'bg-accent-gold/10', avatarBg: 'bg-accent-gold/20', avatarText: 'text-accent-gold', ring: 'ring-accent-gold/60' },
+  { medal: '🥈', border: 'border-border-subtle', bg: 'bg-bg-input/60', avatarBg: 'bg-text-secondary/20', avatarText: 'text-text-secondary', ring: 'ring-text-secondary/50' },
+  { medal: '🥉', border: 'border-orange-500/30', bg: 'bg-orange-500/5', avatarBg: 'bg-orange-500/20', avatarText: 'text-orange-400', ring: 'ring-orange-500/50' },
 ];
+
+const getInitials = (name) => (name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+
+const HonorAvatar = ({ performer, meta, featured }) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  const sizeClass = featured ? 'h-16 w-16 text-xl' : 'h-11 w-11 text-sm';
+
+  if (performer.avatar_url && !imgFailed) {
+    return (
+      <img
+        src={performer.avatar_url}
+        alt={performer.name}
+        onError={() => setImgFailed(true)}
+        className={`mx-auto rounded-full object-cover ring-2 ${meta.ring} ${sizeClass}`}
+      />
+    );
+  }
+
+  return (
+    <div className={`mx-auto flex items-center justify-center rounded-full font-black ring-2 ${meta.avatarBg} ${meta.avatarText} ${meta.ring} ${sizeClass}`}>
+      {getInitials(performer.name)}
+    </div>
+  );
+};
 
 // Resumen calculado por fórmula a partir de datos reales — deliberadamente NO
 // generado por IA: evita costo/latencia recurrente en una página de alto tráfico
@@ -59,7 +83,10 @@ const HonorCard = ({ performer, rank, currentUserId, featured }) => {
 
   return (
     <div className={`rounded-2xl border ${meta.border} ${meta.bg} text-center ${featured ? 'p-6' : 'p-4'} ${isCurrentUser ? 'ring-2 ring-accent-coral' : ''}`}>
-      <div className={featured ? 'text-4xl' : 'text-2xl'}>{meta.medal}</div>
+      <div className="relative mx-auto w-fit">
+        <HonorAvatar performer={performer} meta={meta} featured={featured} />
+        <span className={`absolute -bottom-1 -right-1.5 drop-shadow ${featured ? 'text-xl' : 'text-sm'}`}>{meta.medal}</span>
+      </div>
       <div className={`mt-2 truncate font-black text-text-primary ${featured ? 'text-lg' : 'text-sm'}`}>
         {performer.name}{isCurrentUser ? ' (tú)' : ''}
       </div>

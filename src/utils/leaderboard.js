@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const LEADERBOARD_SELECT = 'user_id, name, set_score, lifetime_xp, current_streak, simulaciones_realizadas, misiones_completadas';
+const LEADERBOARD_SELECT = 'user_id, name, avatar_url, set_score, lifetime_xp, current_streak, simulaciones_realizadas, misiones_completadas';
 
 // Solo alumnos con al menos 1 simulación real cuentan para el Cuadro de Honor —
 // evita mostrar públicamente a alumnos en cero absoluto (ver conversación sobre
