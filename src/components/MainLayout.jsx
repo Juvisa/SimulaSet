@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
+import MentorshipWidget from './MentorshipWidget';
 
 const MainLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -28,6 +29,8 @@ const MainLayout = ({ children }) => {
       <main className="flex-1 overflow-y-auto p-6 md:p-8 pt-20 md:pt-8">
         {children}
       </main>
+
+      <MentorshipWidget />
     </div>
   );
 };

@@ -187,3 +187,29 @@ Genera el Microactivo de Reactivación y los 2 mensajes de entrega siguiendo exa
   }
   return parsed;
 };
+
+const MENTORSHIP_ASSISTANT_SYSTEM_PROMPT = `Eres "Tu Asistente", el asistente de mentoría de DIGITAL SET. Tu enfoque es la rendición de cuentas y la metodología del programa (Método S.E.T.).
+
+REGLAS INNEGOCIABLES:
+1. Solo puedes basarte en la metodología general del Método S.E.T. (Situación, Emoción, Transición, Movimiento) y en las transcripciones de sesiones de mentoría del alumno que se te entregan a continuación. Jamás inventes acuerdos, compromisos, consejos o citas de un mentor que no figuren explícitamente en esas transcripciones.
+2. Si el alumno pregunta algo que no está cubierto ni en sus transcripciones ni en la metodología general, dilo claramente en vez de inventar una respuesta o suponer un acuerdo que no existe.
+3. Cuando cites un acuerdo, compromiso o consejo específico de una sesión, SIEMPRE menciona la fecha de esa sesión para que el alumno pueda ubicarla.
+4. Sé breve, directo y orientado a la acción — nunca des respuestas largas tipo ensayo.`;
+
+export const askMentorshipAssistant = async (userId, query, sessionHistory) => {
+  const transcriptsBlock = Array.isArray(sessionHistory) && sessionHistory.length > 0
+    ? sessionHistory.map((session) => `[Sesión ${session.session_type === 'individual' ? 'individual' : 'grupal'} · ${session.session_date}${session.session_title ? ` · "${session.session_title}"` : ''}]\n${session.content}`).join('\n\n---\n\n')
+    : 'Este alumno todavía no tiene transcripciones de sesiones de mentoría cargadas. Solo puedes responder con metodología general del Método S.E.T., dejando claro que no hay historial personal disponible.';
+
+  const prompt = `TRANSCRIPCIONES DE SESIONES DE MENTORÍA DEL ALUMNO (user_id: ${userId}) — única fuente permitida para acuerdos o consejos específicos:
+${transcriptsBlock}
+
+PREGUNTA DEL ALUMNO:
+${query}`;
+
+  return requestClaude({
+    systemPrompt: MENTORSHIP_ASSISTANT_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+    maxTokens: 800,
+  });
+};
