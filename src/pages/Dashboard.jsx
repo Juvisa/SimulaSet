@@ -25,45 +25,66 @@ const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
 );
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
-const MEDALS = ['🥇', '🥈', '🥉'];
+
+const RANK_META = [
+  { medal: '🥇', border: 'border-accent-gold/50', bg: 'bg-accent-gold/10' },
+  { medal: '🥈', border: 'border-border-subtle', bg: 'bg-bg-input/60' },
+  { medal: '🥉', border: 'border-orange-500/30', bg: 'bg-orange-500/5' },
+];
+
+// Resumen calculado por fórmula a partir de datos reales — deliberadamente NO
+// generado por IA: evita costo/latencia recurrente en una página de alto tráfico
+// (el Dashboard se carga en cada visita) y elimina cualquier riesgo de que un
+// modelo "adorne" el logro de una persona real con algo no respaldado por sus
+// propios números.
+const buildHonorSummary = (performer) => {
+  const parts = [`${performer.simulaciones_realizadas} simulación${performer.simulaciones_realizadas === 1 ? '' : 'es'}`];
+  if (performer.set_score > 0) parts.push(`SET Score ${performer.set_score}`);
+  if (performer.current_streak > 0) parts.push(`racha de ${performer.current_streak} día${performer.current_streak === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+};
+
+const HonorCard = ({ performer, rank, currentUserId, featured }) => {
+  const meta = RANK_META[rank];
+  const isCurrentUser = performer?.user_id === currentUserId;
+
+  if (!performer) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border-subtle text-center text-text-secondary ${featured ? 'py-7' : 'py-5'}`}>
+        <span className={`opacity-40 ${featured ? 'text-3xl' : 'text-xl'}`}>{meta.medal}</span>
+        <span className="text-[11px]">Sé el primero en aparecer aquí</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-2xl border ${meta.border} ${meta.bg} text-center ${featured ? 'p-6' : 'p-4'} ${isCurrentUser ? 'ring-2 ring-accent-coral' : ''}`}>
+      <div className={featured ? 'text-4xl' : 'text-2xl'}>{meta.medal}</div>
+      <div className={`mt-2 truncate font-black text-text-primary ${featured ? 'text-lg' : 'text-sm'}`}>
+        {performer.name}{isCurrentUser ? ' (tú)' : ''}
+      </div>
+      <p className={`mt-1 text-text-secondary ${featured ? 'text-xs' : 'text-[10px]'}`}>{buildHonorSummary(performer)}</p>
+    </div>
+  );
+};
 
 const LeaderboardCard = ({ performers, loading, currentUserId }) => {
   const slots = Array.from({ length: 3 }, (_, i) => performers[i] || null);
 
   return (
     <section className="mb-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-5">
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-accent-gold"><Trophy size={16} /> Cuadro de Honor</div>
+      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-accent-gold"><Trophy size={16} /> Cuadro de Honor S.E.T.</div>
       <p className="mt-1 text-xs text-text-secondary">Los alumnos que más están practicando en el simulador.</p>
 
       {loading ? (
         <div className="mt-4 text-xs text-text-secondary">Cargando...</div>
       ) : (
-        <div className="mt-4 space-y-2">
-          {slots.map((performer, index) => (
-            performer ? (
-              <div
-                key={performer.user_id}
-                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${
-                  performer.user_id === currentUserId ? 'border border-accent-coral/40 bg-accent-coral/5' : 'bg-bg-input/50'
-                }`}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-lg">{MEDALS[index]}</span>
-                  <span className="truncate text-sm font-bold text-text-primary">
-                    {performer.name}{performer.user_id === currentUserId ? ' (tú)' : ''}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-3 text-[11px] text-text-secondary">
-                  <span>{performer.simulaciones_realizadas} sim.</span>
-                  <span>SET {performer.set_score}</span>
-                </div>
-              </div>
-            ) : (
-              <div key={`empty-${index}`} className="flex items-center gap-2 rounded-xl bg-bg-input/30 px-3 py-2.5 text-xs text-text-secondary">
-                <span className="text-lg opacity-40">{MEDALS[index]}</span> Sé el primero en aparecer aquí — entrena en el simulador.
-              </div>
-            )
-          ))}
+        <div className="mt-4 space-y-3">
+          <HonorCard performer={slots[0]} rank={0} currentUserId={currentUserId} featured />
+          <div className="grid grid-cols-2 gap-3">
+            <HonorCard performer={slots[1]} rank={1} currentUserId={currentUserId} />
+            <HonorCard performer={slots[2]} rank={2} currentUserId={currentUserId} />
+          </div>
         </div>
       )}
     </section>
