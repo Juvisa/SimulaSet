@@ -9,9 +9,10 @@ import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
-import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target } from 'lucide-react';
+import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target, Trophy } from 'lucide-react';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
+import { getTopPerformers } from '../utils/leaderboard';
 
 const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
   <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -24,6 +25,50 @@ const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
 );
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+const LeaderboardCard = ({ performers, loading, currentUserId }) => {
+  const slots = Array.from({ length: 3 }, (_, i) => performers[i] || null);
+
+  return (
+    <section className="mb-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-5">
+      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-accent-gold"><Trophy size={16} /> Cuadro de Honor</div>
+      <p className="mt-1 text-xs text-text-secondary">Los alumnos que más están practicando en el simulador.</p>
+
+      {loading ? (
+        <div className="mt-4 text-xs text-text-secondary">Cargando...</div>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {slots.map((performer, index) => (
+            performer ? (
+              <div
+                key={performer.user_id}
+                className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${
+                  performer.user_id === currentUserId ? 'border border-accent-coral/40 bg-accent-coral/5' : 'bg-bg-input/50'
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-lg">{MEDALS[index]}</span>
+                  <span className="truncate text-sm font-bold text-text-primary">
+                    {performer.name}{performer.user_id === currentUserId ? ' (tú)' : ''}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-[11px] text-text-secondary">
+                  <span>{performer.simulaciones_realizadas} sim.</span>
+                  <span>SET {performer.set_score}</span>
+                </div>
+              </div>
+            ) : (
+              <div key={`empty-${index}`} className="flex items-center gap-2 rounded-xl bg-bg-input/30 px-3 py-2.5 text-xs text-text-secondary">
+                <span className="text-lg opacity-40">{MEDALS[index]}</span> Sé el primero en aparecer aquí — entrena en el simulador.
+              </div>
+            )
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -36,11 +81,14 @@ const Dashboard = () => {
   const [realLeads, setRealLeads] = useState([]);
   const [followUps, setFollowUps] = useState({ vencidos: [], hoy: [], proximos: [], total_activos: 0 });
   const [openFollowUp, setOpenFollowUp] = useState(null);
+  const [performers, setPerformers] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
 
   const refreshFollowUps = () => setFollowUps(verificarSeguimientosPendientes(user.id));
 
   useEffect(() => {
     getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
+    getTopPerformers(3).then(({ performers: top }) => setPerformers(top)).finally(() => setLoadingLeaderboard(false));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(getSessions(user.id));
     setAnalyses(getAnalyses(user.id));
@@ -147,6 +195,8 @@ const Dashboard = () => {
         </div>
         <button onClick={() => navigate('/missions/mission_01_conversation_hunt')} className="mt-4 w-full rounded-xl bg-accent-gold px-4 py-2.5 text-sm font-bold text-black md:mt-0 md:w-auto">Ver misión →</button>
       </section>
+
+      <LeaderboardCard performers={performers} loading={loadingLeaderboard} currentUserId={user.id} />
 
       {/* Seguimientos pendientes */}
       {followUps.total_activos > 0 ? (
