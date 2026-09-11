@@ -97,6 +97,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     ...(adminView ? [
       { to: '/admin', icon: Shield, label: 'Pulso de Cohorte' },
       { to: '/empresa', icon: ShieldCheck, label: 'Centro de Auditoría' },
+      { to: '/admin/rewards', icon: Gift, label: 'Canjes de Recompensas' },
     ] : []),
     { to: '/missions', icon: ListChecks, label: 'Misiones & Tareas' },
     { to: adminView ? '/admin/analytics' : '/analytics', icon: TrendingUp, label: 'Analítica' },
