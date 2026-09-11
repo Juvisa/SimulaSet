@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
-import MentorshipWidget from './MentorshipWidget';
+import SetCoachWidget from './SetCoachWidget';
 
 const MainLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -30,7 +30,7 @@ const MainLayout = ({ children }) => {
         {children}
       </main>
 
-      <MentorshipWidget />
+      <SetCoachWidget />
     </div>
   );
 };
