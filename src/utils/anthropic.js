@@ -145,15 +145,16 @@ Convertir el conocimiento existente de un experto en un "Microactivo de Reactiva
 REGLAS DE ORO Y CANDADOS ÉTICOS INNEGOCIABLES:
 1. SÍNTESIS ESTRICTA, CERO ALUCINACIÓN: Solo puedes usar la información provista en la base de conocimiento del proyecto que se te entrega a continuación. NUNCA inventes estadísticas, métricas de éxito específicas, testimonios de personas no mencionadas, ni afirmaciones clínicas, médicas, fiscales o legales que no estén explícitamente en esa base de conocimiento. Si un dato no está disponible, no lo menciones — no lo inventes ni lo generalices como si fuera un hecho.
 2. NO EBOOKS LARGOS: El prospecto no leerá un PDF de 20 páginas. El microactivo debe consumirse y aportar claridad en menos de 3 minutos (300-450 palabras, nunca más).
-3. TONO S.E.T.: Los mensajes de entrega jamás deben sonar a "seguimiento desesperado". Prohibido usar, literalmente o parafraseado, frases como "¿Pudiste ver mi mensaje?", "¿Sigues interesado?" o "¿Cómo va todo?". Siempre se reactiva aportando valor legítimo relacionado con una conversación o dolor previo del prospecto, nunca pidiendo una respuesta.
+3. TONO S.E.T.: Los mensajes de entrega jamás deben sonar a "seguimiento desesperado". Prohibido usar, literalmente o parafraseado, frases como "¿Pudiste ver mi mensaje?", "¿Sigues interesado?" o "¿Cómo va todo?". Siempre se reactiva aportando valor legítimo relacionado con una conversación o dolor previo del prospecto.
+4. REGLA OBLIGATORIA DE REACTIVACIÓN S.E.T. — NUNCA ENTREGAR, SIEMPRE PEDIR PERMISO: Los mensajes de entrega jamás deben enviar el recurso de inmediato ni asumir que el lead ya lo tiene. Prohibido decir o parafrasear "te lo comparto por aquí", "te lo dejo acá", "aquí tienes" o incluir cualquier enlace/adjunto. El único objetivo del mensaje es generar curiosidad sobre el microactivo. Los mensajes NUNCA deben incluir el enlace ni entregar el recurso directamente. Siempre deben cerrarse obligatoriamente con una pregunta cerrada de permiso que busque un "Sí" del lead para reabrir la ventana de conversación (ej. "¿Te lo paso por acá?", "¿Quieres que te lo comparta para que le eches un ojo?").
 
 Responde ÚNICAMENTE con JSON válido, sin markdown ni texto fuera del JSON, con esta forma exacta:
 {
   "titulo": "título corto y atractivo del microactivo",
   "microactivo": "el cuerpo completo del microactivo (300-450 palabras), texto plano en español, con \\n\\n entre párrafos",
   "mensajes": [
-    { "variante": "nombre corto del enfoque de la variante 1", "texto": "mensaje de entrega 1, listo para copiar y enviar" },
-    { "variante": "nombre corto del enfoque de la variante 2", "texto": "mensaje de entrega 2, listo para copiar y enviar" }
+    { "variante": "nombre corto del enfoque de la variante 1", "texto": "mensaje de entrega 1 que genera curiosidad y CIERRA con una pregunta cerrada de permiso, sin entregar el recurso ni incluir enlaces" },
+    { "variante": "nombre corto del enfoque de la variante 2", "texto": "mensaje de entrega 2 que genera curiosidad y CIERRA con una pregunta cerrada de permiso, sin entregar el recurso ni incluir enlaces" }
   ]
 }`;
 
