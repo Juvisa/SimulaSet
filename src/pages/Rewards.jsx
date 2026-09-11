@@ -7,18 +7,18 @@ import { REWARDS, redeemReward } from '../utils/rewards';
 
 const ConfirmModal = ({ reward, redeeming, onConfirm, onCancel }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" onClick={onCancel}>
-    <div className="w-full max-w-sm rounded-2xl border border-border-subtle bg-bg-card p-5" onClick={(e) => e.stopPropagation()}>
+    <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl border border-border-subtle bg-bg-card p-5" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-base font-black text-text-primary">Confirmar canje</h3>
-        <button onClick={onCancel} className="text-text-secondary hover:text-text-primary"><X size={18} /></button>
+        <button onClick={onCancel} className="p-1.5 -m-1.5 text-text-secondary hover:text-text-primary"><X size={18} /></button>
       </div>
-      <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+      <p className="mt-3 text-sm leading-relaxed text-text-secondary break-words">
         ¿Confirmas canjear <span className="font-bold text-text-primary">{reward.title}</span> por{' '}
         <span className="font-black text-accent-gold">{reward.cost} XP</span>? Este XP se descontará de tu saldo disponible de inmediato.
       </p>
       <div className="mt-5 flex gap-2">
-        <button onClick={onCancel} className="flex-1 rounded-xl border border-border-subtle px-4 py-2.5 text-sm font-bold text-text-secondary hover:text-text-primary">Cancelar</button>
-        <button onClick={onConfirm} disabled={redeeming} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">
+        <button onClick={onCancel} className="flex-1 rounded-xl border border-border-subtle px-4 py-3 text-sm font-bold text-text-secondary hover:text-text-primary">Cancelar</button>
+        <button onClick={onConfirm} disabled={redeeming} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent-coral px-4 py-3 text-sm font-black text-white disabled:opacity-50">
           {redeeming ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
           {redeeming ? 'Canjeando...' : 'Confirmar canje'}
         </button>
@@ -39,7 +39,7 @@ const RewardCard = ({ reward, availableXp, onRedeem }) => {
       <button
         onClick={() => canAfford && onRedeem(reward)}
         disabled={!canAfford}
-        className={`mt-4 flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition-opacity ${
+        className={`mt-4 flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition-opacity ${
           canAfford ? 'bg-accent-coral text-white hover:opacity-90' : 'cursor-not-allowed bg-bg-input text-text-secondary'
         }`}
       >

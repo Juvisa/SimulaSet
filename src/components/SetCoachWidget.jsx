@@ -106,7 +106,7 @@ const SetCoachWidget = () => {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Describe la objeción o pega el mensaje del lead..."
               disabled={asking}
-              className="flex-1 rounded-xl border border-border-subtle bg-bg-input px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-secondary focus:border-accent-coral disabled:opacity-60"
+              className="flex-1 rounded-xl border border-border-subtle bg-bg-input px-3 py-2 text-base md:text-sm text-text-primary outline-none placeholder:text-text-secondary focus:border-accent-coral disabled:opacity-60"
             />
             <button type="submit" disabled={asking || !input.trim()} className="flex items-center justify-center rounded-xl bg-accent-coral p-2.5 text-white disabled:opacity-40">
               {asking ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}

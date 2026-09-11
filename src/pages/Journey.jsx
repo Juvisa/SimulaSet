@@ -59,13 +59,13 @@ const Journey = () => {
         </header>
 
         <section className="bg-bg-card border border-border-subtle rounded-2xl p-5 md:p-6">
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="flex md:grid md:grid-cols-5 gap-2 overflow-x-auto pb-1">
             {journeySteps.map((item, index) => {
               const active = isStarter ? index === 0 : index === 1;
               const optional = !isStarter && index === 0;
               return (
-                <div key={item} className={`rounded-xl border px-2 py-3 text-center ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
-                  <div className={`text-[9px] md:text-xs font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
+                <div key={item} className={`flex-shrink-0 min-w-[92px] md:min-w-0 rounded-xl border px-3 py-3 text-center whitespace-nowrap ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
+                  <div className={`text-[10px] font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
                   {optional && <div className="text-[8px] md:text-[9px] text-text-secondary mt-1">Opcional</div>}
                 </div>
               );

@@ -255,25 +255,25 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
       {/* Command palette */}
       {paletteOpen && (
         <div
-          className="fixed inset-0 z-[100] bg-black/60 flex items-start justify-center pt-24 px-4"
+          className="fixed inset-0 z-[100] bg-black/60 flex items-start justify-center pt-12 sm:pt-24 px-4"
           onClick={closePalette}
         >
           <div
-            className="w-full max-w-md bg-bg-card border border-border-subtle rounded-xl shadow-2xl overflow-hidden"
+            className="w-full max-w-md max-h-[85vh] flex flex-col bg-bg-card border border-border-subtle rounded-xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle flex-shrink-0">
               <Search size={16} className="text-text-secondary" />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar sección..."
-                className="flex-1 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-secondary"
+                className="flex-1 bg-transparent outline-none text-base sm:text-sm text-text-primary placeholder:text-text-secondary"
               />
               <kbd className="text-[10px] text-text-secondary border border-border-subtle rounded px-1.5 py-0.5">Esc</kbd>
             </div>
-            <div className="max-h-72 overflow-y-auto py-1">
+            <div className="overflow-y-auto py-1">
               {filteredResults.length === 0 && (
                 <p className="px-4 py-6 text-sm text-text-secondary text-center">Sin resultados</p>
               )}

@@ -60,7 +60,7 @@ const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   return (
     <>
       {/* Mobile: drawer */}
-      <div className={`fixed bottom-16 md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : 'translate-y-full'}`}
+      <div className={`fixed bottom-24 md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : 'translate-y-full'}`}
         style={{ maxHeight: '60vh', overflowY: 'auto' }}
       >
         <button onClick={onToggle} className="w-full flex items-center justify-center gap-2 py-3 text-text-secondary text-sm border-b border-border-subtle">
@@ -332,21 +332,21 @@ const Simulator = () => {
       {/* Chat area */}
       <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full">
         {/* Header */}
-        <div className="sticky top-0 z-30 bg-bg-card border-b border-border-subtle px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg" style={{ backgroundColor: modeColor + '20' }}>
+        <div className="sticky top-0 z-30 bg-bg-card border-b border-border-subtle px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{ backgroundColor: modeColor + '20' }}>
               {prospectProfile?.nombre?.[0] || '?'}
             </div>
-            <div>
-              <div className="font-semibold text-text-primary text-sm">{prospectProfile?.nombre || 'Prospecto'}</div>
-              <div className="text-text-secondary text-xs">{prospectProfile?.tipNegocio}</div>
+            <div className="min-w-0">
+              <div className="font-semibold text-text-primary text-sm truncate">{prospectProfile?.nombre || 'Prospecto'}</div>
+              <div className="text-text-secondary text-xs truncate">{prospectProfile?.tipNegocio}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <ModeBadge mode={mode} size="sm" />
             <button
               onClick={() => endSession()}
-              className="flex items-center gap-1 text-text-secondary hover:text-red-400 text-xs border border-border-subtle rounded-lg px-3 py-1.5 transition-colors"
+              className="flex items-center gap-1 text-text-secondary hover:text-red-400 text-xs border border-border-subtle rounded-lg px-3 py-2 transition-colors"
             >
               <Flag size={12} />
               Terminar
@@ -355,7 +355,7 @@ const Simulator = () => {
         </div>
 
         {/* Lead state indicator */}
-        <div className="px-4 py-2 flex items-center gap-2 border-b border-border-subtle bg-bg-primary/50">
+        <div className="px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle bg-bg-primary/50">
           <span className="text-xs text-text-secondary">Estado del lead:</span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
             ['pidio_llamada', 'confirmado_con_entusiasmo', 'quiere_reagendar'].includes(leadState)
@@ -383,12 +383,12 @@ const Simulator = () => {
               className={`flex ${msg.role === 'setter' ? 'justify-end' : msg.role === 'system' ? 'justify-center' : 'justify-start'} animate-fade-in`}
             >
               {msg.role === 'system' ? (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-xl max-w-sm text-center">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-xl max-w-sm text-center break-words">
                   {msg.content}
                 </div>
               ) : (
                 <div className={`max-w-xs md:max-w-sm lg:max-w-md ${msg.role === 'setter' ? 'items-end' : 'items-start'} flex flex-col`}>
-                  <div className={`px-4 py-2.5 text-sm leading-relaxed ${msg.role === 'setter' ? 'bubble-sent text-white' : 'bubble-received text-text-primary'}`}>
+                  <div className={`px-4 py-2.5 text-sm leading-relaxed break-words ${msg.role === 'setter' ? 'bubble-sent text-white' : 'bubble-received text-text-primary'}`}>
                     {msg.content}
                   </div>
                   <div className="flex items-center gap-1 mt-1 px-1">
@@ -413,7 +413,7 @@ const Simulator = () => {
 
         {/* Input */}
         {!ended && (
-          <div className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto bg-bg-card border-t border-border-subtle px-4 py-3" style={{ zIndex: 35 }}>
+          <div className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto bg-bg-card border-t border-border-subtle px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" style={{ zIndex: 35 }}>
             <div className="max-w-2xl mx-auto flex items-end gap-3">
               <textarea
                 ref={inputRef}
@@ -424,7 +424,7 @@ const Simulator = () => {
                 }}
                 placeholder="Escribe tu mensaje al prospecto..."
                 rows={1}
-                className="flex-1 bg-bg-input border border-border-subtle rounded-2xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm resize-none focus:border-accent-coral transition-colors max-h-32 overflow-y-auto"
+                className="flex-1 bg-bg-input border border-border-subtle rounded-2xl px-4 py-3 text-text-primary placeholder-text-secondary text-base md:text-sm resize-none focus:border-accent-coral transition-colors max-h-32 overflow-y-auto"
                 style={{ minHeight: '44px' }}
               />
               <button
@@ -438,7 +438,7 @@ const Simulator = () => {
           </div>
         )}
         {ended && (
-          <div className="fixed bottom-0 left-0 right-0 md:relative bg-bg-card border-t border-border-subtle px-4 py-4 text-center" style={{ zIndex: 35 }}>
+          <div className="fixed bottom-0 left-0 right-0 md:relative bg-bg-card border-t border-border-subtle px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center" style={{ zIndex: 35 }}>
             <p className="text-text-secondary text-sm">Simulación finalizada — redirigiendo al reporte...</p>
           </div>
         )}
@@ -453,7 +453,7 @@ const Simulator = () => {
       {lastCoaching && (
         <button
           onClick={() => setCoachingVisible(!coachingVisible)}
-          className="fixed bottom-20 right-4 md:hidden z-50 bg-accent-coral text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg"
+          className="fixed bottom-28 right-4 md:hidden z-50 bg-accent-coral text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg"
         >
           {coachingVisible ? <X size={18} /> : <ChevronUp size={18} />}
         </button>

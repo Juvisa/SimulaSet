@@ -73,7 +73,7 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
               key={option.id}
               onClick={() => !revealed && canAct && setSelected(option.id)}
               disabled={revealed || !canAct}
-              className={`flex w-full items-start gap-2 rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:cursor-default ${optionClass}`}
+              className={`flex w-full items-start gap-2 rounded-xl border px-4 py-3 text-left text-sm transition-colors disabled:cursor-default ${optionClass}`}
             >
               {showResult && isCorrectOption && <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-green-400" />}
               {showResult && isSelected && !isCorrectOption && <XCircle size={16} className="mt-0.5 shrink-0 text-red-400" />}
@@ -97,7 +97,7 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
         <button
           onClick={handleSubmit}
           disabled={submitting || !selected}
-          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-2.5 text-xs font-black text-white disabled:opacity-40"
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-xs font-black text-white disabled:opacity-40"
         >
           {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
           {submitting ? 'Enviando...' : 'Responder'}
@@ -147,7 +147,7 @@ const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, criteri
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={!canAct}
                 placeholder="Pega el link de tu captura o conversación..."
-                className="w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-secondary disabled:opacity-60"
+                className="w-full bg-transparent text-base md:text-sm text-text-primary outline-none placeholder:text-text-secondary disabled:opacity-60"
               />
             </div>
             <label className={`flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-3 py-2.5 text-xs font-bold text-text-secondary transition-colors ${canAct ? 'cursor-pointer hover:text-text-primary' : 'cursor-not-allowed opacity-50'}`}>
@@ -166,7 +166,7 @@ const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, criteri
             disabled={!canAct}
             rows={3}
             placeholder="¿Qué objeción o situación enfrentaste y cómo la manejaste?"
-            className="mt-2 w-full resize-y rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary focus:border-accent-coral disabled:opacity-60"
+            className="mt-2 w-full resize-y rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5 text-base md:text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary focus:border-accent-coral disabled:opacity-60"
           />
         </div>
 

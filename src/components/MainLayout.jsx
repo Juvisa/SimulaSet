@@ -12,7 +12,7 @@ const MainLayout = ({ children }) => {
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 flex items-center justify-between px-4 bg-bg-card border-b border-border-subtle">
         <button
           onClick={() => setMobileOpen(true)}
-          className="text-text-secondary hover:text-text-primary"
+          className="p-2.5 -m-2.5 text-text-secondary hover:text-text-primary"
           aria-label="Abrir menú"
         >
           <Menu size={22} />

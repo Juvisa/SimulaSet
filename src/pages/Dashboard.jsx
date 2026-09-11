@@ -186,7 +186,7 @@ const Dashboard = () => {
           {fu.nota && <p className="text-text-secondary text-xs mt-0.5 truncate">{fu.nota}</p>}
         </div>
         <button onClick={() => setOpenFollowUp({ fu, lead, project })}
-          className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-black transition-all"
+          className="flex-shrink-0 flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold text-black transition-all"
           style={{ backgroundColor: '#C9920A' }}>
           Generar →
         </button>
@@ -222,10 +222,10 @@ const Dashboard = () => {
               );
             })}
           </div>
-          <div className="grid grid-cols-3 gap-3 mt-7 mb-4">
-            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1">SET Rookie 🌱</div></div>
-            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1">{user.set_score ?? '—'}</div></div>
-            <div><div className="text-[10px] md:text-xs text-text-secondary uppercase">Próximo nivel</div><div className="text-sm md:text-lg font-black mt-1">SET Operator ⚡</div></div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-7 mb-4">
+            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1 truncate">SET Rookie 🌱</div></div>
+            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1 truncate">{user.set_score ?? '—'}</div></div>
+            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">Próximo nivel</div><div className="text-sm md:text-lg font-black mt-1 truncate">SET Operator ⚡</div></div>
           </div>
           <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
           <p className="text-text-secondary text-xs mt-2">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>
@@ -423,7 +423,7 @@ const Dashboard = () => {
                 <div className="flex items-center gap-2 ml-3">
                   <button
                     onClick={() => navigate('/simulate', { state: { projectId: p.id } })}
-                    className="flex items-center gap-1 bg-accent-coral/10 text-accent-coral border border-accent-coral/20 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-accent-coral/20 transition-all"
+                    className="flex items-center gap-1 bg-accent-coral/10 text-accent-coral border border-accent-coral/20 px-3 py-2 rounded-lg text-xs font-medium hover:bg-accent-coral/20 transition-all"
                   >
                     <Play size={12} /> Simular
                   </button>
