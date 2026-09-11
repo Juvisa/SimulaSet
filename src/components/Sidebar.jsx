@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import {
-  LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ListChecks, TrendingUp,
+  LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
   BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap,
 } from 'lucide-react';
 
@@ -93,10 +93,13 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   ];
 
   const trackingItems = [
-    ...(adminView ? [{ to: '/admin', icon: Shield, label: 'Pulso de Cohorte' }] : []),
+    ...(adminView ? [
+      { to: '/admin', icon: Shield, label: 'Pulso de Cohorte' },
+      { to: '/empresa', icon: ShieldCheck, label: 'Centro de Auditoría' },
+    ] : []),
     { to: '/missions', icon: ListChecks, label: 'Misiones & Tareas' },
     { to: adminView ? '/admin/analytics' : '/analytics', icon: TrendingUp, label: 'Analítica' },
-    { to: '/oportunidades', icon: BriefcaseBusiness, label: 'SET Opportunity Hub' },
+    { to: '/oportunidades', icon: BriefcaseBusiness, label: 'Bolsa de Empleo' },
   ];
 
   const communityItems = [

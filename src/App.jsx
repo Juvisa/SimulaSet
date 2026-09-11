@@ -33,6 +33,7 @@ import MissionConversationHunt from './pages/MissionConversationHunt';
 import SetWins from './pages/SetWins';
 import Rewards from './pages/Rewards';
 import OpportunityHub from './pages/OpportunityHub';
+import TalentVault from './pages/TalentVault';
 
 function App() {
   return (
@@ -63,6 +64,7 @@ function App() {
           <Route path="/set-wins" element={<ProtectedRoute><SetWins /></ProtectedRoute>} />
           <Route path="/recompensas" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
           <Route path="/oportunidades" element={<ProtectedRoute><OpportunityHub /></ProtectedRoute>} />
+          <Route path="/empresa" element={<ProtectedRoute adminOnly><TalentVault /></ProtectedRoute>} />
 
           {/* Copiloto en Vivo / Leads Reales */}
           <Route path="/leads-reales" element={<ProtectedRoute><RealLeads /></ProtectedRoute>} />
