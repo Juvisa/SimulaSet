@@ -56,7 +56,9 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error || `API error ${response.status}`);
+    const message = [err?.error, err?.reason].filter(Boolean).join(': ') || `API error ${response.status}`;
+    console.error('[anthropic] Solicitud a /api/anthropic falló:', message);
+    throw new Error(message);
   }
 
   const data = await response.json();
