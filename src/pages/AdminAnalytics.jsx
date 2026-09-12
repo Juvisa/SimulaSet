@@ -377,15 +377,15 @@ const AdminAnalytics = () => {
             <h3 className="font-bold text-text-primary mb-4">Actividad — últimos 14 días</h3>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={metricas.actividad_barras || []} barSize={10}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#262B31" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff14" />
                 <XAxis
                   dataKey="fecha"
-                  tick={{ fill: '#9A9A9A', fontSize: 9 }}
+                  tick={{ fill: '#94a3b8', fontSize: 9 }}
                   axisLine={false}
                   tickLine={false}
                   interval={2}
                 />
-                <YAxis tick={{ fill: '#9A9A9A', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip content={<BarTooltip />} cursor={{ fill: '#E0605E10' }} />
                 <Bar dataKey="sesiones" radius={[4, 4, 0, 0]}>
                   {(metricas.actividad_barras || []).map((entry, i) => (

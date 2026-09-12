@@ -193,7 +193,7 @@ const CertBadge = ({ cert }) => {
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-bg-card border border-border-subtle rounded-xl px-3 py-2 text-sm">
+    <div className="card-tactical rounded-xl px-3 py-2 text-sm">
       <p className="text-text-secondary text-xs mb-1">{label}</p>
       <p className="font-bold text-text-primary">{payload[0].value}/100</p>
     </div>
@@ -291,17 +291,17 @@ const Analytics = () => {
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={curva}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#242424" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff14" />
                     <XAxis
                       dataKey="semana"
-                      tick={{ fill: '#9A9A9A', fontSize: 10 }}
+                      tick={{ fill: '#94a3b8', fontSize: 10 }}
                       tickFormatter={v => v.split('-W')[1] ? `Sem ${v.split('-W')[1]}` : v}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
                       domain={[0, 100]}
-                      tick={{ fill: '#9A9A9A', fontSize: 10 }}
+                      tick={{ fill: '#94a3b8', fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
                     />
