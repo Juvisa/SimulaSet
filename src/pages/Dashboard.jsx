@@ -16,7 +16,7 @@ import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
 import { getTopPerformers } from '../utils/leaderboard';
 
 const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
-  <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+  <div className="card-tactical rounded-2xl p-5">
     <div className="flex items-center justify-between mb-2">
       <span className="text-text-secondary text-xs font-medium uppercase tracking-wider">{label}</span>
       <Icon size={16} style={{ color }} />
@@ -182,7 +182,7 @@ const Dashboard = () => {
       ? `Hace ${Math.round((Date.now() - new Date(fu.programado_para)) / 3600000)}h`
       : new Date(fu.programado_para).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
     return (
-      <div className="bg-bg-card border rounded-xl p-3 flex items-center justify-between gap-3" style={{ borderColor: borderColor + '40' }}>
+      <div className="card-tactical rounded-xl border p-3 flex items-center justify-between gap-3" style={{ borderColor: borderColor + '40' }}>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {urgencia === 'vencido' && <Bell size={12} className="text-red-400 animate-bounce flex-shrink-0" />}
@@ -247,7 +247,7 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-5 md:flex md:items-center md:justify-between md:gap-6">
+      <section className="card-tactical mb-6 rounded-2xl border-accent-gold/30 p-5 md:flex md:items-center md:justify-between md:gap-6">
         <div className="flex items-start gap-3">
           <div className="rounded-xl bg-accent-gold/10 p-2.5 text-accent-gold"><Target size={20} /></div>
           <div>
@@ -263,7 +263,7 @@ const Dashboard = () => {
 
       {/* Seguimientos pendientes */}
       {followUps.total_activos > 0 ? (
-        <div className="mb-6 bg-bg-card border border-border-subtle rounded-2xl overflow-hidden">
+        <div className="card-tactical mb-6 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Clock size={15} style={{ color: '#C9920A' }} />
@@ -290,7 +290,7 @@ const Dashboard = () => {
           </div>
         </div>
       ) : (
-        <div className="mb-6 bg-bg-card border border-border-subtle rounded-2xl px-4 py-3 flex items-center gap-2 text-text-secondary text-sm">
+        <div className="card-tactical mb-6 rounded-2xl px-4 py-3 flex items-center gap-2 text-text-secondary text-sm">
           <Clock size={14} />
           <span>✅ Todo al día — sin seguimientos pendientes</span>
         </div>
@@ -315,7 +315,7 @@ const Dashboard = () => {
       )}
 
       {/* Level banner */}
-      <div className="bg-bg-card border border-border-subtle rounded-2xl p-6 mb-6"
+      <div className="card-tactical rounded-2xl border p-6 mb-6"
         style={{ borderColor: levelInfo.color + '30', backgroundColor: levelInfo.color + '08' }}>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -369,7 +369,7 @@ const Dashboard = () => {
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <button
           onClick={() => navigate('/academy')}
-          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-accent-gold/40 transition-all group"
+          className="card-tactical rounded-2xl p-5 text-left hover:border-accent-gold/40 transition-all group"
         >
           <div className="w-11 h-11 rounded-xl bg-accent-gold/10 flex items-center justify-center mb-4">
             <BookOpen size={21} className="text-accent-gold" />
@@ -379,7 +379,7 @@ const Dashboard = () => {
         </button>
         <button
           onClick={() => navigate('/simulate')}
-          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-accent-coral/40 transition-all group"
+          className="card-tactical rounded-2xl p-5 text-left hover:border-accent-coral/40 transition-all group"
         >
           <div className="w-11 h-11 rounded-xl bg-accent-coral/10 flex items-center justify-center mb-4">
             <Bot size={21} className="text-accent-coral" />
@@ -390,7 +390,7 @@ const Dashboard = () => {
         </button>
         <button
           onClick={() => navigate('/set-wins')}
-          className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-green-500/40 transition-all group"
+          className="card-tactical rounded-2xl p-5 text-left hover:border-green-500/40 transition-all group"
         >
           <div className="w-11 h-11 rounded-xl bg-green-500/10 flex items-center justify-center mb-4">
             <Award size={21} className="text-green-400" />
@@ -419,7 +419,7 @@ const Dashboard = () => {
           <button onClick={() => navigate('/projects')} className="w-full sm:w-auto shrink-0 text-left sm:text-right text-accent-coral hover:text-accent-coral/80 text-sm font-medium transition-colors">Ir a Mis Proyectos</button>
         </div>
         {projects.length === 0 ? (
-          <div className="bg-bg-card border border-dashed border-border-subtle rounded-2xl p-8 text-center">
+          <div className="card-tactical rounded-2xl border-dashed border-border-subtle p-8 text-center">
             <div className="text-4xl mb-3">📁</div>
             <div className="text-text-secondary text-sm mb-4">Crea tu primer proyecto para empezar a practicar</div>
             <button onClick={() => navigate('/projects/new')}
@@ -430,7 +430,7 @@ const Dashboard = () => {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {projects.slice(0, 4).map(p => (
-              <div key={p.id} className="bg-bg-card border border-border-subtle rounded-2xl p-4 flex items-center justify-between hover:border-accent-coral/30 transition-all">
+              <div key={p.id} className="card-tactical rounded-2xl p-4 flex items-center justify-between hover:border-accent-coral/30 transition-all">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-text-primary text-sm truncate">{p.name}</div>
                   <div className="text-text-secondary text-xs mt-0.5">{p.expertName}</div>
@@ -464,7 +464,7 @@ const Dashboard = () => {
           </button>
         </div>
         {realLeads.length === 0 ? (
-          <div className="bg-bg-card border border-dashed rounded-2xl p-6 text-center" style={{ borderColor: '#C9920A30' }}>
+          <div className="card-tactical rounded-2xl border border-dashed p-6 text-center" style={{ borderColor: '#C9920A30' }}>
             <div className="text-3xl mb-2">👤</div>
             <div className="text-text-secondary text-sm mb-3">Registra leads reales y opera con asistencia de IA</div>
             <button onClick={() => navigate('/leads-reales/nuevo')}
@@ -479,7 +479,7 @@ const Dashboard = () => {
               const isFantasma = lead.estado === 'fantasma' || lead.alerta_fantasma;
               return (
                 <button key={lead.id} onClick={() => navigate(`/leads-reales/${lead.id}`)}
-                  className={`w-full bg-bg-card border rounded-xl p-3 flex items-center justify-between hover:border-accent-gold/30 transition-all text-left ${isFantasma ? 'border-red-500/30' : 'border-border-subtle'}`}>
+                  className={`card-tactical w-full rounded-xl border p-3 flex items-center justify-between hover:border-accent-gold/30 transition-all text-left ${isFantasma ? 'border-red-500/30' : ''}`}>
                   <div className="flex items-center gap-3">
                     {isFantasma && <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />}
                     <div>
@@ -521,7 +521,7 @@ const Dashboard = () => {
               const sessionScore = Math.round(s.averageScore || 0);
               const scoreColor = sessionScore >= 80 ? '#1D9E75' : sessionScore >= 60 ? '#C9920A' : '#DC2626';
               return (
-                <div key={s.id} className="bg-bg-card border border-border-subtle rounded-xl p-4 flex items-center justify-between">
+                <div key={s.id} className="card-tactical rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ModeBadge mode={s.mode} size="sm" />
                     <div>
@@ -539,7 +539,7 @@ const Dashboard = () => {
 
       {/* CTA if no sessions */}
       {sessions.length === 0 && projects.length > 0 && (
-        <div className="bg-bg-card border border-accent-coral/20 rounded-2xl p-8 text-center mt-6"
+        <div className="card-tactical rounded-2xl border-accent-coral/20 p-8 text-center mt-6"
           style={{ backgroundColor: '#E0605E08' }}>
           <div className="text-4xl mb-3">🎯</div>
           <div className="text-text-primary font-semibold mb-2">¡Listo para practicar!</div>
@@ -552,7 +552,7 @@ const Dashboard = () => {
       )}
 
       {/* Analyzer CTA — always visible */}
-      <div className="mt-6 bg-bg-card border border-border-subtle rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:border-blue-500/40 transition-all"
+      <div className="card-tactical mt-6 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:border-blue-500/40 transition-all"
         onClick={() => navigate('/analyzer')}>
         <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
           <MessageSquare size={22} className="text-blue-400" />
