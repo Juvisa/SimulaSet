@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { getAnalyses, getAllRealLeads } from '../utils/storage';
+import { getAllRealLeads } from '../utils/storage';
 import {
   getFeedbackForSession, getFeedbackForLead, createSessionFeedback, createLeadFeedback,
 } from '../utils/adminFeedback';
+import { getAnalyses } from '../utils/analyses';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
@@ -49,8 +50,10 @@ const AdminSetterDetail = () => {
       const allSessions = sessionRows || [];
       setSessions(allSessions);
 
-      const userAnalyses = getAnalyses(setterId);
-      setAnalyses(userAnalyses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+      const { analyses: userAnalyses, error: analysesError } = await getAnalyses(setterId);
+      if (!active) return;
+      setAnalyses(userAnalyses);
+      if (analysesError) setError(prev => prev || `No pudimos cargar los análisis: ${analysesError}`);
 
       const fbEntries = await Promise.all(allSessions.map(async (s) => {
         const { feedback } = await getFeedbackForSession(s.id);
@@ -334,8 +337,8 @@ const AdminSetterDetail = () => {
                   <div className="flex items-center gap-3">
                     <ModeBadge mode={a.mode} size="sm" />
                     <div>
-                      <div className="text-text-primary text-sm">{a.projectName}</div>
-                      <div className="text-text-secondary text-xs">{new Date(a.createdAt).toLocaleDateString('es')}</div>
+                      <div className="text-text-primary text-sm">{a.project_name || 'Proyecto sin nombre'}</div>
+                      <div className="text-text-secondary text-xs">{new Date(a.created_at).toLocaleDateString('es')}</div>
                     </div>
                   </div>
                   <div className="text-sm font-bold" style={{ color: '#C9920A' }}>

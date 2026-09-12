@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  getAnalyses, getRealLeads
-} from '../utils/storage';
+import { getRealLeads } from '../utils/storage';
 import { getPendingFeedback, markFeedbackSeen } from '../utils/adminFeedback';
+import { getAnalyses } from '../utils/analyses';
 import { getProjects } from '../utils/projects';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
 import Layout from '../components/Layout';
@@ -140,9 +139,9 @@ const Dashboard = () => {
     getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
     getTopPerformers(3).then(({ performers: top }) => setPerformers(top)).finally(() => setLoadingLeaderboard(false));
     getSimulatorSessions(user.id).then(({ sessions: rows }) => setSessions(rows));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAnalyses(getAnalyses(user.id));
+    getAnalyses(user.id).then(({ analyses: rows }) => setAnalyses(rows));
     getPendingFeedback(user.id).then(({ feedback }) => setPendingFeedback(feedback));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRealLeads(getRealLeads(user.id));
     refreshFollowUps();
     const interval = setInterval(refreshFollowUps, 5 * 60 * 1000);

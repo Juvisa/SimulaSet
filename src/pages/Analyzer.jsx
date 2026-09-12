@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { saveAnalysis } from '../utils/storage';
+import { createAnalysis } from '../utils/analyses';
 import { getProjects } from '../utils/projects';
 import { callClaude, extractConversationText } from '../utils/anthropic';
 import { buildAnalyzerPrompt } from '../utils/prompts';
@@ -115,15 +115,16 @@ const Analyzer = () => {
       const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
 
       setResult(analysis);
-      saveAnalysis({
-        id: crypto.randomUUID(),
+      // Persistencia en Supabase — no se espera esta llamada para no retrasar
+      // que el setter vea su resultado (mismo patrón que saveSimulatorSession
+      // en Simulator.jsx).
+      createAnalysis({
         userId: user.id,
         projectId: form.projectId,
         projectName: project.name,
         mode: form.mode,
         conversationText,
         result: analysis,
-        createdAt: new Date().toISOString(),
       });
     } catch (err) {
       setError(`Error: ${err.message}`);
