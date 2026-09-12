@@ -164,6 +164,7 @@ const Dashboard = () => {
   // comparar contra la lista de proyectos activos del usuario, no confiar en
   // que la fila de la sesión "sepa" que su proyecto ya no está.
   const activeProjectIds = new Set(projects.map(p => p.id));
+  const visibleSessions = sessions.filter(s => !s.projectId || activeProjectIds.has(s.projectId));
 
   const dismissFeedback = (id) => {
     markFeedbackSeen(id);
@@ -505,29 +506,26 @@ const Dashboard = () => {
       </div>
 
       {/* Recent sessions */}
-      {sessions.length > 0 && (
+      {/* Se excluyen sesiones de proyectos ya eliminados (project_id no está
+          entre activeProjectIds) — el usuario prefiere que desaparezcan de
+          esta lista en vez de mostrarse marcadas como "Archivado". La sesión
+          en sí no se borra (sigue contando para los stats de arriba y para
+          "Mi Performance"), solo se oculta de este listado puntual. */}
+      {visibleSessions.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-text-primary">Últimas sesiones</h2>
           </div>
           <div className="space-y-2">
-            {sessions.slice(0, 5).map(s => {
+            {visibleSessions.slice(0, 5).map(s => {
               const sessionScore = Math.round(s.averageScore || 0);
               const scoreColor = sessionScore >= 80 ? '#1D9E75' : sessionScore >= 60 ? '#C9920A' : '#DC2626';
-              const projectDeleted = s.projectId && !activeProjectIds.has(s.projectId);
               return (
                 <div key={s.id} className="bg-bg-card border border-border-subtle rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ModeBadge mode={s.mode} size="sm" />
                     <div>
-                      <div className={`flex flex-wrap items-center gap-1.5 text-sm font-medium ${projectDeleted ? 'text-zinc-400' : 'text-text-primary'}`}>
-                        <span>{s.projectName || 'Proyecto sin nombre'}</span>
-                        {projectDeleted && (
-                          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700 text-zinc-400">
-                            Archivado
-                          </span>
-                        )}
-                      </div>
+                      <div className="text-text-primary text-sm font-medium">{s.projectName || 'Proyecto sin nombre'}</div>
                       <div className="text-text-secondary text-xs">{new Date(s.createdAt).toLocaleDateString('es')}</div>
                     </div>
                   </div>
