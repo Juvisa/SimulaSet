@@ -5,13 +5,27 @@
 
 @layer components {
   /* Tarjeta "terminal táctica": material semi-translúcido con blur, borde
-     apenas visible e iluminación superior sutil en vez del panel plano
-     bg-bg-card + border-border-subtle genérico. Las clases de color/borde
-     que se agreguen junto a esta (ej. border-accent-gold/30) la sobreescriben
-     porque las utilidades de Tailwind siempre pesan más que @layer components. */
+     sutil e iluminación superior + sombra de profundidad, en vez del panel
+     plano bg-bg-card + border-border-subtle genérico.
+     background/backdrop-filter/box-shadow llevan !important porque son las
+     propiedades "de material" que definen el efecto y nada más en la app
+     las toca — deben ganar siempre. El border-color NO lleva !important a
+     propósito: varias tarjetas (Cuadro de Honor por rango, hero de recorrido,
+     tarjeta de misión, hovers de acceso rápido) dependen de que su propio
+     color de acento (ej. border-accent-gold/30, hover:border-accent-coral/40)
+     siga ganando sobre este valor base — forzarlo con !important los dejaría
+     a todos con el mismo borde blanco plano. */
   .card-tactical {
-    @apply relative bg-zinc-900/70 backdrop-blur-md border border-white/5;
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+    position: relative;
+    background: rgba(18, 22, 27, 0.65) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 32px -8px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .card-tactical:hover {
+    border-color: rgba(255, 255, 255, 0.15);
   }
 }
 
@@ -24,8 +38,8 @@
 body {
   background-color: #0B0D10;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.13) 1px, transparent 1px),
     radial-gradient(ellipse 70% 50% at 10% 0%, rgba(224, 96, 94, 0.18), transparent 60%),
     radial-gradient(ellipse 60% 45% at 100% 25%, rgba(201, 146, 10, 0.12), transparent 65%);
   background-size: 44px 44px, 44px 44px, 100% 100%, 100% 100%;
