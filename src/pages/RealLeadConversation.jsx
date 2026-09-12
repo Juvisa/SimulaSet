@@ -30,6 +30,13 @@ const ESTADO_CONFIG = {
 
 const TEMP_ICON = { 'Frío': '❄️', 'Tibio': '🌤️', 'Caliente': '🔥' };
 
+const TIPO_SEGUIMIENTO_LABELS = {
+  valor: 'Aportar valor',
+  angulo: 'Cambio de ángulo',
+  reactivacion: 'Reactivación',
+  confirmacion: 'Confirmar asistencia',
+};
+
 const timeAgo = (ts) => {
   if (!ts) return null;
   const diff = Date.now() - new Date(ts).getTime();
@@ -337,15 +344,25 @@ const RealLeadConversation = () => {
   const [followUpPanelOpen, setFollowUpPanelOpen] = useState(false);
   const [activeFollowUp, setActiveFollowUp] = useState(null);
   const [pendingFollowUps, setPendingFollowUps] = useState([]);
+  const [showFollowUpMenu, setShowFollowUpMenu] = useState(false);
   // "vencido" ya no es un estado persistido — se deriva una sola vez al
   // recibir la respuesta (fuera del render, donde comparar contra la hora
-  // actual sí es válido) en vez de recalcularse en cada render del badge.
+  // actual sí es válido) en vez de recalcularse en cada render del badge o
+  // de cada fila del menú.
   const [hasVencidoFollowUp, setHasVencidoFollowUp] = useState(false);
 
   const applyPendingFollowUps = useCallback((followUps) => {
-    setPendingFollowUps(followUps);
-    setHasVencidoFollowUp(followUps.some(f => new Date(f.programado_para).getTime() <= Date.now()));
+    const now = Date.now();
+    const enriched = followUps.map(f => ({ ...f, isVencido: new Date(f.programado_para).getTime() <= now }));
+    setPendingFollowUps(enriched);
+    setHasVencidoFollowUp(enriched.some(f => f.isVencido));
   }, []);
+
+  const openFollowUp = (fu) => {
+    setShowFollowUpMenu(false);
+    setActiveFollowUp(fu);
+    setFollowUpPanelOpen(true);
+  };
 
   const refreshPendingFollowUps = useCallback(() => {
     getPendingFollowUpsForLead(leadId).then(({ followUps }) => applyPendingFollowUps(followUps));
@@ -620,20 +637,55 @@ const RealLeadConversation = () => {
             </div>
           </div>
 
-          {/* Schedule follow-up button */}
-          <button
-            onClick={() => setScheduleOpen(true)}
-            className="relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border transition-all"
-            style={{ backgroundColor: '#C9920A15', borderColor: '#C9920A40', color: '#C9920A' }}
-          >
-            <Clock size={12} />
-            <span className="hidden sm:inline">Seguimiento</span>
-            {pendingFollowUps.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ backgroundColor: hasVencidoFollowUp ? '#DC2626' : '#C9920A', fontSize: '9px' }}>
-                {pendingFollowUps.length}
-              </span>
+          {/* Follow-up button + menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowFollowUpMenu(!showFollowUpMenu)}
+              className="relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border transition-all"
+              style={{ backgroundColor: '#C9920A15', borderColor: '#C9920A40', color: '#C9920A' }}
+            >
+              <Clock size={12} />
+              <span className="hidden sm:inline">Seguimiento</span>
+              {pendingFollowUps.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ backgroundColor: hasVencidoFollowUp ? '#DC2626' : '#C9920A', fontSize: '9px' }}>
+                  {pendingFollowUps.length}
+                </span>
+              )}
+            </button>
+            {showFollowUpMenu && (
+              <div className="card-tactical absolute top-9 right-0 rounded-xl shadow-xl z-50 p-2 w-64">
+                {pendingFollowUps.length === 0 ? (
+                  <p className="px-2 py-3 text-xs text-text-secondary text-center">Sin seguimientos pendientes</p>
+                ) : (
+                  <div className="mb-2 max-h-56 space-y-1 overflow-y-auto">
+                    {pendingFollowUps.map(fu => (
+                      <button
+                        key={fu.id}
+                        onClick={() => openFollowUp(fu)}
+                        className="w-full rounded-lg px-2.5 py-2 text-left transition-all hover:bg-bg-input"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-text-primary">{TIPO_SEGUIMIENTO_LABELS[fu.tipo_seguimiento] || fu.tipo_seguimiento}</span>
+                          {fu.isVencido && <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ backgroundColor: '#DC2626' }}>VENCIDO</span>}
+                        </div>
+                        <div className="text-[11px] text-text-secondary">
+                          {new Date(fu.programado_para).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        {fu.nota && <div className="mt-0.5 truncate text-[11px] italic text-text-secondary">{fu.nota}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => { setShowFollowUpMenu(false); setScheduleOpen(true); }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all"
+                  style={{ backgroundColor: '#C9920A15', borderColor: '#C9920A40', color: '#C9920A' }}
+                >
+                  <Clock size={12} /> Programar nuevo
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
           {/* Ghost/Reactivation button */}
           <div className="relative">
