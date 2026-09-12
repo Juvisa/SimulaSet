@@ -49,9 +49,9 @@ export const KPICard = ({ label, value, sub, trend, color }) => {
 
 const ModeCard = ({ mode, data, isBest, isWorst }) => {
   const MODE_CONFIG = {
-    outbound:    { label: 'Outbound',    color: '#2563EB', emoji: '🔵', metricLabel: 'Lead pidió la llamada' },
-    inbound:     { label: 'Inbound',     color: '#1D9E75', emoji: '🟢', metricLabel: 'Confirmó con entusiasmo' },
-    reactivacion:{ label: 'Reactivación',color: '#DC2626', emoji: '🔴', metricLabel: 'Quiso reagendar' },
+    outbound:    { label: 'Outbound',    color: '#2563EB', metricLabel: 'Lead pidió la llamada' },
+    inbound:     { label: 'Inbound',     color: '#1D9E75', metricLabel: 'Confirmó con entusiasmo' },
+    reactivacion:{ label: 'Reactivación',color: '#DC2626', metricLabel: 'Quiso reagendar' },
   };
   const navigate = useNavigate();
   const cfg = MODE_CONFIG[mode];
@@ -59,14 +59,16 @@ const ModeCard = ({ mode, data, isBest, isWorst }) => {
 
   return (
     <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span>{cfg.emoji}</span>
-          <span className="font-bold text-text-primary">{cfg.label}</span>
-          {isBest && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Más fuerte ⭐</span>}
-          {isWorst && <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Mejorar ⚠</span>}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
+          <span className="font-bold text-text-primary truncate">{cfg.label}</span>
         </div>
-        <span className="text-text-secondary text-xs">{data.sesiones} sesiones</span>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {isBest && <span className="whitespace-nowrap text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">Más fuerte ⭐</span>}
+          {isWorst && <span className="whitespace-nowrap text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Mejorar ⚠</span>}
+          <span className="whitespace-nowrap text-text-secondary text-xs">{data.sesiones} sesiones</span>
+        </div>
       </div>
 
       {data.sesiones === 0 ? (

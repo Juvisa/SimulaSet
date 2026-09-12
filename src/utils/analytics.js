@@ -76,11 +76,24 @@ function calcularMetricasSimulador(sesiones) {
     return acc;
   }, {});
 
+  // "Más fuerte"/"Mejorar" solo tienen sentido para comparar, así que se
+  // necesitan al menos 2 modos con sesiones — y si todos empatan en promedio,
+  // el reduce por "estrictamente mayor/menor" dejaría el mismo modo como best
+  // y worst a la vez, mostrando ambos badges en la misma tarjeta. Por eso se
+  // descartan los dos si terminan apuntando al mismo modo.
   const modos = ['outbound', 'inbound', 'reactivacion'].filter(m => porModo[m].sesiones > 0);
-  const modoMasFuerte = modos.reduce((best, m) =>
-    !best || porModo[m].promedio > porModo[best].promedio ? m : best, null);
-  const modoMasDebil = modos.reduce((worst, m) =>
-    !worst || porModo[m].promedio < porModo[worst].promedio ? m : worst, null);
+  let modoMasFuerte = null;
+  let modoMasDebil = null;
+  if (modos.length >= 2) {
+    const best = modos.reduce((b, m) =>
+      !b || porModo[m].promedio > porModo[b].promedio ? m : b, null);
+    const worst = modos.reduce((w, m) =>
+      !w || porModo[m].promedio < porModo[w].promedio ? m : w, null);
+    if (best !== worst) {
+      modoMasFuerte = best;
+      modoMasDebil = worst;
+    }
+  }
 
   // Week before this week average for trend
   const thisWeekKey = isoWeek(new Date().toISOString());
