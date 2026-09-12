@@ -383,7 +383,7 @@ const Dashboard = () => {
           <div className="text-text-secondary text-xs mt-1">Módulo SimulaSET</div>
         </button>
         <button
-          onClick={() => navigate('/wins')}
+          onClick={() => navigate('/set-wins')}
           className="bg-bg-card border border-border-subtle rounded-2xl p-5 text-left hover:border-green-500/40 transition-all group"
         >
           <div className="w-11 h-11 rounded-xl bg-green-500/10 flex items-center justify-center mb-4">

@@ -26,7 +26,6 @@ import Migrate from './pages/Migrate';
 import RestoreData from './pages/RestoreData';
 import Academy from './pages/Academy';
 import Opportunities from './pages/Opportunities';
-import Wins from './pages/Wins';
 import Journey from './pages/Journey';
 import Onboarding from './pages/Onboarding';
 import Missions from './pages/Missions';
@@ -59,7 +58,6 @@ function App() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/academy" element={<ProtectedRoute><Academy /></ProtectedRoute>} />
           <Route path="/opportunities" element={<ProtectedRoute><Opportunities /></ProtectedRoute>} />
-          <Route path="/wins" element={<ProtectedRoute><Wins /></ProtectedRoute>} />
           <Route path="/journey" element={<ProtectedRoute><Journey /></ProtectedRoute>} />
           <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
           <Route path="/missions/mission_01_conversation_hunt" element={<ProtectedRoute><MissionConversationHunt /></ProtectedRoute>} />
