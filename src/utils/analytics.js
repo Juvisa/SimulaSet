@@ -44,20 +44,6 @@ const isoWeek = (dateStr) => {
 
 const daysAgo = (dateStr) => (Date.now() - new Date(dateStr)) / 86400000;
 
-const setStagesFromSession = (session) => {
-  // Infer from: messages coaching.etapa_set + finalFomo + finalState
-  const msgs = session.messages || [];
-  const etapasVistas = new Set(
-    msgs.flatMap(m => (m.coaching?.etapa_set ? [m.coaching.etapa_set] : []))
-  );
-  const fomo = session.finalFomo || 0;
-  return {
-    S: etapasVistas.has('S') || etapasVistas.has('E') || etapasVistas.has('T') || (session.scores?.length >= 2),
-    E: etapasVistas.has('E') || etapasVistas.has('T') || fomo >= 40,
-    T: etapasVistas.has('T') || isSuccess(session),
-  };
-};
-
 // ─── Setter analytics ─────────────────────────────────────────────────────────
 
 function calcularMetricasSimulador(sesiones) {
@@ -120,24 +106,6 @@ function calcularMetricasSimulador(sesiones) {
     modo_mas_fuerte: modoMasFuerte,
     modo_mas_debil: modoMasDebil,
   };
-}
-
-function calcularMetricasSET(sesiones) {
-  if (!sesiones.length) return null;
-  const total = sesiones.length;
-  const counts = sesiones.reduce((acc, s) => {
-    const st = setStagesFromSession(s);
-    if (st.S) acc.S++;
-    if (st.E) acc.E++;
-    if (st.T) acc.T++;
-    return acc;
-  }, { S: 0, E: 0, T: 0 });
-
-  const porcentajes = { S: pct(counts.S, total), E: pct(counts.E, total), T: pct(counts.T, total) };
-  const puntDebil = Object.entries(porcentajes).reduce(
-    (min, [k, v]) => v < porcentajes[min] ? k : min, 'S'
-  );
-  return { ...porcentajes, punto_debil: puntDebil };
 }
 
 function calcularCurvaProgreso(sesiones) {
@@ -217,22 +185,7 @@ function evaluarCertificacion(sesiones, leads) {
   };
 }
 
-export function calcularMetricasSetter(userId) {
-  const sesiones = get(KEYS.SESSIONS).filter(s => s.userId === userId);
-  const leads = get(KEYS.LEADS).filter(l => l.setter_id === userId);
-
-  return {
-    simulador: calcularMetricasSimulador(sesiones),
-    leadsReales: calcularMetricasLeads(leads),
-    set: calcularMetricasSET(sesiones),
-    curva: calcularCurvaProgreso(sesiones),
-    certificacion: evaluarCertificacion(sesiones, leads),
-  };
-}
-
-// A diferencia de calcularMetricasSetter (arriba, 100% localStorage — usada
-// hoy solo internamente por calcularMetricasAdmin/el panel de admin), esta
-// versión trae las sesiones reales desde Supabase para que "Mi Performance"
+// Trae las sesiones reales desde Supabase para que "Mi Performance"
 // funcione igual sin importar en qué dispositivo/navegador se completaron las
 // simulaciones (antes dependía de que el navegador actual tuviera esas
 // sesiones en localStorage, que es por-dispositivo y no se sincroniza).
@@ -266,54 +219,94 @@ export async function calcularMetricasSetterReal(userId) {
   };
 }
 
-// ─── Admin analytics ──────────────────────────────────────────────────────────
+// ─── Admin analytics (Supabase) ────────────────────────────────────────────────
+// Reemplaza a la vieja calcularMetricasAdmin, que leía todo de localStorage
+// ('setter_users', 'simulator_sessions', 'real_leads_sessions') — datos que
+// viven en el navegador de CADA alumno, nunca en el del admin, así que ese
+// panel mostraba prácticamente siempre cohortes vacías o desactualizadas.
+// Ahora trae setters reales desde profiles y sus sesiones reales desde
+// simulator_sessions; RLS ya le permite a un admin leer ambas tablas completas
+// (profiles_select_own_or_admin, simulator_sessions_select_own_or_admin).
+//
+// Importante: NO existe tabla de "leads reales" en Supabase — ese dato solo
+// vive en localStorage, por dispositivo, así que un admin nunca puede ver los
+// leads de OTRO setter sin importar cómo se implemente esto. Por eso ya no hay
+// KPI de "leads agendados" a nivel cohorte, y el criterio de certificación de
+// abajo (evaluarCertificacionCohorte) NO exige leads_reales >= 5 como sí lo
+// hace evaluarCertificacion() para el propio setter — solo evalúa lo que es
+// verificable desde el servidor (promedio >= 80 y 3 modos con 5+ sesiones).
+const evaluarCertificacionCohorte = (sesiones) => {
+  const promedioSim = avg(sesiones.map(sessionScore));
+  const modos = ['outbound', 'inbound', 'reactivacion'];
+  const modosCon5 = modos.filter(m => sesiones.filter(s => s.mode === m).length >= 5);
+  return {
+    listo: promedioSim >= 80 && modosCon5.length === 3,
+    promedio_simulador: promedioSim,
+    modos_con_5_sesiones: modosCon5,
+    modos_faltantes: modos.filter(m => !modosCon5.includes(m)),
+  };
+};
 
-function actividadBarras() {
-  const sesiones = get(KEYS.SESSIONS);
+const actividadBarrasReal = (sesiones) => {
   const dias = {};
   for (let i = 13; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    dias[key] = 0;
+    dias[d.toISOString().slice(0, 10)] = 0;
   }
   sesiones.forEach(s => {
     const key = s.createdAt?.slice(0, 10);
     if (key && dias[key] !== undefined) dias[key]++;
   });
-  return Object.entries(dias).map(([fecha, sesiones]) => ({
-    fecha: fecha.slice(5), // MM-DD
-    sesiones,
+  return Object.entries(dias).map(([fecha, count]) => ({ fecha: fecha.slice(5), sesiones: count }));
+};
+
+export async function calcularMetricasAdminReal() {
+  const [{ data: profileRows, error: profilesError }, { data: sessionRows, error: sessionsError }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, name, level, active, created_at')
+      .eq('role', 'setter')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('simulator_sessions')
+      .select('user_id, mode, final_state, average_score, created_at'),
+  ]);
+
+  const error = profilesError?.message || sessionsError?.message;
+  const setters = profileRows || [];
+
+  const sessionsByUser = new Map();
+  (sessionRows || []).forEach((row) => {
+    const normalized = { mode: row.mode, finalState: row.final_state, createdAt: row.created_at, averageScore: row.average_score };
+    const list = sessionsByUser.get(row.user_id) || [];
+    list.push(normalized);
+    sessionsByUser.set(row.user_id, list);
+  });
+
+  const conMetricas = setters.map((setter) => {
+    const sesiones = (sessionsByUser.get(setter.id) || [])
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return {
+      ...setter,
+      lastActivity: sesiones[0]?.createdAt || null,
+      sesiones,
+      metricas: {
+        simulador: calcularMetricasSimulador(sesiones),
+        certificacion: evaluarCertificacionCohorte(sesiones),
+      },
+    };
+  });
+
+  const ranking = [...conMetricas].sort((a, b) =>
+    (b.metricas.simulador?.promedio_total || 0) - (a.metricas.simulador?.promedio_total || 0)
+  );
+
+  const todasSesiones = (sessionRows || []).map(row => ({
+    mode: row.mode, finalState: row.final_state, createdAt: row.created_at, averageScore: row.average_score,
   }));
-}
-
-export function calcularMetricasAdmin() {
-  const todosUsuarios = get(KEYS.USERS);
-  const setters = todosUsuarios.filter(u => u.rol === 'setter' || !u.rol || u.rol !== 'admin');
-
-  const conMetricas = setters.map(s => {
-    const m = calcularMetricasSetter(s.id);
-    return { ...s, metricas: m };
-  });
-
-  const ranking = [...conMetricas]
-    .sort((a, b) =>
-      (b.metricas.simulador?.promedio_total || 0) -
-      (a.metricas.simulador?.promedio_total || 0)
-    );
-
-  const sinActividad7Dias = setters.filter(s => {
-    const sesiones = get(KEYS.SESSIONS).filter(x => x.userId === s.id);
-    return !sesiones.some(x => daysAgo(x.createdAt) <= 7);
-  });
-
-  const bajRendimiento = setters.filter(s => {
-    const ultimas5 = get(KEYS.SESSIONS)
-      .filter(x => x.userId === s.id)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 5);
-    return ultimas5.length >= 3 && avg(ultimas5.map(sessionScore)) < 50;
-  });
+  const semanaActual = isoWeek(new Date().toISOString());
 
   const NIVEL_MAP = { 1: 'Novato', 2: 'Aprendiz', 3: 'Practicante', 4: 'Pro', 5: 'Élite' };
   const distribucion = [1, 2, 3, 4, 5].reduce((acc, n) => {
@@ -321,27 +314,27 @@ export function calcularMetricasAdmin() {
     return acc;
   }, {});
 
-  const todasSesiones = get(KEYS.SESSIONS);
-  const todosLeads = get(KEYS.LEADS);
-  const semanaActual = isoWeek(new Date().toISOString());
+  const porModoGlobal = ['outbound', 'inbound', 'reactivacion'].map((mode) => {
+    const count = todasSesiones.filter(s => s.mode === mode).length;
+    return { mode, sesiones: count, pct: pct(count, todasSesiones.length) };
+  });
 
   return {
+    error,
     total_setters: setters.length,
-    setters_activos: setters.filter(s =>
-      get(KEYS.SESSIONS).some(x => x.userId === s.id && daysAgo(x.createdAt) <= 7)
-    ).length,
+    setters_activos: conMetricas.filter(s => s.sesiones.some(x => daysAgo(x.createdAt) <= 7)).length,
     simulaciones_total: todasSesiones.length,
     simulaciones_esta_semana: todasSesiones.filter(s => isoWeek(s.createdAt) === semanaActual).length,
-    leads_agendados_total: todosLeads.filter(l => ['agendado','cerrado_ganado'].includes(l.estado)).length,
-    leads_total: todosLeads.length,
-    promedio_global: avg(setters.map(s =>
-      calcularMetricasSetter(s.id).simulador?.promedio_total || 0
-    ).filter(v => v > 0)),
+    promedio_global: avg(conMetricas.map(s => s.metricas.simulador?.promedio_total || 0).filter(v => v > 0)),
+    por_modo_global: porModoGlobal,
     ranking,
     listos_para_proyecto: conMetricas.filter(s => s.metricas.certificacion?.listo),
-    sin_actividad_7_dias: sinActividad7Dias,
-    bajo_rendimiento: bajRendimiento,
+    sin_actividad_7_dias: conMetricas.filter(s => !s.sesiones.some(x => daysAgo(x.createdAt) <= 7)),
+    bajo_rendimiento: conMetricas.filter(s => {
+      const ultimas5 = s.sesiones.slice(0, 5);
+      return ultimas5.length >= 3 && avg(ultimas5.map(sessionScore)) < 50;
+    }),
     distribucion_niveles: distribucion,
-    actividad_barras: actividadBarras(),
+    actividad_barras: actividadBarrasReal(todasSesiones),
   };
 }

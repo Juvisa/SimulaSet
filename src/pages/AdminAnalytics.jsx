@@ -1,19 +1,33 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { calcularMetricasAdmin } from '../utils/analytics';
+import { calcularMetricasAdminReal } from '../utils/analytics';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { Users, BarChart2, Target, TrendingUp, AlertTriangle, CheckCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Users, BarChart2, Loader2, AlertTriangle, CheckCircle, ChevronUp, ChevronDown, Zap } from 'lucide-react';
 import { KPICard, ProgressBar } from './Analytics';
+
+const MODE_META = {
+  outbound: { label: 'Outbound', color: '#2563EB' },
+  inbound: { label: 'Inbound', color: '#1D9E75' },
+  reactivacion: { label: 'Reactivación', color: '#DC2626' },
+};
+
+const formatRelativeDate = (isoString) => {
+  if (!isoString) return 'Sin actividad';
+  const days = Math.floor((Date.now() - new Date(isoString)) / 86400000);
+  if (days <= 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  if (days < 7) return `Hace ${days}d`;
+  return new Date(isoString).toLocaleDateString('es', { day: '2-digit', month: 'short' });
+};
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
 const scoreColor = (v) => v >= 80 ? '#1D9E75' : v >= 60 ? '#C9920A' : '#DC2626';
-const pctColor   = (v) => v >= 70 ? '#1D9E75' : v >= 50 ? '#C9920A' : '#DC2626';
 
 const NIVEL_COLORS = {
   'Novato':      '#DC2626',
@@ -26,7 +40,7 @@ const NIVEL_COLORS = {
 const BarTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-bg-card border border-border-subtle rounded-xl px-3 py-2 text-sm">
+    <div className="card-tactical rounded-xl px-3 py-2 text-sm">
       <p className="text-text-secondary text-xs mb-1">{label}</p>
       <p className="font-bold text-text-primary">{payload[0].value} sesiones</p>
     </div>
@@ -36,7 +50,7 @@ const BarTooltip = ({ active, payload, label }) => {
 const PieTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-bg-card border border-border-subtle rounded-xl px-3 py-2 text-sm">
+    <div className="card-tactical rounded-xl px-3 py-2 text-sm">
       <p className="font-bold text-text-primary">{payload[0].name}: {payload[0].value}</p>
     </div>
   );
@@ -44,23 +58,31 @@ const PieTooltip = ({ active, payload }) => {
 
 // ─── Ranking table ────────────────────────────────────────────────────────────
 
-const SORT_OPTIONS = [
-  { key: 'promedio', label: 'Promedio' },
-  { key: 'agendamiento', label: 'Tasa agend.' },
-  { key: 'sesiones', label: 'Sesiones' },
-  { key: 'nivel', label: 'Nivel' },
-];
-
 const STATUS_CONFIG = {
   listo:   { label: 'Listo para proyecto', color: '#1D9E75', icon: CheckCircle },
   atencion:{ label: 'Necesita ayuda',       color: '#DC2626', icon: AlertTriangle },
   normal:  { label: 'En progreso',          color: '#9A9A9A', icon: null },
 };
 
+const SortBtn = ({ col, label, sortBy, sortDir, onSort }) => {
+  const active = sortBy === col;
+  return (
+    <th
+      className="px-4 py-3 text-center cursor-pointer select-none hover:text-text-primary transition-colors"
+      onClick={() => onSort(col)}
+    >
+      <span className="flex items-center justify-center gap-1 text-xs font-semibold uppercase tracking-wider"
+        style={{ color: active ? '#E0605E' : '#9A9A9A' }}>
+        {label}
+        {active && (sortDir === 'desc' ? <ChevronDown size={10} /> : <ChevronUp size={10} />)}
+      </span>
+    </th>
+  );
+};
+
 const SetterRow = ({ setter, rank, navigate }) => {
   const m = setter.metricas;
   const promedio = m.simulador?.promedio_total || 0;
-  const agend    = m.leadsReales?.tasa_agendamiento || 0;
   const sesiones = m.simulador?.sesiones_totales || 0;
 
   const status = m.certificacion?.listo ? 'listo'
@@ -88,10 +110,8 @@ const SetterRow = ({ setter, rank, navigate }) => {
       <td className="px-4 py-3 text-center">
         <span className="font-bold text-sm" style={{ color: scoreColor(promedio) }}>{promedio}/100</span>
       </td>
-      <td className="px-4 py-3 text-center">
-        <span className="font-bold text-sm" style={{ color: pctColor(agend) }}>{agend > 0 ? `${agend}%` : '—'}</span>
-      </td>
       <td className="px-4 py-3 text-center text-text-secondary text-sm">{sesiones}</td>
+      <td className="px-4 py-3 text-center text-text-secondary text-xs">{formatRelativeDate(setter.lastActivity)}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: statusColor }}>
           {StatusIcon && <StatusIcon size={12} />}
@@ -104,11 +124,31 @@ const SetterRow = ({ setter, rank, navigate }) => {
 
 // ─── Main Admin Analytics page ────────────────────────────────────────────────
 
+const EMPTY_METRICAS = {
+  total_setters: 0, setters_activos: 0, simulaciones_total: 0, simulaciones_esta_semana: 0,
+  promedio_global: 0, por_modo_global: [], ranking: [], listos_para_proyecto: [],
+  sin_actividad_7_dias: [], bajo_rendimiento: [], distribucion_niveles: {}, actividad_barras: [],
+};
+
 const AdminAnalytics = () => {
   const navigate = useNavigate();
-  const metricas = useMemo(() => calcularMetricasAdmin(), []);
+  const [metricas, setMetricas] = useState(EMPTY_METRICAS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [sortBy, setSortBy] = useState('promedio');
   const [sortDir, setSortDir] = useState('desc');
+
+  useEffect(() => {
+    let active = true;
+    calcularMetricasAdminReal().then((result) => {
+      if (!active) return;
+      setMetricas(result);
+      if (result.error) setError(`No pudimos cargar algunos datos: ${result.error}`);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   const toggleSort = (key) => {
     if (sortBy === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -118,10 +158,9 @@ const AdminAnalytics = () => {
   const sortedRanking = useMemo(() => {
     return [...(metricas.ranking || [])].sort((a, b) => {
       const getVal = (s) => {
-        if (sortBy === 'promedio')     return s.metricas.simulador?.promedio_total || 0;
-        if (sortBy === 'agendamiento') return s.metricas.leadsReales?.tasa_agendamiento || 0;
-        if (sortBy === 'sesiones')     return s.metricas.simulador?.sesiones_totales || 0;
-        if (sortBy === 'nivel')        return s.level || 1;
+        if (sortBy === 'promedio')  return s.metricas.simulador?.promedio_total || 0;
+        if (sortBy === 'sesiones')  return s.metricas.simulador?.sesiones_totales || 0;
+        if (sortBy === 'actividad') return s.lastActivity ? new Date(s.lastActivity).getTime() : 0;
         return 0;
       };
       return sortDir === 'desc' ? getVal(b) - getVal(a) : getVal(a) - getVal(b);
@@ -131,22 +170,6 @@ const AdminAnalytics = () => {
   const pieData = Object.entries(metricas.distribucion_niveles || {})
     .filter(([, v]) => v > 0)
     .map(([name, value]) => ({ name, value }));
-
-  const SortBtn = ({ col, label }) => {
-    const active = sortBy === col;
-    return (
-      <th
-        className="px-4 py-3 text-center cursor-pointer select-none hover:text-text-primary transition-colors"
-        onClick={() => toggleSort(col)}
-      >
-        <span className="flex items-center justify-center gap-1 text-xs font-semibold uppercase tracking-wider"
-          style={{ color: active ? '#E0605E' : '#9A9A9A' }}>
-          {label}
-          {active && (sortDir === 'desc' ? <ChevronDown size={10} /> : <ChevronUp size={10} />)}
-        </span>
-      </th>
-    );
-  };
 
   return (
     <Layout>
@@ -162,6 +185,14 @@ const AdminAnalytics = () => {
           </p>
         </div>
 
+        {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
+
+        {loading ? (
+          <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-text-secondary">
+            <Loader2 size={18} className="animate-spin" /> Cargando métricas de la cohorte...
+          </div>
+        ) : (
+        <>
         {/* Sección A — KPIs globales */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KPICard
@@ -177,10 +208,10 @@ const AdminAnalytics = () => {
             color="#E0605E"
           />
           <KPICard
-            label="Leads agendados"
-            value={`${metricas.leads_agendados_total} / ${metricas.leads_total}`}
-            sub={metricas.leads_total ? `${Math.round((metricas.leads_agendados_total / metricas.leads_total) * 100)}% tasa global` : 'Sin leads'}
-            color={pctColor(metricas.leads_total ? Math.round((metricas.leads_agendados_total / metricas.leads_total) * 100) : 0)}
+            label="Sesiones totales"
+            value={metricas.simulaciones_total}
+            sub="histórico de la cohorte"
+            color="#C9920A"
           />
           <KPICard
             label="Promedio global"
@@ -191,7 +222,7 @@ const AdminAnalytics = () => {
         </div>
 
         {/* Sección B — Ranking */}
-        <div className="bg-bg-card border border-border-subtle rounded-2xl overflow-hidden">
+        <div className="card-tactical rounded-2xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between">
             <h3 className="font-bold text-text-primary flex items-center gap-2">
               <Users size={16} className="text-accent-coral" /> Ranking de Setters
@@ -210,9 +241,9 @@ const AdminAnalytics = () => {
                     <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-secondary">#</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Setter</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Nivel</th>
-                    <SortBtn col="promedio" label="Promedio" />
-                    <SortBtn col="agendamiento" label="Agend.%" />
-                    <SortBtn col="sesiones" label="Sesiones" />
+                    <SortBtn col="promedio" label="Promedio" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <SortBtn col="sesiones" label="Sesiones" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <SortBtn col="actividad" label="Última act." sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Estado</th>
                   </tr>
                 </thead>
@@ -229,7 +260,7 @@ const AdminAnalytics = () => {
         {/* Sección C — Alertas */}
         <div className="grid md:grid-cols-2 gap-4">
           {/* Necesitan atención */}
-          <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+          <div className="card-tactical rounded-2xl p-5">
             <h3 className="font-bold text-red-400 mb-3 flex items-center gap-2">
               <AlertTriangle size={16} /> Requieren Atención ({metricas.bajo_rendimiento?.length + metricas.sin_actividad_7_dias?.length || 0})
             </h3>
@@ -262,7 +293,7 @@ const AdminAnalytics = () => {
           </div>
 
           {/* Listos para proyecto */}
-          <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+          <div className="card-tactical rounded-2xl p-5">
             <h3 className="font-bold text-green-400 mb-3 flex items-center gap-2">
               <CheckCircle size={16} /> Listos para Proyecto ({metricas.listos_para_proyecto?.length || 0})
             </h3>
@@ -275,7 +306,7 @@ const AdminAnalytics = () => {
                     <div>
                       <span className="text-text-primary text-sm font-medium">{s.name}</span>
                       <span className="text-green-400 text-xs ml-2">
-                        {s.metricas.simulador?.promedio_total}/100 · {s.metricas.leadsReales?.tasa_agendamiento || 0}% agend.
+                        {s.metricas.simulador?.promedio_total}/100 · {s.metricas.simulador?.sesiones_totales || 0} sesiones
                       </span>
                     </div>
                     <button onClick={() => navigate(`/admin/setter/${s.id}`)}
@@ -287,10 +318,32 @@ const AdminAnalytics = () => {
           </div>
         </div>
 
-        {/* Sección D+E — Gráficas */}
+        {/* Sección D — Distribución por modo */}
+        <div className="card-tactical rounded-2xl p-5">
+          <h3 className="font-bold text-text-primary mb-4 flex items-center gap-2">
+            <Zap size={16} className="text-accent-coral" /> Distribución de Actividad por Modo
+          </h3>
+          {!metricas.por_modo_global?.some(m => m.sesiones > 0) ? (
+            <p className="text-text-secondary text-sm italic text-center py-4">Sin sesiones registradas aún</p>
+          ) : (
+            <div className="space-y-3">
+              {metricas.por_modo_global.map(({ mode, sesiones, pct: modePct }) => (
+                <div key={mode} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-secondary font-medium">{MODE_META[mode].label}</span>
+                    <span className="font-bold text-text-primary">{sesiones} <span className="text-text-secondary font-normal">({modePct}%)</span></span>
+                  </div>
+                  <ProgressBar value={modePct} color={MODE_META[mode].color} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Sección E+F — Gráficas */}
         <div className="grid md:grid-cols-2 gap-4">
           {/* Distribución por nivel (pie) */}
-          <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+          <div className="card-tactical rounded-2xl p-5">
             <h3 className="font-bold text-text-primary mb-4">Distribución por Nivel</h3>
             {pieData.length === 0 ? (
               <p className="text-text-secondary text-sm italic text-center py-8">Sin datos</p>
@@ -320,11 +373,11 @@ const AdminAnalytics = () => {
           </div>
 
           {/* Actividad 14 días (barras) */}
-          <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+          <div className="card-tactical rounded-2xl p-5">
             <h3 className="font-bold text-text-primary mb-4">Actividad — últimos 14 días</h3>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={metricas.actividad_barras || []} barSize={10}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#242424" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#262B31" />
                 <XAxis
                   dataKey="fecha"
                   tick={{ fill: '#9A9A9A', fontSize: 9 }}
@@ -336,13 +389,15 @@ const AdminAnalytics = () => {
                 <Tooltip content={<BarTooltip />} cursor={{ fill: '#E0605E10' }} />
                 <Bar dataKey="sesiones" radius={[4, 4, 0, 0]}>
                   {(metricas.actividad_barras || []).map((entry, i) => (
-                    <Cell key={i} fill={entry.sesiones > 0 ? '#E0605E' : '#242424'} />
+                    <Cell key={i} fill={entry.sesiones > 0 ? '#E0605E' : '#262B31'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
+        </>
+        )}
       </div>
     </Layout>
   );
