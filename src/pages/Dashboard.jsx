@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getAnalyses, getPendingFeedback, markFeedbackSeen, getRealLeads
+  getAnalyses, getRealLeads
 } from '../utils/storage';
+import { getPendingFeedback, markFeedbackSeen } from '../utils/adminFeedback';
 import { getProjects } from '../utils/projects';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
 import Layout from '../components/Layout';
@@ -141,7 +142,7 @@ const Dashboard = () => {
     getSimulatorSessions(user.id).then(({ sessions: rows }) => setSessions(rows));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAnalyses(getAnalyses(user.id));
-    setPendingFeedback(getPendingFeedback(user.id));
+    getPendingFeedback(user.id).then(({ feedback }) => setPendingFeedback(feedback));
     setRealLeads(getRealLeads(user.id));
     refreshFollowUps();
     const interval = setInterval(refreshFollowUps, 5 * 60 * 1000);
@@ -167,8 +168,8 @@ const Dashboard = () => {
   const visibleSessions = sessions.filter(s => !s.projectId || activeProjectIds.has(s.projectId));
 
   const dismissFeedback = (id) => {
-    markFeedbackSeen(id);
     setPendingFeedback(prev => prev.filter(f => f.id !== id));
+    markFeedbackSeen(id);
   };
 
   const allLeadsForFollowUp = realLeads;
