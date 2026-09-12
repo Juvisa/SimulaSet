@@ -1,13 +1,13 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { calcularMetricasSetter } from '../utils/analytics';
+import { calcularMetricasSetterReal } from '../utils/analytics';
 import Layout from '../components/Layout';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Cell,
+  ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Minus, Award, Target, Users, BarChart2, AlertTriangle, CheckCircle, ArrowRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Target, BarChart2, AlertTriangle, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
 
 // ─── Reusable components ──────────────────────────────────────────────────────
 
@@ -103,64 +103,7 @@ const ModeCard = ({ mode, data, isBest, isWorst }) => {
   );
 };
 
-const SETSemaphore = ({ setMetrics, navigate }) => {
-  if (!setMetrics) return null;
-  const stages = [
-    { key: 'S', label: 'S — Situación',    desc: 'Diagnóstico del prospecto' },
-    { key: 'E', label: 'E — Emoción',      desc: 'Activar el dolor / urgencia' },
-    { key: 'T', label: 'T — Transacción',  desc: 'Proponer la cita / cierre' },
-  ];
-  const debil = setMetrics.punto_debil;
-
-  const stageColor = (v) => v >= 75 ? '#1D9E75' : v >= 50 ? '#C9920A' : '#DC2626';
-  const stageIcon  = (v) => v >= 75 ? '✓' : v >= 50 ? '↗' : '⚠';
-
-  const consejos = {
-    S: 'Estás saltando al dolor antes de entender bien la situación. Haz más preguntas de diagnóstico antes de avanzar.',
-    E: 'Estás yendo a la T antes de activar bien el dolor. Practica más el discovery emocional.',
-    T: 'Llegas bien al dolor pero no estás cerrando la cita. Trabaja en presentar la propuesta con más confianza.',
-  };
-
-  return (
-    <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 space-y-4">
-      <h3 className="font-bold text-text-primary">¿Qué tan bien ejecutas cada etapa?</h3>
-      <div className="space-y-3">
-        {stages.map(({ key, label }) => {
-          const val = setMetrics[key];
-          const c = stageColor(val);
-          return (
-            <div key={key} className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-text-secondary font-medium">{label}</span>
-                <span className="font-bold flex items-center gap-1.5" style={{ color: c }}>
-                  {val}%  <span>{stageIcon(val)}</span>
-                </span>
-              </div>
-              <ProgressBar value={val} color={c} />
-            </div>
-          );
-        })}
-      </div>
-      {debil && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-2">
-          <p className="text-amber-400 text-sm font-semibold">
-            💡 Tu punto débil es la Etapa {debil}
-          </p>
-          <p className="text-text-secondary text-xs leading-relaxed">{consejos[debil]}</p>
-          <button
-            onClick={() => navigate('/simulate')}
-            className="flex items-center gap-1.5 text-amber-400 text-xs font-medium hover:underline"
-          >
-            Practicar Etapa {debil} <ArrowRight size={11} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const CertBadge = ({ cert, userName }) => {
-  const NIVEL_LABELS = ['', 'Novato', 'Aprendiz', 'Practicante', 'Pro', 'Élite'];
+const CertBadge = ({ cert }) => {
   const allModes = ['outbound', 'inbound', 'reactivacion'];
   const faltanModos = cert.modos_faltantes || [];
 
@@ -255,24 +198,25 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-const BarTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-bg-card border border-border-subtle rounded-xl px-3 py-2 text-sm">
-      <p className="text-text-secondary text-xs mb-1">{label}</p>
-      <p className="font-bold text-text-primary">{payload[0].value} sesiones</p>
-    </div>
-  );
-};
-
 // ─── Main Analytics page ──────────────────────────────────────────────────────
 
 const Analytics = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const metricas = useMemo(() => calcularMetricasSetter(user?.id), [user?.id]);
+  const [metricas, setMetricas] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const { simulador, leadsReales, set: setM, curva, certificacion } = metricas;
+  useEffect(() => {
+    let active = true;
+    calcularMetricasSetterReal(user.id).then((result) => {
+      if (active) setMetricas(result);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [user.id]);
+
+  const { simulador, leadsReales, curva, certificacion } = metricas || {};
 
   return (
     <Layout>
@@ -291,7 +235,11 @@ const Analytics = () => {
         </div>
 
         {/* Sección A — 4 KPIs */}
-        {!simulador && !leadsReales ? (
+        {loading ? (
+          <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-text-secondary">
+            <Loader2 size={18} className="animate-spin" /> Cargando tu performance...
+          </div>
+        ) : !simulador && !leadsReales ? (
           <div className="bg-bg-card border border-border-subtle rounded-2xl p-10 text-center">
             <div className="text-4xl mb-3">📊</div>
             <p className="text-text-primary font-semibold mb-1">Aún no hay datos suficientes</p>
@@ -387,9 +335,6 @@ const Analytics = () => {
               </div>
             )}
 
-            {/* Sección D — Semáforo S.E.T. */}
-            {setM && <SETSemaphore setMetrics={setM} navigate={navigate} />}
-
             {/* Sección E — Leads Reales */}
             {leadsReales && (
               <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 space-y-4">
@@ -446,7 +391,7 @@ const Analytics = () => {
             )}
 
             {/* Sección F — Certificación */}
-            {certificacion && <CertBadge cert={certificacion} userName={user?.name} />}
+            {certificacion && <CertBadge cert={certificacion} />}
           </>
         )}
       </div>

@@ -1,5 +1,7 @@
 // ─── Analytics utility — read-only, no localStorage writes ───────────────────
 
+import { supabase } from '../lib/supabase';
+
 const KEYS = {
   SESSIONS: 'simulator_sessions',
   LEADS: 'real_leads_sessions',
@@ -14,8 +16,14 @@ const get = (key) => JSON.parse(localStorage.getItem(key) || '[]');
 const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
+// Las sesiones reales (Supabase) ya traen average_score precalculado con esta
+// misma fórmula (ver utils/simulatorSessions.js) — se usa directo en vez de
+// recalcularlo. Las sesiones locales (localStorage, usadas hoy solo por el
+// panel de admin) no tienen ese campo, así que caen al cálculo original.
 const sessionScore = (s) =>
-  s.scores?.length > 0 ? Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length * 10) : 0;
+  typeof s.averageScore === 'number'
+    ? Math.round(s.averageScore)
+    : s.scores?.length > 0 ? Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length * 10) : 0;
 
 const SUCCESS_STATES = {
   outbound:    ['pidio_llamada'],
@@ -206,6 +214,42 @@ export function calcularMetricasSetter(userId) {
     set: calcularMetricasSET(sesiones),
     curva: calcularCurvaProgreso(sesiones),
     certificacion: evaluarCertificacion(sesiones, leads),
+  };
+}
+
+// A diferencia de calcularMetricasSetter (arriba, 100% localStorage — usada
+// hoy solo internamente por calcularMetricasAdmin/el panel de admin), esta
+// versión trae las sesiones reales desde Supabase para que "Mi Performance"
+// funcione igual sin importar en qué dispositivo/navegador se completaron las
+// simulaciones (antes dependía de que el navegador actual tuviera esas
+// sesiones en localStorage, que es por-dispositivo y no se sincroniza).
+//
+// No incluye el Semáforo S.E.T. (S/E/T): ese cálculo depende de
+// session.messages (etapa_set por mensaje de coaching) y session.finalFomo,
+// campos que utils/simulatorSessions.js nunca persiste en la tabla
+// simulator_sessions — no hay de dónde traerlos en el servidor hoy.
+export async function calcularMetricasSetterReal(userId) {
+  const { data, error } = await supabase
+    .from('simulator_sessions')
+    .select('mode, final_state, scores, average_score, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+
+  const sesiones = (error ? [] : data || []).map(row => ({
+    mode: row.mode,
+    finalState: row.final_state,
+    createdAt: row.created_at,
+    scores: Array.isArray(row.scores) ? row.scores : [],
+    averageScore: row.average_score,
+  }));
+  const leads = get(KEYS.LEADS).filter(l => l.setter_id === userId);
+
+  return {
+    simulador: calcularMetricasSimulador(sesiones),
+    leadsReales: calcularMetricasLeads(leads),
+    curva: calcularCurvaProgreso(sesiones),
+    certificacion: evaluarCertificacion(sesiones, leads),
+    error: error?.message,
   };
 }
 
