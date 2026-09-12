@@ -7,7 +7,7 @@ const MainLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="h-screen flex overflow-hidden bg-bg-primary">
+    <div className="h-screen flex overflow-hidden">
       {/* Barra superior solo en móvil, para abrir el sidebar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 flex items-center justify-between px-4 bg-bg-card border-b border-border-subtle">
         <button

@@ -27,9 +27,9 @@ const StatCard = ({ label, value, icon: Icon, color = '#E0605E' }) => (
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 
 const RANK_META = [
-  { medal: '🥇', border: 'border-accent-gold/50', bg: 'bg-accent-gold/10', avatarBg: 'bg-accent-gold/20', avatarText: 'text-accent-gold', ring: 'ring-accent-gold/60' },
-  { medal: '🥈', border: 'border-border-subtle', bg: 'bg-bg-input/60', avatarBg: 'bg-text-secondary/20', avatarText: 'text-text-secondary', ring: 'ring-text-secondary/50' },
-  { medal: '🥉', border: 'border-orange-500/30', bg: 'bg-orange-500/5', avatarBg: 'bg-orange-500/20', avatarText: 'text-orange-400', ring: 'ring-orange-500/50' },
+  { medal: '🥇', border: 'border-accent-gold/50', bg: 'bg-accent-gold/10', avatarBg: 'bg-accent-gold/20', avatarText: 'text-accent-gold', ring: 'ring-accent-gold/60', glow: 'hover:shadow-[0_0_28px_-8px_rgba(201,146,10,0.45)]' },
+  { medal: '🥈', border: 'border-border-subtle', bg: 'bg-bg-input/60', avatarBg: 'bg-text-secondary/20', avatarText: 'text-text-secondary', ring: 'ring-text-secondary/50', glow: 'hover:shadow-[0_0_24px_-8px_rgba(154,154,154,0.35)]' },
+  { medal: '🥉', border: 'border-orange-500/30', bg: 'bg-orange-500/5', avatarBg: 'bg-orange-500/20', avatarText: 'text-orange-400', ring: 'ring-orange-500/50', glow: 'hover:shadow-[0_0_24px_-8px_rgba(251,146,60,0.4)]' },
 ];
 
 const getInitials = (name) => (name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -82,15 +82,15 @@ const HonorCard = ({ performer, rank, currentUserId, featured }) => {
   }
 
   return (
-    <div className={`rounded-2xl border ${meta.border} ${meta.bg} text-center ${featured ? 'p-6' : 'p-4'} ${isCurrentUser ? 'ring-2 ring-accent-coral' : ''}`}>
+    <div className={`card-tactical rounded-2xl border ${meta.border} ${meta.bg} text-center transition-shadow duration-200 ${meta.glow} ${featured ? 'p-6' : 'p-4'} ${isCurrentUser ? 'ring-2 ring-accent-coral' : ''}`}>
       <div className="relative mx-auto w-fit">
         <HonorAvatar performer={performer} meta={meta} featured={featured} />
         <span className={`absolute -bottom-1 -right-1.5 drop-shadow ${featured ? 'text-xl' : 'text-sm'}`}>{meta.medal}</span>
       </div>
-      <div className={`mt-2 truncate font-black text-text-primary ${featured ? 'text-lg' : 'text-sm'}`}>
+      <div className={`font-display mt-2 truncate font-black tracking-tight text-text-primary ${featured ? 'text-lg' : 'text-sm'}`}>
         {performer.name}{isCurrentUser ? ' (tú)' : ''}
       </div>
-      <p className={`mt-1 text-text-secondary ${featured ? 'text-xs' : 'text-[10px]'}`}>{buildHonorSummary(performer)}</p>
+      <p className={`font-mono mt-1 text-text-secondary ${featured ? 'text-xs' : 'text-[10px]'}`}>{buildHonorSummary(performer)}</p>
     </div>
   );
 };
@@ -99,8 +99,8 @@ const LeaderboardCard = ({ performers, loading, currentUserId }) => {
   const slots = Array.from({ length: 3 }, (_, i) => performers[i] || null);
 
   return (
-    <section className="mb-6 rounded-2xl border border-accent-gold/30 bg-bg-card p-5">
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-accent-gold"><Trophy size={16} /> Cuadro de Honor S.E.T.</div>
+    <section className="card-tactical mb-6 rounded-2xl border-accent-gold/30 p-5">
+      <div className="font-mono flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-accent-gold"><Trophy size={16} /> Cuadro de Honor S.E.T.</div>
       <p className="mt-1 text-xs text-text-secondary">Los alumnos que más están practicando en el simulador.</p>
 
       {loading ? (
@@ -197,13 +197,13 @@ const Dashboard = () => {
   return (
     <Layout>
       {/* DIGITAL SET journey hero */}
-      <section className="relative overflow-hidden bg-bg-card border border-accent-coral/20 rounded-2xl p-6 md:p-8 mb-6">
+      <section className="relative overflow-hidden card-tactical border-accent-coral/20 rounded-2xl p-6 md:p-8 mb-6">
         <div className="absolute -right-16 -top-20 w-56 h-56 rounded-full bg-accent-coral/10 blur-3xl" />
         <div className="relative">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral mb-2">Tu recorrido</div>
-              <h1 className="text-2xl md:text-3xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
+              <div className="font-mono text-xs font-black uppercase tracking-[0.25em] text-accent-coral mb-2">Tu recorrido</div>
+              <h1 className="font-display tracking-tight text-2xl md:text-3xl font-black text-text-primary">Tu camino DIGITAL SET comienza aquí</h1>
               <p className="text-text-secondary text-sm mt-2">{isStarter ? 'Tu ruta comienza con una base clara.' : 'Tu experiencia te permite comenzar directamente en SET Academy.'}</p>
             </div>
             <button onClick={() => navigate(isStarter ? '/academy#digital-set-start' : '/academy#set-academy-main')} className="flex-shrink-0 bg-accent-coral text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity">
@@ -216,16 +216,25 @@ const Dashboard = () => {
               const optional = !isStarter && index === 0;
               return (
                 <div key={item} className={`flex-shrink-0 min-w-[92px] md:min-w-0 rounded-xl border px-3 py-2.5 text-center whitespace-nowrap ${active ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-input/60'}`}>
-                  <div className={`text-[10px] font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
+                  <div className={`font-mono text-[10px] font-black tracking-wide ${active ? 'text-accent-coral' : 'text-text-secondary'}`}>{item}</div>
                   {optional && <div className="text-[8px] text-text-secondary mt-0.5">Opcional</div>}
                 </div>
               );
             })}
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-7 mb-4">
-            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">Nivel actual</div><div className="text-sm md:text-lg font-black mt-1 truncate">SET Rookie 🌱</div></div>
-            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">SET Score</div><div className="text-sm md:text-lg font-black text-accent-coral mt-1 truncate">{user.set_score ?? '—'}</div></div>
-            <div className="min-w-0"><div className="text-[10px] md:text-xs text-text-secondary uppercase truncate">Próximo nivel</div><div className="text-sm md:text-lg font-black mt-1 truncate">SET Operator ⚡</div></div>
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Nivel actual</div>
+              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-color-success/30 bg-color-success/10 px-2.5 py-1 text-sm md:text-lg font-bold text-color-success">SET Rookie 🌱</div>
+            </div>
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">SET Score</div>
+              <div className="font-mono mt-1.5 inline-block w-full truncate rounded-lg border border-accent-coral/30 bg-accent-coral/10 px-2.5 py-1 text-sm md:text-lg font-bold tabular-nums text-accent-coral">{user.set_score ?? '—'}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Próximo nivel</div>
+              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-accent-gold/30 bg-accent-gold/10 px-2.5 py-1 text-sm md:text-lg font-bold text-accent-gold">SET Operator ⚡</div>
+            </div>
           </div>
           <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
           <p className="text-text-secondary text-xs mt-2">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>

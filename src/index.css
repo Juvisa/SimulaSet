@@ -1,7 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  /* Tarjeta "terminal táctica": material semi-translúcido con blur, borde
+     apenas visible e iluminación superior sutil en vez del panel plano
+     bg-bg-card + border-border-subtle genérico. Las clases de color/borde
+     que se agreguen junto a esta (ej. border-accent-gold/30) la sobreescriben
+     porque las utilidades de Tailwind siempre pesan más que @layer components. */
+  .card-tactical {
+    @apply relative bg-zinc-900/70 backdrop-blur-md border border-white/5;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+}
 
 * {
   box-sizing: border-box;
@@ -10,7 +22,13 @@
 }
 
 body {
-  background-color: #0F0F0F;
+  background-color: #0B0D10;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(224, 96, 94, 0.09), transparent 60%);
+  background-size: 44px 44px, 44px 44px, 100% 100%;
+  background-attachment: fixed;
   color: #F5F5F5;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -28,10 +46,10 @@ body {
   height: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #1A1A1A;
+  background: #14171B;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2E2E2E;
+  background: #262B31;
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -82,9 +100,9 @@ body {
 }
 
 .bubble-received {
-  background: #1A1A1A;
+  background: #14171B;
   border-radius: 18px 18px 18px 4px;
-  border: 1px solid #2E2E2E;
+  border: 1px solid #262B31;
 }
 
 /* FOMO bar gradient */
