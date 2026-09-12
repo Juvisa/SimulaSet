@@ -3,7 +3,7 @@ import { X, Copy, Check, Loader2, RefreshCw, ExternalLink, ChevronRight } from '
 import { callClaude } from '../utils/anthropic';
 import { buildFollowUpPrompt } from '../utils/prompts';
 import { updateFollowUpEstado } from '../utils/followUps';
-import { saveRealLead } from '../utils/storage';
+import { addLeadMessage } from '../utils/realLeads';
 import { useNavigate } from 'react-router-dom';
 
 const TIPO_LABELS = {
@@ -49,6 +49,8 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
         [{ role: 'user', content: prompt }]
       );
       setResult(res);
+      // No se bloquea ni se falla la vista si esto no se guarda — el setter
+      // ya está viendo el mensaje generado, que es lo que importa ahora.
       updateFollowUpEstado(followUp.id, followUp.estado, { mensaje_generado: res });
     } catch (err) {
       setError(err.message);
@@ -61,7 +63,7 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
     if (isOpen && !result) generate();
   }, [generate, isOpen, result]);
 
-  const handleSent = (opcion) => {
+  const handleSent = async (opcion) => {
     if (sentRef.current || markedIdx !== null) return;
     sentRef.current = true;
     setMarkedIdx(opcion.numero);
@@ -73,33 +75,30 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
     });
 
     const alreadyAdded = (lead.conversacion || []).some(message => message.follow_up_id === followUp.id);
-    const updatedLead = alreadyAdded ? lead : saveRealLead({
-      ...lead,
-      ultimo_contacto: new Date().toISOString(),
-      conversacion: [
-        ...(lead.conversacion || []),
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          turno: (lead.conversacion?.length || 0) + 1,
-          tipo: 'setter_enviado',
-          mensaje: opcion.texto,
-          follow_up_id: followUp.id,
-          opcion_elegida: opcion.numero,
-        },
-      ],
-      metricas: {
-        ...lead.metricas,
-        total_turnos: alreadyAdded ? (lead.conversacion?.length || 0) : (lead.conversacion?.length || 0) + 1,
-      },
-    });
+    let updatedLead = lead;
+    if (!alreadyAdded) {
+      const { message, lead: freshLead } = await addLeadMessage(lead.id, {
+        tipo: 'setter_enviado',
+        mensaje: opcion.texto,
+        followUpId: followUp.id,
+        opcionElegida: opcion.numero,
+      }, lead.metricas);
+      if (freshLead && message) {
+        updatedLead = { ...freshLead, conversacion: [...(lead.conversacion || []), message] };
+      }
+    }
     setTimeout(() => onSent?.(updatedLead), 1500);
   };
 
   if (!isOpen) return null;
 
-  const vencidoText = followUp?.estado === 'vencido'
-    ? `Vencido hace ${Math.round((openedAt - new Date(followUp.programado_para)) / 3600000)}h`
+  // "vencido" ya no es un estado persistido — se deriva comparando la fecha
+  // programada contra el momento en que se abrió el panel (openedAt, capturado
+  // una sola vez, no un Date.now() nuevo en cada render).
+  const programadoMs = followUp?.programado_para ? new Date(followUp.programado_para).getTime() : null;
+  const isVencido = programadoMs !== null && openedAt > programadoMs;
+  const vencidoText = isVencido
+    ? `Vencido hace ${Math.round((openedAt - programadoMs) / 3600000)}h`
     : new Date(followUp?.programado_para).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -114,7 +113,7 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
             <h2 className="font-bold text-text-primary">💬 Seguimiento — {lead?.nombre}</h2>
             <p className="text-text-secondary text-xs mt-0.5">
               {TIPO_LABELS[followUp?.tipo_seguimiento]} ·{' '}
-              <span style={{ color: followUp?.estado === 'vencido' ? '#DC2626' : '#C9920A' }}>{vencidoText}</span>
+              <span style={{ color: isVencido ? '#DC2626' : '#C9920A' }}>{vencidoText}</span>
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg flex-shrink-0">

@@ -24,6 +24,7 @@ const ScheduleFollowUpModal = ({ isOpen, onClose, lead, project, setterId, onSch
   const [tipo, setTipo] = useState('angulo');
   const [nota, setNota] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -33,25 +34,26 @@ const ScheduleFollowUpModal = ({ isOpen, onClose, lead, project, setterId, onSch
     return new Date(Date.now() + sel.horas * 3600000).toISOString();
   };
 
-  const handleGuardar = () => {
+  const handleGuardar = async () => {
     const programado = calcFecha();
     if (!programado) return;
 
     const ultimaInteraccion = lead.conversacion?.slice(-1)[0]?.mensaje || '';
-    const diasSinResp = lead.horas_sin_respuesta ? Math.floor(lead.horas_sin_respuesta / 24) : 0;
 
-    createFollowUp({
+    setSaving(true);
+    const { error } = await createFollowUp({
       setter_id: setterId,
       lead_id: lead.id,
-      lead_nombre: lead.nombre,
       project_id: project?.id || lead.project_id,
       programado_para: programado,
       tipo_seguimiento: tipo,
       nota,
       ultima_interaccion: ultimaInteraccion,
-      dias_sin_respuesta: diasSinResp,
+      dias_sin_respuesta: 0,
       temperatura_actual: lead.temperatura || 'Tibio',
     });
+    setSaving(false);
+    if (error) return;
 
     setSaved(true);
     setTimeout(() => {
@@ -141,10 +143,10 @@ const ScheduleFollowUpModal = ({ isOpen, onClose, lead, project, setterId, onSch
             Cancelar
           </button>
           <button onClick={handleGuardar}
-            disabled={tiempoSel.horas === null && !fechaExacta}
+            disabled={(tiempoSel.horas === null && !fechaExacta) || saving}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-black text-sm font-bold transition-all disabled:opacity-40"
             style={{ backgroundColor: saved ? '#1D9E75' : '#C9920A' }}>
-            {saved ? <><Check size={16} /> ¡Programado!</> : 'Programar →'}
+            {saved ? <><Check size={16} /> ¡Programado!</> : saving ? 'Guardando...' : 'Programar →'}
           </button>
         </div>
       </div>

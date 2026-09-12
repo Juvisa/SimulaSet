@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
+import { getSeguimientosPendientes } from '../utils/followUps';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
@@ -80,10 +80,18 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [pendingFollowUpCount, setPendingFollowUpCount] = useState(0);
 
-  const pendingFollowUpCount = user?.id
-    ? verificarSeguimientosPendientes(user.id).total_activos
-    : 0;
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    const refresh = () => getSeguimientosPendientes(user.id).then(({ total_activos }) => {
+      if (active) setPendingFollowUpCount(total_activos);
+    });
+    refresh();
+    const interval = setInterval(refresh, 5 * 60 * 1000);
+    return () => { active = false; clearInterval(interval); };
+  }, [user?.id]);
 
   const trainingItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Panel / Inicio' },

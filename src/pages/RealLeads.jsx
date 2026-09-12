@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getRealLeads, saveRealLead } from '../utils/storage';
+import { getRealLeads } from '../utils/realLeads';
 import Layout from '../components/Layout';
-import { Plus, MessageCircle, Clock, AlertTriangle, Zap, FileText, Bell } from 'lucide-react';
-import { getPendingFollowUpsForLead } from '../utils/followUps';
+import { Plus, MessageCircle, Clock, AlertTriangle, FileText, Bell } from 'lucide-react';
+import { getFollowUps } from '../utils/followUps';
 
 const ESTADO_CONFIG = {
   activo:          { label: 'Activo',          color: '#E0605E', bg: '#E0605E15' },
@@ -28,12 +28,9 @@ const timeAgo = (ts) => {
   return `Hace ${d}d`;
 };
 
-const LeadCard = ({ lead, onOpen }) => {
+const LeadCard = ({ lead, vencidoFU, proximoFU, onOpen }) => {
   const estado = ESTADO_CONFIG[lead.estado] || ESTADO_CONFIG.activo;
   const isFantasma = lead.estado === 'fantasma' || lead.alerta_fantasma;
-  const pendingFUs = getPendingFollowUpsForLead(lead.id);
-  const vencidoFU = pendingFUs.find(f => f.estado === 'vencido');
-  const proximoFU = pendingFUs.find(f => f.estado === 'pendiente');
 
   return (
     <div className={`bg-bg-card border rounded-2xl p-4 transition-all hover:border-accent-gold/40 ${isFantasma ? 'border-red-500/40 animate-pulse-glow' : 'border-border-subtle'}`}>
@@ -114,12 +111,34 @@ const RealLeads = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
+  const [followUpsByLead, setFollowUpsByLead] = useState({});
   const [filterEstado, setFilterEstado] = useState('');
   const [filterOrigen, setFilterOrigen] = useState('');
   const [filterAlerta, setFilterAlerta] = useState(false);
 
   useEffect(() => {
-    setLeads(getRealLeads(user.id));
+    let active = true;
+    getRealLeads(user.id).then(({ leads: rows }) => {
+      if (active) setLeads(rows);
+    });
+    // Un solo query para todos los seguimientos pendientes del setter, en vez
+    // de uno por cada tarjeta (evitaba N+1 relecturas de localStorage antes).
+    // "vencido" se clasifica aquí (fuera del render, donde comparar contra la
+    // hora actual sí es válido) en vez de en LeadCard.
+    getFollowUps(user.id).then(({ followUps }) => {
+      if (!active) return;
+      const now = Date.now();
+      const byLead = {};
+      followUps.filter(f => f.estado === 'pendiente').forEach(f => {
+        const isVencido = new Date(f.programado_para).getTime() <= now;
+        const current = byLead[f.lead_id] || { vencidoFU: null, proximoFU: null };
+        if (isVencido && !current.vencidoFU) current.vencidoFU = f;
+        if (!isVencido && !current.proximoFU) current.proximoFU = f;
+        byLead[f.lead_id] = current;
+      });
+      setFollowUpsByLead(byLead);
+    });
+    return () => { active = false; };
   }, [user.id]);
 
   const filtered = leads.filter(l => {
@@ -234,7 +253,13 @@ const RealLeads = () => {
             if (!(a.alerta_fantasma || a.estado === 'fantasma') && (b.alerta_fantasma || b.estado === 'fantasma')) return 1;
             return new Date(b.updated_at) - new Date(a.updated_at);
           }).map(lead => (
-            <LeadCard key={lead.id} lead={lead} onOpen={(id) => navigate(`/leads-reales/${id}`)} />
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              vencidoFU={followUpsByLead[lead.id]?.vencidoFU || null}
+              proximoFU={followUpsByLead[lead.id]?.proximoFU || null}
+              onOpen={(id) => navigate(`/leads-reales/${id}`)}
+            />
           ))}
         </div>
       )}

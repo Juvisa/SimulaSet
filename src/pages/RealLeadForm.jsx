@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createRealLead } from '../utils/storage';
+import { createRealLead } from '../utils/realLeads';
 import { getProjects } from '../utils/projects';
 import Layout from '../components/Layout';
 import { ChevronLeft, Zap } from 'lucide-react';
@@ -49,13 +49,18 @@ const RealLeadForm = () => {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.project_id) { setError('Selecciona un proyecto'); return; }
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
     if (!form.dolor_principal.trim()) { setError('El dolor principal es obligatorio'); return; }
     setSaving(true);
-    const lead = createRealLead({ ...form, setter_id: user.id });
+    const project = projects.find(p => p.id === form.project_id);
+    const { lead, error: saveError } = await createRealLead({
+      ...form, setter_id: user.id, project_name: project?.name,
+    });
+    setSaving(false);
+    if (saveError || !lead) { setError(saveError || 'No pudimos registrar el lead.'); return; }
     navigate(`/leads-reales/${lead.id}`);
   };
 

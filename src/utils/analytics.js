@@ -1,15 +1,7 @@
 // ─── Analytics utility — read-only, no localStorage writes ───────────────────
 
 import { supabase } from '../lib/supabase';
-
-const KEYS = {
-  SESSIONS: 'simulator_sessions',
-  LEADS: 'real_leads_sessions',
-  USERS: 'setter_users',
-  PROJECTS: 'projects',
-};
-
-const get = (key) => JSON.parse(localStorage.getItem(key) || '[]');
+import { getRealLeads } from './realLeads';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -143,8 +135,8 @@ function calcularMetricasLeads(leads) {
     .sort(([, a], [, b]) => pct(b.agendados, b.total) - pct(a.agendados, a.total))[0]?.[0] || null;
 
   // Origen stats
-  const inboundLeads = leads.filter(l => l.origen === 'inbound');
-  const outboundLeads = leads.filter(l => l.origen === 'outbound');
+  const inboundLeads = leads.filter(l => l.origen === 'Inbound');
+  const outboundLeads = leads.filter(l => l.origen === 'Outbound');
 
   // Average close time (days from createdAt to agendado)
   const tiemposCierre = agendados
@@ -208,7 +200,7 @@ export async function calcularMetricasSetterReal(userId) {
     scores: Array.isArray(row.scores) ? row.scores : [],
     averageScore: row.average_score,
   }));
-  const leads = get(KEYS.LEADS).filter(l => l.setter_id === userId);
+  const { leads } = await getRealLeads(userId);
 
   return {
     simulador: calcularMetricasSimulador(sesiones),

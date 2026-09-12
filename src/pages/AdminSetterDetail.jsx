@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { getAllRealLeads } from '../utils/storage';
+import { getRealLeads } from '../utils/realLeads';
 import {
   getFeedbackForSession, getFeedbackForLead, createSessionFeedback, createLeadFeedback,
 } from '../utils/adminFeedback';
@@ -62,9 +62,9 @@ const AdminSetterDetail = () => {
       if (!active) return;
       setFeedbackMap(Object.fromEntries(fbEntries));
 
-      // Nota: real_leads todavía vive en localStorage (fase 3 pendiente), por
-      // eso solo ve leads si el admin los generó en su propio navegador.
-      const leads = getAllRealLeads().filter(l => l.setter_id === setterId && l.estado === 'agendado' && l.briefing);
+      const { leads: setterLeads } = await getRealLeads(setterId);
+      if (!active) return;
+      const leads = setterLeads.filter(l => l.estado === 'agendado' && l.briefing);
       const sortedLeads = leads.sort((a, b) => new Date(b.briefing.generado_en) - new Date(a.briefing.generado_en));
       setAgendadoLeads(sortedLeads);
 
@@ -363,6 +363,7 @@ const AdminSetterDetail = () => {
           setterName={setter?.name}
           existingBriefing={openBriefingLead.briefing?.contenido || null}
           onSave={() => setOpenBriefingLead(null)}
+          readOnly
         />
       )}
     </Layout>

@@ -91,7 +91,7 @@ _Setter: ${b.setter} — SimulaSET_`;
 
 // ─── Editable Field ───────────────────────────────────────────────────────
 
-const EditableField = ({ label, value, onChange, multiline = false }) => {
+const EditableField = ({ value, onChange, multiline = false }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -198,15 +198,15 @@ const BriefingModal = ({
   // Persistence
   existingBriefing,
   onSave,
+  // Cuando se abre desde AdminSetterDetail (project/lead === null): oculta
+  // "Regenerar" (fallaría en silencio, generate() no tiene con qué generar)
+  // y cambia "Guardar" por un simple "Cerrar" que no llama a onSave.
+  readOnly = false,
 }) => {
   const [loading, setLoading] = useState(false);
   const [briefing, setBriefing] = useState(existingBriefing || null);
   const [copyFormat, setCopyFormat] = useState('plain');
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (isOpen && !briefing && !loading) generate();
-  }, [isOpen]);
 
   const generate = async () => {
     if (!project || !lead) return;
@@ -224,6 +224,12 @@ const BriefingModal = ({
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isOpen && !briefing && !loading) generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const updateField = (path, value) => {
     setBriefing(prev => {
@@ -432,17 +438,27 @@ const BriefingModal = ({
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               <CopyBtn text={getCopyText()} label="Copiar Briefing" icon={Copy} />
-              <button onClick={generate}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-input transition-all">
-                <RefreshCw size={14} />
-                Regenerar
-              </button>
-              <button onClick={handleSave}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-black transition-all ml-auto"
-                style={{ backgroundColor: '#C9920A' }}>
-                <Save size={14} />
-                Guardar
-              </button>
+              {!readOnly && (
+                <button onClick={generate}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-input transition-all">
+                  <RefreshCw size={14} />
+                  Regenerar
+                </button>
+              )}
+              {readOnly ? (
+                <button onClick={onClose}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-black transition-all ml-auto"
+                  style={{ backgroundColor: '#C9920A' }}>
+                  Cerrar
+                </button>
+              ) : (
+                <button onClick={handleSave}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-black transition-all ml-auto"
+                  style={{ backgroundColor: '#C9920A' }}>
+                  <Save size={14} />
+                  Guardar
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getRealLeadById, saveRealLead } from '../utils/storage';
+import { getRealLeadById, updateRealLead, addLeadMessage, updateMessageAnalysis } from '../utils/realLeads';
 import { getProjectById } from '../utils/projects';
 import { callClaude, callSetEngine } from '../utils/anthropic';
 import { findProjectResource, getSetDecisionView } from '../utils/setEngine';
@@ -337,32 +337,52 @@ const RealLeadConversation = () => {
   const [followUpPanelOpen, setFollowUpPanelOpen] = useState(false);
   const [activeFollowUp, setActiveFollowUp] = useState(null);
   const [pendingFollowUps, setPendingFollowUps] = useState([]);
+  // "vencido" ya no es un estado persistido — se deriva una sola vez al
+  // recibir la respuesta (fuera del render, donde comparar contra la hora
+  // actual sí es válido) en vez de recalcularse en cada render del badge.
+  const [hasVencidoFollowUp, setHasVencidoFollowUp] = useState(false);
+
+  const applyPendingFollowUps = useCallback((followUps) => {
+    setPendingFollowUps(followUps);
+    setHasVencidoFollowUp(followUps.some(f => new Date(f.programado_para).getTime() <= Date.now()));
+  }, []);
+
+  const refreshPendingFollowUps = useCallback(() => {
+    getPendingFollowUpsForLead(leadId).then(({ followUps }) => applyPendingFollowUps(followUps));
+  }, [leadId, applyPendingFollowUps]);
 
   useEffect(() => {
     let active = true;
-    const l = getRealLeadById(leadId);
-    if (!l) { navigate('/leads-reales'); return; }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLead(l);
-    getProjectById(l.project_id).then(({ project: linkedProject }) => {
-      if (active) setProject(linkedProject);
-    });
-    if (l.estado === 'agendado' && !l.briefing) setShowAgendadoBanner(true);
-    setPendingFollowUps(getPendingFollowUpsForLead(leadId));
+    const load = async () => {
+      const { lead: l } = await getRealLeadById(leadId);
+      if (!active) return;
+      if (!l) { navigate('/leads-reales'); return; }
+      setLead(l);
+      if (l.project_id) {
+        getProjectById(l.project_id).then(({ project: linkedProject }) => {
+          if (active) setProject(linkedProject);
+        });
+      }
+      if (l.estado === 'agendado' && !l.briefing) setShowAgendadoBanner(true);
+      const { followUps } = await getPendingFollowUpsForLead(leadId);
+      if (active) applyPendingFollowUps(followUps);
+    };
+    load();
     return () => { active = false; };
-  }, [leadId, navigate]);
+  }, [leadId, navigate, applyPendingFollowUps]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [lead?.conversacion]);
 
+  // Actualización optimista: el estado local se refleja de inmediato y la
+  // escritura a Supabase se dispara sin esperarla (mismo patrón que
+  // saveSimulatorSession/createAnalysis en otras fases de esta migración) —
+  // prioriza que el setter no sienta ninguna latencia en el chat.
   const persistLead = useCallback((updates) => {
-    setLead(prev => {
-      const updated = { ...prev, ...updates };
-      saveRealLead(updated);
-      return updated;
-    });
-  }, []);
+    setLead(prev => (prev ? { ...prev, ...updates } : prev));
+    updateRealLead(leadId, updates);
+  }, [leadId]);
 
   // ── Analyze message ──────────────────────────────────────────────────────
 
@@ -383,19 +403,13 @@ const RealLeadConversation = () => {
       const prompt = buildSetEngineAnalysisPrompt(project, leadSnapshot, historialReciente, message.mensaje);
       const result = await callSetEngine('Eres SET Core v1 Beta. Devuelve exclusivamente el contrato JSON solicitado.', [{ role: 'user', content: prompt }], project);
 
-      setLead(prev => {
-        const newConversacion = (prev.conversacion || []).map(entry =>
+      updateMessageAnalysis(message.id, result);
+      setLead(prev => ({
+        ...prev,
+        conversacion: (prev.conversacion || []).map(entry =>
           entry.id === message.id ? { ...entry, analisis_ia: result } : entry
-        );
-        return saveRealLead({
-          ...prev,
-          conversacion: newConversacion,
-          metricas: {
-            ...prev.metricas,
-            total_turnos: newConversacion.length,
-          },
-        });
-      });
+        ),
+      }));
 
       setCurrentDecision(result);
       setCurrentAnalysis(null);
@@ -408,87 +422,71 @@ const RealLeadConversation = () => {
     setAnalyzing(false);
   };
 
-  const handleSendDecision = (pieces) => {
+  const handleSendDecision = async (pieces) => {
     if (suggestionSentRef.current || !pieces.length) return;
     suggestionSentRef.current = true;
-    const timestamp = new Date().toISOString();
-    const entries = pieces.map((piece, index) => {
+
+    const newMessages = [];
+    let freshLead = null;
+    for (const piece of pieces) {
       const resource = piece.tipo === 'recurso' ? findProjectResource(project, piece.recurso_id) : null;
-      return {
-        id: crypto.randomUUID(),
-        timestamp,
-        turno: (lead.conversacion?.length || 0) + index + 1,
-        tipo: 'setter_enviado',
-        mensaje: piece.tipo === 'recurso'
-          ? [resource?.nombre || resource?.name, resource?.link].filter(Boolean).join('\n')
-          : piece.contenido,
-        formato: piece.tipo,
-        recurso_id: piece.recurso_id,
-      };
-    });
-    const newConversacion = [...(lead.conversacion || []), ...entries];
-    persistLead({
-      conversacion: newConversacion,
-      ultimo_contacto: timestamp,
-      metricas: { ...lead.metricas, total_turnos: newConversacion.length },
-    });
+      const mensaje = piece.tipo === 'recurso'
+        ? [resource?.nombre || resource?.name, resource?.link].filter(Boolean).join('\n')
+        : piece.contenido;
+      const { message, lead: updatedLead } = await addLeadMessage(lead.id, {
+        tipo: 'setter_enviado', mensaje, formato: piece.tipo, recursoId: piece.recurso_id,
+      }, lead.metricas);
+      if (message) newMessages.push(message);
+      if (updatedLead) freshLead = updatedLead;
+    }
+
+    setLead(prev => ({
+      ...(freshLead || prev),
+      conversacion: [...(prev.conversacion || []), ...newMessages],
+    }));
     setCurrentDecision(null);
     setPanelVisible(false);
   };
 
   const handleAnalyze = async () => {
     if (!leadInput.trim() || !project) return;
-
-    const msgEntry = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      turno: (lead.conversacion?.length || 0) + 1,
-      tipo: 'lead',
-      mensaje: leadInput.trim(),
-      analisis_ia: null,
-    };
-    const newConversacion = [...(lead.conversacion || []), msgEntry];
-    const leadWithMessage = saveRealLead({
-      ...lead,
-      conversacion: newConversacion,
-      ultimo_contacto: new Date().toISOString(),
-      metricas: { ...lead.metricas, total_turnos: newConversacion.length },
-    });
-
-    setLead(leadWithMessage);
+    const mensaje = leadInput.trim();
     setLeadInput('');
-    await analyzeLeadMessage(msgEntry, leadWithMessage);
+
+    const { message, lead: updatedLead } = await addLeadMessage(lead.id, { tipo: 'lead', mensaje }, lead.metricas);
+    if (!message) return;
+
+    const leadWithMessage = { ...(updatedLead || lead), conversacion: [...(lead.conversacion || []), message] };
+    setLead(leadWithMessage);
+    await analyzeLeadMessage(message, leadWithMessage);
   };
 
   // ── Send suggestion ─────────────────────────────────────────────────────
 
-  const handleSendSuggestion = (sug, allSugs) => {
+  const handleSendSuggestion = async (sug) => {
     if (suggestionSentRef.current) return;
     suggestionSentRef.current = true;
-    const entries = allSugs.map(s => ({
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      turno: (lead.conversacion?.length || 0) + 1,
-      tipo: s.opcion === sug.opcion ? 'setter_enviado' : 'setter_sugerido_no_enviado',
-      mensaje: s.texto,
-      sugerencias: allSugs,
-      opcion_elegida: sug.opcion,
-    }));
 
-    const newConversacion = [...(lead.conversacion || []), ...entries.filter(e => e.tipo === 'setter_enviado')];
-    persistLead({
-      conversacion: newConversacion,
-      ultimo_contacto: new Date().toISOString(),
-      estado: mode === 'reactivacion' ? 'fantasma' : lead.estado,
-      alerta_fantasma: mode === 'reactivacion' ? true : lead.alerta_fantasma,
+    const isReactivacion = mode === 'reactivacion';
+    const { message, lead: updatedLead } = await addLeadMessage(lead.id, {
+      tipo: 'setter_enviado', mensaje: sug.texto, opcionElegida: sug.opcion,
+    }, lead.metricas);
+
+    const { lead: finalLead } = await updateRealLead(lead.id, {
+      estado: isReactivacion ? 'fantasma' : lead.estado,
+      alerta_fantasma: isReactivacion ? true : lead.alerta_fantasma,
       metricas: {
-        ...lead.metricas,
-        total_turnos: newConversacion.length,
-        reactivaciones_enviadas: mode === 'reactivacion'
+        ...(updatedLead?.metricas || lead.metricas),
+        reactivaciones_enviadas: isReactivacion
           ? (lead.metricas?.reactivaciones_enviadas || 0) + 1
           : (lead.metricas?.reactivaciones_enviadas || 0),
       },
     });
+
+    setLead(prev => ({
+      ...(finalLead || prev),
+      conversacion: message ? [...(prev.conversacion || []), message] : prev.conversacion,
+    }));
 
     setCurrentSuggestions(null);
     setCurrentAnalysis(null);
@@ -631,7 +629,7 @@ const RealLeadConversation = () => {
             <Clock size={12} />
             <span className="hidden sm:inline">Seguimiento</span>
             {pendingFollowUps.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ backgroundColor: pendingFollowUps.some(f => f.estado === 'vencido') ? '#DC2626' : '#C9920A', fontSize: '9px' }}>
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-xs flex items-center justify-center font-bold" style={{ backgroundColor: hasVencidoFollowUp ? '#DC2626' : '#C9920A', fontSize: '9px' }}>
                 {pendingFollowUps.length}
               </span>
             )}
@@ -755,7 +753,7 @@ const RealLeadConversation = () => {
                     {msg.mensaje}
                   </div>
                   <div className="flex items-center gap-2 mt-1 px-1">
-                    <span className="text-text-secondary text-xs">{formatTime(msg.timestamp)}</span>
+                    <span className="text-text-secondary text-xs">{formatTime(msg.created_at)}</span>
                     {msg.tipo === 'setter_enviado' && (
                       <span className="text-xs" style={{ color: '#C9920A' }}>Enviado ✓</span>
                     )}
@@ -862,7 +860,7 @@ const RealLeadConversation = () => {
                     key={sug.opcion}
                     sug={sug}
                     disabled={false}
-                    onSend={(s) => handleSendSuggestion(s, currentSuggestions)}
+                    onSend={(s) => handleSendSuggestion(s)}
                   />
                 ))}
               </div>
@@ -898,7 +896,7 @@ const RealLeadConversation = () => {
                 key={sug.opcion}
                 sug={sug}
                 disabled={false}
-                onSend={(s) => handleSendSuggestion(s, currentSuggestions)}
+                onSend={(s) => handleSendSuggestion(s)}
               />
             ))}
           </div>
@@ -923,7 +921,7 @@ const RealLeadConversation = () => {
         lead={lead}
         project={project}
         setterId={user?.id}
-        onScheduled={() => { setScheduleOpen(false); setPendingFollowUps(getPendingFollowUpsForLead(leadId)); }}
+        onScheduled={() => { setScheduleOpen(false); refreshPendingFollowUps(); }}
       />
 
       {/* Follow-up Message Panel */}
@@ -934,7 +932,7 @@ const RealLeadConversation = () => {
           followUp={activeFollowUp}
           lead={lead}
           project={project}
-          onSent={(updatedLead) => { if (updatedLead) setLead(updatedLead); setFollowUpPanelOpen(false); setActiveFollowUp(null); setPendingFollowUps(getPendingFollowUpsForLead(leadId)); }}
+          onSent={(updatedLead) => { if (updatedLead) setLead(updatedLead); setFollowUpPanelOpen(false); setActiveFollowUp(null); refreshPendingFollowUps(); }}
         />
       )}
 

@@ -3,8 +3,6 @@ const KEYS = {
   PROJECTS: 'simulaset_projects',
   SESSIONS: 'simulaset_sessions',
   ANALYSES: 'simulaset_analyses',
-  ADMIN_FEEDBACK: 'simulaset_admin_feedback',
-  REAL_LEADS: 'real_leads_sessions',
 };
 
 const get = (key) => {
@@ -15,7 +13,7 @@ const get = (key) => {
 };
 
 const set = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* localStorage no disponible — se ignora */ }
 };
 
 // Users
@@ -59,43 +57,9 @@ export const saveSession = (session) => {
   set(KEYS.SESSIONS, all);
 };
 
-// Analyses
-export const getAnalyses = (userId) => {
-  const all = get(KEYS.ANALYSES) || [];
-  return all.filter(a => a.userId === userId || a.setter_id === userId);
-};
-
+// Analyses (solo lectura global — usada por AdminDashboard.jsx; la lectura
+// por-usuario y la escritura ya viven en utils/analyses.js sobre Supabase)
 export const getAllAnalyses = () => get(KEYS.ANALYSES) || [];
-
-export const saveAnalysis = (analysis) => {
-  const all = get(KEYS.ANALYSES) || [];
-  all.push(analysis);
-  set(KEYS.ANALYSES, all);
-};
-
-// Admin feedback
-export const getAdminFeedback = (sessionId) => {
-  const all = get(KEYS.ADMIN_FEEDBACK) || [];
-  return all.filter(f => f.sessionId === sessionId);
-};
-
-export const saveFeedback = (feedback) => {
-  const all = get(KEYS.ADMIN_FEEDBACK) || [];
-  all.push(feedback);
-  set(KEYS.ADMIN_FEEDBACK, all);
-};
-
-export const getPendingFeedback = (userId) => {
-  const all = get(KEYS.ADMIN_FEEDBACK) || [];
-  return all.filter(f => f.targetUserId === userId && !f.seen);
-};
-
-export const markFeedbackSeen = (feedbackId) => {
-  const all = get(KEYS.ADMIN_FEEDBACK) || [];
-  const idx = all.findIndex(f => f.id === feedbackId);
-  if (idx >= 0) all[idx].seen = true;
-  set(KEYS.ADMIN_FEEDBACK, all);
-};
 
 // Update user stats after session
 export const updateUserStats = (userId, score) => {
@@ -113,63 +77,4 @@ export const updateUserStats = (userId, score) => {
   else if (total >= 5 && avg > 50) users[idx].level = 2;
   else users[idx].level = 1;
   saveUsers(users);
-};
-
-// Real Leads
-export const getRealLeads = (userId) => {
-  const all = get(KEYS.REAL_LEADS) || [];
-  return all.filter(l => l.setter_id === userId);
-};
-
-export const getAllRealLeads = () => get(KEYS.REAL_LEADS) || [];
-
-export const getRealLeadById = (id) => {
-  const all = get(KEYS.REAL_LEADS) || [];
-  return all.find(l => l.id === id) || null;
-};
-
-export const saveRealLead = (lead) => {
-  const all = get(KEYS.REAL_LEADS) || [];
-  const idx = all.findIndex(l => l.id === lead.id);
-  const updated = { ...lead, updated_at: new Date().toISOString() };
-  if (idx >= 0) all[idx] = updated;
-  else all.push(updated);
-  set(KEYS.REAL_LEADS, all);
-  return updated;
-};
-
-export const deleteRealLead = (id) => {
-  const all = (get(KEYS.REAL_LEADS) || []).filter(l => l.id !== id);
-  set(KEYS.REAL_LEADS, all);
-};
-
-export const createRealLead = (data) => {
-  const lead = {
-    id: crypto.randomUUID(),
-    setter_id: data.setter_id,
-    project_id: data.project_id,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    nombre: data.nombre,
-    origen: data.origen,
-    canal: data.canal,
-    dolor_principal: data.dolor_principal,
-    nivel_consciencia: data.nivel_consciencia,
-    temperatura: data.temperatura,
-    notas_adicionales: data.notas_adicionales || '',
-    estado: 'activo',
-    ultimo_contacto: null,
-    horas_sin_respuesta: 0,
-    alerta_fantasma: false,
-    conversacion: [],
-    metricas: {
-      total_turnos: 0,
-      nivel_interes_actual: 0,
-      etapa_set_actual: 'S',
-      reactivaciones_enviadas: 0,
-      apertura_generada: false,
-    },
-  };
-  saveRealLead(lead);
-  return lead;
 };

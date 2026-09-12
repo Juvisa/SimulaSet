@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getRealLeads } from '../utils/storage';
+import { getRealLeads } from '../utils/realLeads';
 import { getPendingFeedback, markFeedbackSeen } from '../utils/adminFeedback';
 import { getAnalyses } from '../utils/analyses';
 import { getProjects } from '../utils/projects';
@@ -11,7 +11,7 @@ import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
 import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target, Trophy } from 'lucide-react';
-import { verificarSeguimientosPendientes } from '../utils/followUpChecker';
+import { getSeguimientosPendientes } from '../utils/followUps';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
 import { getTopPerformers } from '../utils/leaderboard';
 
@@ -133,7 +133,7 @@ const Dashboard = () => {
   const [performers, setPerformers] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
 
-  const refreshFollowUps = () => setFollowUps(verificarSeguimientosPendientes(user.id));
+  const refreshFollowUps = () => getSeguimientosPendientes(user.id).then(setFollowUps);
 
   useEffect(() => {
     getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
@@ -141,8 +141,7 @@ const Dashboard = () => {
     getSimulatorSessions(user.id).then(({ sessions: rows }) => setSessions(rows));
     getAnalyses(user.id).then(({ analyses: rows }) => setAnalyses(rows));
     getPendingFeedback(user.id).then(({ feedback }) => setPendingFeedback(feedback));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRealLeads(getRealLeads(user.id));
+    getRealLeads(user.id).then(({ leads }) => setRealLeads(leads));
     refreshFollowUps();
     const interval = setInterval(refreshFollowUps, 5 * 60 * 1000);
     return () => clearInterval(interval);
@@ -179,7 +178,7 @@ const Dashboard = () => {
     const project = allProjectsForFollowUp.find(p => p.id === fu.project_id);
     const borderColor = urgencia === 'vencido' ? '#DC2626' : urgencia === 'hoy' ? '#D97706' : '#1D9E75';
     const tiempoLabel = urgencia === 'vencido'
-      ? `Hace ${Math.round((Date.now() - new Date(fu.programado_para)) / 3600000)}h`
+      ? `Hace ${fu.horas_vencido}h`
       : new Date(fu.programado_para).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
     return (
       <div className="card-tactical rounded-xl border p-3 flex items-center justify-between gap-3" style={{ borderColor: borderColor + '40' }}>

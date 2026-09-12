@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getSessions } from '../utils/storage';
-import { getRealLeads } from '../utils/storage';
+import { getSimulatorSessions } from '../utils/simulatorSessions';
+import { getRealLeads } from '../utils/realLeads';
 import Layout from '../components/Layout';
 import { Lock, LogOut, Check, AlertTriangle } from 'lucide-react';
 
@@ -23,11 +23,18 @@ const Profile = () => {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [leads, setLeads] = useState([]);
 
-  const sessions = getSessions(user.id);
-  const leads = getRealLeads(user.id);
+  useEffect(() => {
+    let active = true;
+    getSimulatorSessions(user.id).then(({ sessions: rows }) => { if (active) setSessions(rows); });
+    getRealLeads(user.id).then(({ leads: rows }) => { if (active) setLeads(rows); });
+    return () => { active = false; };
+  }, [user.id]);
+
   const avg = sessions.length > 0
-    ? Math.round(sessions.reduce((a, s) => a + (s.globalScore || 0), 0) / sessions.length)
+    ? Math.round(sessions.reduce((a, s) => a + (s.averageScore || 0), 0) / sessions.length)
     : 0;
 
   const nivel = NIVEL_LABELS[user.level] || 'Setter Novato';
