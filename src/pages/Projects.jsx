@@ -3,12 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProjects, deleteProject } from '../utils/projects';
 import Layout from '../components/Layout';
-import { Plus, Trash2, Edit3, Play, BarChart2 } from 'lucide-react';
+import { Plus, Trash2, Edit3, Play, BarChart2, Loader2 } from 'lucide-react';
 
 const Projects = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,7 +24,9 @@ const Projects = () => {
 
   const handleDelete = async (id, name) => {
     if (!window.confirm(`¿Eliminar el proyecto "${name}"?`)) return;
+    setDeletingId(id);
     const { deletedId, error: deleteError } = await deleteProject(id);
+    setDeletingId(null);
     if (deleteError) { setError(deleteError); return; }
     setProjects(current => current.filter(project => project.id !== deletedId));
   };
@@ -82,12 +85,15 @@ const Projects = () => {
                   >
                     <Edit3 size={15} />
                   </button>
-                  <button
-                    onClick={() => handleDelete(project.id, project.name)}
-                    className="p-2 text-text-secondary hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {(project.userId === user.id || user.role === 'admin') && (
+                    <button
+                      onClick={() => handleDelete(project.id, project.name)}
+                      disabled={deletingId === project.id}
+                      className="p-2 text-text-secondary hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-40"
+                    >
+                      {deletingId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                    </button>
+                  )}
                 </div>
               </div>
 

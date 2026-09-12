@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createProject, getProjectById, updateProject } from '../utils/projects';
+import { createProject, getProjectById, updateProject, uploadProjectResourceFile } from '../utils/projects';
 import Layout from '../components/Layout';
-import { Plus, Trash2, ChevronLeft, Save } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, Save, Upload, FileText, Loader2 } from 'lucide-react';
 
 const emptyTestimonial = () => ({ id: crypto.randomUUID(), clientName: '', niche: '', result: '', time: '', text: '' });
 const emptyResource = () => ({ id: crypto.randomUUID(), name: '', type: 'guia', link: '', when: 'inbound' });
@@ -45,6 +45,7 @@ const ProjectForm = () => {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingGuiaId, setUploadingGuiaId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -96,6 +97,18 @@ const ProjectForm = () => {
     arr[idx] = { ...arr[idx], [field]: value };
     setForm(f => ({ ...f, recursos: { ...f.recursos, videos_testimonios: arr } }));
   };
+  const handleGuiaFileChange = async (idx, guiaId, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingGuiaId(guiaId);
+    setError('');
+    const { url, error: uploadError } = await uploadProjectResourceFile({ userId: user.id, projectId: isEdit ? id : null, file });
+    setUploadingGuiaId(null);
+    event.target.value = '';
+    if (uploadError) { setError(uploadError); return; }
+    updateGuia(idx, 'link', url);
+  };
+
   const updateVsl = (field, value) => setForm(f => ({ ...f, recursos: { ...f.recursos, vsl_presentacion: { ...f.recursos.vsl_presentacion, [field]: value } } }));
   const updateScript = (field, value) => setForm(f => ({ ...f, recursos: { ...f.recursos, scripts_apertura: { ...f.recursos.scripts_apertura, [field]: value } } }));
 
@@ -217,8 +230,26 @@ ${form.avatarDescription ? 'Detalles adicionales: ' + form.avatarDescription : '
                       </div>
                     </div>
                     <div>
-                      <label className={LABEL}>Link de descarga o vista previa</label>
-                      <input value={g.link} onChange={e => updateGuia(idx, 'link', e.target.value)} className={INPUT} placeholder="https://drive.google.com/..." />
+                      <label className={LABEL}>Archivo (PDF/Word) o link de descarga</label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input value={g.link} onChange={e => updateGuia(idx, 'link', e.target.value)} className={`${INPUT} flex-1`} placeholder="https://drive.google.com/... o sube un archivo →" />
+                        <label className={`flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-3 py-3 text-xs font-bold text-text-secondary transition-colors ${uploadingGuiaId === g.id ? 'cursor-wait opacity-70' : 'cursor-pointer hover:text-text-primary'}`}>
+                          {uploadingGuiaId === g.id ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                          Subir archivo
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx"
+                            className="hidden"
+                            disabled={uploadingGuiaId === g.id}
+                            onChange={e => handleGuiaFileChange(idx, g.id, e)}
+                          />
+                        </label>
+                      </div>
+                      {g.link && (
+                        <a href={g.link} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs text-accent-coral hover:underline">
+                          <FileText size={12} /> Ver archivo o link actual
+                        </a>
+                      )}
                     </div>
                     <div>
                       <label className={LABEL}>Descripción breve (para que la IA sepa cuándo sugerirla)</label>

@@ -166,6 +166,18 @@ export const updateProject = async (id, project) => {
   return { project: savedProject, error: null };
 };
 
+const sanitizeFileName = (name) => name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+
+export const uploadProjectResourceFile = async ({ userId, projectId, file }) => {
+  if (!supabase) return { url: null, error: 'Supabase no está configurado.' };
+  const path = `${userId}/${projectId || 'nuevo'}-${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error: uploadError } = await supabase.storage.from('project-resources').upload(path, file, { upsert: false });
+  if (uploadError) return { url: null, error: uploadError.message };
+
+  const { data } = supabase.storage.from('project-resources').getPublicUrl(path);
+  return { url: data?.publicUrl || null, error: data?.publicUrl ? undefined : 'No pudimos generar el enlace del archivo.' };
+};
+
 export const deleteProject = async (id) => {
   if (!supabase) return { deletedId: null, error: 'Supabase no está configurado.' };
   const { data, error } = await supabase
