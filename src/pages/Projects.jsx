@@ -85,15 +85,13 @@ const Projects = () => {
                   >
                     <Edit3 size={15} />
                   </button>
-                  {(project.userId === user.id || user.role === 'admin') && (
-                    <button
-                      onClick={() => handleDelete(project.id, project.name)}
-                      disabled={deletingId === project.id}
-                      className="p-2 text-text-secondary hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-40"
-                    >
-                      {deletingId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleDelete(project.id, project.name)}
+                    disabled={deletingId === project.id}
+                    className="p-2 text-text-secondary hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-40"
+                  >
+                    {deletingId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                  </button>
                 </div>
               </div>
 
