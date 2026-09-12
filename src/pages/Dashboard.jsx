@@ -520,9 +520,13 @@ const Dashboard = () => {
                   <div className="flex items-center gap-3">
                     <ModeBadge mode={s.mode} size="sm" />
                     <div>
-                      <div className="text-text-primary text-sm font-medium">
-                        {s.projectName || 'Proyecto sin nombre'}
-                        {projectDeleted && <span className="text-text-secondary font-normal"> (proyecto eliminado)</span>}
+                      <div className={`flex flex-wrap items-center gap-1.5 text-sm font-medium ${projectDeleted ? 'text-zinc-400' : 'text-text-primary'}`}>
+                        <span>{s.projectName || 'Proyecto sin nombre'}</span>
+                        {projectDeleted && (
+                          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700 text-zinc-400">
+                            Archivado
+                          </span>
+                        )}
                       </div>
                       <div className="text-text-secondary text-xs">{new Date(s.createdAt).toLocaleDateString('es')}</div>
                     </div>
