@@ -46,6 +46,7 @@ const ProjectForm = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [uploadingGuiaId, setUploadingGuiaId] = useState(null);
+  const [uploadingResourceId, setUploadingResourceId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -97,6 +98,18 @@ const ProjectForm = () => {
     arr[idx] = { ...arr[idx], [field]: value };
     setForm(f => ({ ...f, recursos: { ...f.recursos, videos_testimonios: arr } }));
   };
+  const handleResourceFileChange = async (idx, resourceId, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingResourceId(resourceId);
+    setError('');
+    const { url, error: uploadError } = await uploadProjectResourceFile({ userId: user.id, projectId: isEdit ? id : null, file });
+    setUploadingResourceId(null);
+    event.target.value = '';
+    if (uploadError) { setError(uploadError); return; }
+    updateResource(idx, 'link', url);
+  };
+
   const handleGuiaFileChange = async (idx, guiaId, event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -431,7 +444,25 @@ ${form.avatarDescription ? 'Detalles adicionales: ' + form.avatarDescription : '
                 </div>
                 <div>
                   <label className={LABEL}>Link o descripción breve</label>
-                  <input value={r.link} onChange={e => updateResource(idx, 'link', e.target.value)} className={INPUT} placeholder="https://... o descripción del recurso" />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input value={r.link} onChange={e => updateResource(idx, 'link', e.target.value)} className={`${INPUT} flex-1`} placeholder="https://... o sube un documento →" />
+                    <label className={`flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-3 py-3 text-xs font-bold text-text-secondary transition-colors ${uploadingResourceId === r.id ? 'cursor-wait opacity-70' : 'cursor-pointer hover:text-text-primary'}`}>
+                      {uploadingResourceId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                      Subir documento
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="hidden"
+                        disabled={uploadingResourceId === r.id}
+                        onChange={e => handleResourceFileChange(idx, r.id, e)}
+                      />
+                    </label>
+                  </div>
+                  {r.link && (
+                    <a href={r.link} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs text-accent-coral hover:underline">
+                      <FileText size={12} /> Ver archivo subido
+                    </a>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL}>¿Para qué momento usarlo?</label>
