@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getSessions, getAnalyses, getPendingFeedback, markFeedbackSeen, getRealLeads
+  getAnalyses, getPendingFeedback, markFeedbackSeen, getRealLeads
 } from '../utils/storage';
 import { getProjects } from '../utils/projects';
+import { getSimulatorSessions } from '../utils/simulatorSessions';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
@@ -137,8 +138,8 @@ const Dashboard = () => {
   useEffect(() => {
     getProjects(user.id).then(({ projects: rows }) => setProjects(rows));
     getTopPerformers(3).then(({ performers: top }) => setPerformers(top)).finally(() => setLoadingLeaderboard(false));
+    getSimulatorSessions(user.id).then(({ sessions: rows }) => setSessions(rows));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessions(getSessions(user.id));
     setAnalyses(getAnalyses(user.id));
     setPendingFeedback(getPendingFeedback(user.id));
     setRealLeads(getRealLeads(user.id));
@@ -150,15 +151,19 @@ const Dashboard = () => {
   const levelInfo = getLevelInfo(user.level || 1);
   const progress = getProgressToNext(user);
   const avgScore = sessions.length > 0
-    ? Math.round(sessions.reduce((sum, s) => {
-        const avg = s.scores?.length > 0 ? s.scores.reduce((a, b) => a + b, 0) / s.scores.length * 10 : 0;
-        return sum + avg;
-      }, 0) / sessions.length)
+    ? Math.round(sessions.reduce((sum, s) => sum + (s.averageScore || 0), 0) / sessions.length)
     : 0;
 
   const leadsClosed = sessions.filter(s =>
     ['pidio_llamada', 'confirmado_con_entusiasmo', 'quiere_reagendar'].includes(s.finalState)
   ).length;
+
+  // simulator_sessions.project_id no tiene foreign key hacia projects (es
+  // intencional: el nombre del proyecto queda congelado en la sesión aunque el
+  // proyecto se borre después), así que para saber si sigue existiendo hay que
+  // comparar contra la lista de proyectos activos del usuario, no confiar en
+  // que la fila de la sesión "sepa" que su proyecto ya no está.
+  const activeProjectIds = new Set(projects.map(p => p.id));
 
   const dismissFeedback = (id) => {
     markFeedbackSeen(id);
@@ -506,17 +511,19 @@ const Dashboard = () => {
             <h2 className="font-bold text-text-primary">Últimas sesiones</h2>
           </div>
           <div className="space-y-2">
-            {sessions.slice(-5).reverse().map(s => {
-              const sessionScore = s.scores?.length > 0
-                ? Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length * 10)
-                : 0;
+            {sessions.slice(0, 5).map(s => {
+              const sessionScore = Math.round(s.averageScore || 0);
               const scoreColor = sessionScore >= 80 ? '#1D9E75' : sessionScore >= 60 ? '#C9920A' : '#DC2626';
+              const projectDeleted = s.projectId && !activeProjectIds.has(s.projectId);
               return (
                 <div key={s.id} className="bg-bg-card border border-border-subtle rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ModeBadge mode={s.mode} size="sm" />
                     <div>
-                      <div className="text-text-primary text-sm font-medium">{s.projectName}</div>
+                      <div className="text-text-primary text-sm font-medium">
+                        {s.projectName || 'Proyecto sin nombre'}
+                        {projectDeleted && <span className="text-text-secondary font-normal"> (proyecto eliminado)</span>}
+                      </div>
                       <div className="text-text-secondary text-xs">{new Date(s.createdAt).toLocaleDateString('es')}</div>
                     </div>
                   </div>
