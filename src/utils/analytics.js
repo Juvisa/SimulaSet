@@ -257,7 +257,7 @@ export async function calcularMetricasAdminReal() {
   const [{ data: profileRows, error: profilesError }, { data: sessionRows, error: sessionsError }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, name, level, active, created_at')
+      .select('id, name, email, level, active, created_at')
       .eq('role', 'setter')
       .order('created_at', { ascending: true }),
     supabase

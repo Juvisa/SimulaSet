@@ -2,7 +2,6 @@ const KEYS = {
   USERS: 'simulaset_users',
   PROJECTS: 'simulaset_projects',
   SESSIONS: 'simulaset_sessions',
-  ANALYSES: 'simulaset_analyses',
 };
 
 const get = (key) => {
@@ -47,8 +46,6 @@ export const getSessions = (userId) => {
   return all.filter(s => s.userId === userId || s.setter_id === userId);
 };
 
-export const getAllSessions = () => get(KEYS.SESSIONS) || [];
-
 export const saveSession = (session) => {
   const all = get(KEYS.SESSIONS) || [];
   const idx = all.findIndex(s => s.id === session.id);
@@ -56,10 +53,6 @@ export const saveSession = (session) => {
   else all.push(session);
   set(KEYS.SESSIONS, all);
 };
-
-// Analyses (solo lectura global — usada por AdminDashboard.jsx; la lectura
-// por-usuario y la escritura ya viven en utils/analyses.js sobre Supabase)
-export const getAllAnalyses = () => get(KEYS.ANALYSES) || [];
 
 // Update user stats after session
 export const updateUserStats = (userId, score) => {

@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUsers, getAllSessions, getAllAnalyses } from '../utils/storage';
 import { supabase } from '../lib/supabase';
+import { calcularMetricasAdminReal } from '../utils/analytics';
 import { MISSION_01 } from '../data/missions';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
-import { Users, Play, BarChart2, TrendingUp, ChevronRight, Search, BookOpen, Sparkles, Trophy } from 'lucide-react';
+import { Users, Play, BarChart2, TrendingUp, ChevronRight, Search, BookOpen, Sparkles, Trophy, Loader2 } from 'lucide-react';
 
 const StatCard = ({ label, value, icon: Icon, color }) => (
-  <div className="bg-bg-card border border-border-subtle rounded-2xl p-5">
+  <div className="card-tactical rounded-2xl p-5">
     <div className="flex items-center justify-between mb-2"><span className="text-text-secondary text-xs font-medium uppercase tracking-wider">{label}</span><Icon size={16} style={{ color }} /></div>
     <div className="text-2xl font-black text-text-primary">{value}</div>
   </div>
@@ -17,62 +17,84 @@ const StatCard = ({ label, value, icon: Icon, color }) => (
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [analyses, setAnalyses] = useState([]);
+  const [metricas, setMetricas] = useState(null);
   const [cohort, setCohort] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
 
   useEffect(() => {
-    setUsers(getUsers());
-    setSessions(getAllSessions());
-    setAnalyses(getAllAnalyses());
-
     let active = true;
-    const loadCohort = async () => {
-      const [{ data: profiles }, { data: progress }] = await Promise.all([
-        supabase.from('profiles').select('id, name, email, level, active, created_at').eq('role', 'setter').order('created_at', { ascending: true }),
+
+    const load = async () => {
+      const [metricasResult, { data: progress, error: progressError }] = await Promise.all([
+        calcularMetricasAdminReal(),
         supabase.from('mission_progress').select('user_id, mission_id, responses, status, completed_at, updated_at').eq('mission_id', MISSION_01.id),
       ]);
       if (!active) return;
+
+      setMetricas(metricasResult);
+      if (metricasResult.error) setError(`No pudimos cargar algunas métricas: ${metricasResult.error}`);
+      else if (progressError) setError(`No pudimos cargar el progreso de la Misión 01: ${progressError.message}`);
+
+      // La cohorte reutiliza el ranking que ya trajo calcularMetricasAdminReal
+      // (evita una segunda consulta a profiles) — solo se reordena de vuelta
+      // por fecha de registro, porque esta sección es un roster, no un ranking.
       const progressByUser = new Map((progress || []).map(item => [item.user_id, item]));
-      setCohort((profiles || []).map(profile => {
-        const mission = progressByUser.get(profile.id);
-        const evaluation = mission?.responses?._evaluation;
-        const validEvaluation = evaluation?.version === MISSION_01.version ? evaluation.data : null;
-        return { ...profile, mission, evaluation: validEvaluation };
-      }));
+      const roster = [...(metricasResult.ranking || [])]
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map(profile => {
+          const mission = progressByUser.get(profile.id);
+          const evaluation = mission?.responses?._evaluation;
+          const validEvaluation = evaluation?.version === MISSION_01.version ? evaluation.data : null;
+          return { ...profile, mission, evaluation: validEvaluation };
+        });
+      setCohort(roster);
+      setLoading(false);
     };
-    loadCohort();
+
+    load();
     return () => { active = false; };
   }, []);
 
-  const today = new Date().toDateString();
-  const todaySessions = sessions.filter(s => new Date(s.createdAt).toDateString() === today).length;
-  const globalAvg = users.length > 0 ? Math.round(users.reduce((sum, u) => sum + (u.totalSessions > 0 ? u.totalScore / u.totalSessions : 0), 0) / users.length) : 0;
   const evaluated = cohort.filter(item => Number.isFinite(item.evaluation?.setScore));
   const cohortAverage = evaluated.length ? Math.round(evaluated.reduce((sum, item) => sum + item.evaluation.setScore, 0) / evaluated.length) : 0;
   const leader = [...evaluated].sort((a, b) => b.evaluation.setScore - a.evaluation.setScore)[0];
 
-  const filteredUsers = users.filter(u => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-    const matchLevel = !filterLevel || String(u.level) === filterLevel;
+  const ranking = metricas?.ranking || [];
+  const todaySessions = metricas?.actividad_barras?.[metricas.actividad_barras.length - 1]?.sesiones || 0;
+
+  const filteredSetters = ranking.filter(u => {
+    const matchSearch = (u.name || '').toLowerCase().includes(search.toLowerCase()) || (u.email || '').toLowerCase().includes(search.toLowerCase());
+    const matchLevel = !filterLevel || String(u.level || 1) === filterLevel;
     return matchSearch && matchLevel;
   });
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-text-secondary">
+          <Loader2 size={18} className="animate-spin" /> Cargando panel de administración...
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="mb-6"><h1 className="text-2xl font-bold text-text-primary flex items-center gap-2"><span className="text-accent-coral">Admin</span> — DIGITAL SET</h1><p className="text-text-secondary text-sm mt-1">Panel de control global</p></div>
 
+      {error && <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        <StatCard label="Alumnos" value={cohort.length || users.length} icon={Users} color="#E0605E" />
+        <StatCard label="Alumnos" value={cohort.length || metricas?.total_setters || 0} icon={Users} color="#E0605E" />
         <StatCard label="Evaluados M01" value={evaluated.length} icon={Sparkles} color="#2563EB" />
         <StatCard label="SET Score cohorte" value={`${cohortAverage}/100`} icon={TrendingUp} color="#1D9E75" />
         <StatCard label="Mejor SET Score" value={leader ? `${leader.evaluation.setScore}/100` : '—'} icon={Trophy} color="#C9920A" />
       </div>
 
-      <section className="mb-8 rounded-2xl border border-accent-coral/20 bg-bg-card p-5 md:p-6">
+      <section className="card-tactical mb-8 rounded-2xl border-accent-coral/20 p-5 md:p-6">
         <div className="flex items-center gap-2 text-accent-coral font-black"><Sparkles size={18} /> Pulso de la cohorte · Misión 01</div>
         <p className="mt-1 text-xs text-text-secondary">Evidencia real del SET Evaluator. Este será el punto de partida del motor de actividad y reconocimiento.</p>
         {cohort.length === 0 ? <div className="mt-5 rounded-xl bg-bg-input p-4 text-sm text-text-secondary">Aún no hay alumnos visibles en la cohorte.</div> : (
@@ -96,17 +118,17 @@ const AdminDashboard = () => {
         )}
       </section>
 
-      <button type="button" onClick={() => navigate('/admin/academy')} className="mb-8 flex min-h-16 w-full items-center gap-4 rounded-2xl border border-border-subtle bg-bg-card p-4 text-left transition-all hover:border-accent-coral/30">
+      <button type="button" onClick={() => navigate('/admin/academy')} className="card-tactical mb-8 flex min-h-16 w-full items-center gap-4 rounded-2xl p-4 text-left transition-all hover:border-accent-coral/30">
         <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent-coral/20 text-accent-coral"><BookOpen size={20} /></span>
         <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-text-primary">Gestionar Academy</span><span className="mt-0.5 block text-xs text-text-secondary">Crear, editar y organizar las clases de SET Academy.</span></span><ChevronRight size={18} className="flex-shrink-0 text-text-secondary" />
       </button>
 
-      <div className="mb-4"><h2 className="font-black text-text-primary">SimulaSET · datos locales</h2><p className="text-xs text-text-secondary mt-1">Se mantiene este bloque existente mientras migramos el resto de evidencias al sistema central.</p></div>
+      <div className="mb-4"><h2 className="font-black text-text-primary">Simulador · Actividad real</h2><p className="text-xs text-text-secondary mt-1">Sesiones reales de la plataforma (Supabase), no datos locales del navegador.</p></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Setters locales" value={users.length} icon={Users} color="#E0605E" />
+        <StatCard label="Setters" value={metricas?.total_setters || 0} icon={Users} color="#E0605E" />
         <StatCard label="Sesiones hoy" value={todaySessions} icon={Play} color="#2563EB" />
-        <StatCard label="Total sesiones" value={sessions.length} icon={TrendingUp} color="#1D9E75" />
-        <StatCard label="Promedio local" value={`${globalAvg}/10`} icon={BarChart2} color="#C9920A" />
+        <StatCard label="Total sesiones" value={metricas?.simulaciones_total || 0} icon={TrendingUp} color="#1D9E75" />
+        <StatCard label="Promedio global" value={`${metricas?.promedio_global || 0}/100`} icon={BarChart2} color="#C9920A" />
       </div>
 
       <div className="flex items-center gap-3 mb-4">
@@ -114,12 +136,12 @@ const AdminDashboard = () => {
         <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="bg-bg-input border border-border-subtle rounded-xl px-4 py-2.5 text-text-primary text-sm focus:border-accent-coral transition-colors"><option value="">Todos los niveles</option><option value="1">Novato</option><option value="2">Aprendiz</option><option value="3">Practicante</option><option value="4">Pro</option><option value="5">Élite</option></select>
       </div>
 
-      {filteredUsers.length === 0 ? <div className="bg-bg-card border border-border-subtle rounded-2xl p-12 text-center"><div className="text-4xl mb-3">👤</div><div className="text-text-secondary">Sin datos locales de SimulaSET aún</div></div> : <div className="space-y-2">{filteredUsers.map(u => {
-        const userSessions = sessions.filter(s => s.userId === u.id);
-        const userAvg = u.totalSessions > 0 ? Math.round(u.totalScore / u.totalSessions) : 0;
-        const modeCount = userSessions.reduce((acc, s) => { acc[s.mode] = (acc[s.mode] || 0) + 1; return acc; }, {});
-        const topMode = Object.entries(modeCount).sort((a, b) => b[1] - a[1])[0]?.[0];
-        return <button key={u.id} onClick={() => navigate(`/admin/setter/${u.id}`)} className="w-full bg-bg-card border border-border-subtle rounded-2xl p-4 flex items-center gap-4 hover:border-accent-coral/30 transition-all text-left"><div className="w-10 h-10 rounded-full bg-accent-coral/20 flex items-center justify-center text-accent-coral font-bold text-sm flex-shrink-0">{u.name?.[0]?.toUpperCase()}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><span className="font-semibold text-text-primary text-sm">{u.name}</span><LevelBadge level={u.level || 1} size="sm" showName={false} /></div><div className="text-text-secondary text-xs">{u.email}</div></div><div className="hidden md:flex items-center gap-6 text-sm"><div className="text-center"><div className="font-bold text-text-primary">{userSessions.length}</div><div className="text-text-secondary text-xs">sesiones</div></div><div className="text-center"><div className="font-bold" style={{ color: userAvg >= 80 ? '#1D9E75' : userAvg >= 60 ? '#C9920A' : '#DC2626' }}>{userAvg}/10</div><div className="text-text-secondary text-xs">promedio</div></div>{topMode && <div className="text-center"><ModeBadge mode={topMode} size="sm" /><div className="text-text-secondary text-xs mt-1">modo favorito</div></div>}{u.lastActivity && <div className="text-center"><div className="text-text-secondary text-xs">{new Date(u.lastActivity).toLocaleDateString('es')}</div><div className="text-text-secondary text-xs">última actividad</div></div>}</div><ChevronRight size={16} className="text-text-secondary flex-shrink-0" /></button>;
+      {filteredSetters.length === 0 ? <div className="card-tactical rounded-2xl p-12 text-center"><div className="text-4xl mb-3">👤</div><div className="text-text-secondary">Sin setters registrados aún</div></div> : <div className="space-y-2">{filteredSetters.map(u => {
+        const porModo = u.metricas?.simulador?.por_modo || {};
+        const topMode = Object.entries(porModo).sort((a, b) => (b[1]?.sesiones || 0) - (a[1]?.sesiones || 0))[0]?.[0];
+        const promedio = u.metricas?.simulador?.promedio_total || 0;
+        const totalSesiones = u.metricas?.simulador?.sesiones_totales || 0;
+        return <button key={u.id} onClick={() => navigate(`/admin/setter/${u.id}`)} className="card-tactical w-full rounded-2xl p-4 flex items-center gap-4 hover:border-accent-coral/30 transition-all text-left"><div className="w-10 h-10 rounded-full bg-accent-coral/20 flex items-center justify-center text-accent-coral font-bold text-sm flex-shrink-0">{u.name?.[0]?.toUpperCase()}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><span className="font-semibold text-text-primary text-sm">{u.name}</span><LevelBadge level={u.level || 1} size="sm" showName={false} /></div><div className="text-text-secondary text-xs">{u.email}</div></div><div className="hidden md:flex items-center gap-6 text-sm"><div className="text-center"><div className="font-bold text-text-primary">{totalSesiones}</div><div className="text-text-secondary text-xs">sesiones</div></div><div className="text-center"><div className="font-bold" style={{ color: promedio >= 80 ? '#1D9E75' : promedio >= 60 ? '#C9920A' : '#DC2626' }}>{promedio}/100</div><div className="text-text-secondary text-xs">promedio</div></div>{topMode && <div className="text-center"><ModeBadge mode={topMode} size="sm" /><div className="text-text-secondary text-xs mt-1">modo favorito</div></div>}<div className="text-center"><div className="text-text-secondary text-xs">{u.lastActivity ? new Date(u.lastActivity).toLocaleDateString('es') : 'Sin actividad'}</div><div className="text-text-secondary text-xs">última actividad</div></div></div><ChevronRight size={16} className="text-text-secondary flex-shrink-0" /></button>;
       })}</div>}
     </Layout>
   );
