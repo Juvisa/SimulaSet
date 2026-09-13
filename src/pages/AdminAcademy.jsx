@@ -152,8 +152,18 @@ const AdminAcademy = () => {
     event.preventDefault();
     setSaveError('');
 
+    const normalizedTitle = form.title.trim();
     const normalizedModuleId = form.module_id.trim();
     const normalizedLessonId = form.lesson_id.trim();
+
+    if (!normalizedTitle) {
+      setSaveError('El título no puede quedar vacío ni ser solo espacios.');
+      return;
+    }
+    if (!editingLesson && (!normalizedModuleId || !normalizedLessonId)) {
+      setSaveError('Módulo e ID de lección no pueden quedar vacíos ni ser solo espacios.');
+      return;
+    }
 
     if (!editingLesson && lessons.some(lesson => (
       lesson.module_id.trim() === normalizedModuleId
@@ -176,7 +186,7 @@ const AdminAcademy = () => {
     setSaving(true);
 
     const payload = {
-      title: form.title.trim(),
+      title: normalizedTitle,
       description: form.description.trim(),
       position: Number(form.position),
       scheduled_at: toTimestamptz(form.scheduled_at),
