@@ -38,6 +38,7 @@ const MissionConversationHunt = () => {
   const [evaluating, setEvaluating] = useState(false);
   const [evaluationError, setEvaluationError] = useState('');
   const [evaluationAttempt, setEvaluationAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -114,6 +115,14 @@ const MissionConversationHunt = () => {
     if (!completed) setCurrentCaseIndex(index => Math.min(index + 1, MISSION_01.cases.length - 1));
   };
 
+  const handleRetryMission = async () => {
+    setRetrying(true); setError('');
+    const { progress, error: saveError } = await saveMissionProgress({ userId: user.id, missionId: MISSION_01.id, responses: {}, status: 'in_progress' });
+    setRetrying(false);
+    if (saveError || !progress) { setError(`No pudimos reiniciar la misión: ${saveError || 'Error inesperado'}`); return; }
+    setResponses({}); setStatus('in_progress'); setEvaluation(null); setEvaluationError(''); setCurrentCaseIndex(0);
+  };
+
   if (loading) return <Layout><div className="flex min-h-[60vh] items-center justify-center gap-2 text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Preparando misión...</div></Layout>;
 
   if (status === 'completed' && isMissionComplete(responses)) {
@@ -127,7 +136,15 @@ const MissionConversationHunt = () => {
         {evaluation && <><div className="mt-6 grid gap-5 lg:grid-cols-[220px_1fr]"><div className="rounded-2xl border border-accent-coral/30 bg-accent-coral/5 p-6 text-center"><div className="text-xs font-black tracking-[0.16em] text-text-secondary">SET SCORE</div><div className="mt-2 text-6xl font-black text-accent-coral">{evaluation.setScore}</div><div className="text-sm font-bold text-text-secondary">/100</div>{evaluation.level && <div className="mt-4 rounded-full border border-border-subtle bg-bg-input px-3 py-2 text-xs font-black text-text-primary">{evaluation.level}</div>}</div><div className="rounded-2xl border border-accent-gold/30 bg-accent-gold/5 p-5 md:p-6"><div className="text-xs font-black tracking-[0.15em] text-accent-gold">TU PRINCIPAL OPORTUNIDAD</div><p className="mt-3 text-base font-bold leading-relaxed text-text-primary">{evaluation.mainOpportunity}</p><p className="mt-4 text-xs leading-relaxed text-text-secondary">Este score evalúa la calidad de tu razonamiento en esta misión. No mide tu valor profesional ni pretende que copies una respuesta modelo.</p></div></div><div className="mt-5 grid gap-4 md:grid-cols-2">{dimensionMeta.map(([key,label]) => <div key={key} className="rounded-2xl border border-border-subtle bg-bg-input/50 p-5"><div className="flex items-center justify-between gap-3"><div className="text-xs font-black text-text-primary">{label}</div><div className="text-xl font-black text-accent-coral">{evaluation.dimensions[key].score}<span className="text-xs text-text-secondary">/100</span></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-primary"><div className="h-full rounded-full bg-accent-coral" style={{width:`${evaluation.dimensions[key].score}%`}} /></div><p className="mt-4 text-sm leading-relaxed text-text-secondary">{evaluation.dimensions[key].feedback}</p></div>)}</div></>}
       </section>
       <div className="mt-6 space-y-6">{MISSION_01.cases.map((completedCase,index) => <article key={completedCase.id} className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-6"><div className="text-xs font-black tracking-[0.18em] text-accent-gold">CASO {index+1} · {completedCase.industry.toUpperCase()}</div>{completedCase.context && <div className="mt-2 text-xs font-bold text-text-secondary">CONTEXTO · {completedCase.context}</div>}<div className="mt-4 rounded-2xl rounded-tl-sm border border-border-subtle bg-bg-input px-4 py-3 text-sm leading-relaxed text-text-primary">{completedCase.leadMessage}</div><div className="mt-6 grid gap-4 lg:grid-cols-2"><section className="rounded-2xl border border-accent-coral/30 bg-accent-coral/5 p-4 md:p-5"><h2 className="text-xs font-black tracking-[0.18em] text-accent-coral">TU ANÁLISIS</h2><div className="mt-5 space-y-5">{MISSION_FIELDS.map(field => <div key={field.key}><div className="text-xs font-black text-text-secondary">{field.label}</div><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{responses[completedCase.id]?.[field.key]}</p></div>)}</div></section><section className="rounded-2xl border border-green-500/30 bg-green-500/5 p-4 md:p-5"><h2 className="text-xs font-black tracking-[0.14em] text-green-400">CRITERIO S.E.T. DE REFERENCIA</h2><p className="mt-2 text-xs leading-relaxed text-text-secondary">No es una respuesta para copiar. Es una referencia para contrastar tu criterio.</p><div className="mt-5 space-y-5">{MISSION_FIELDS.map(field => <div key={field.key}><div className="text-xs font-black text-text-secondary">{field.key==='movimiento'?'MOVIMIENTO SUGERIDO':field.label}</div><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{completedCase.reference[field.key]}</p></div>)}</div></section></div><section className="mt-4 rounded-2xl border border-accent-gold/30 bg-accent-gold/5 p-4 md:p-5"><div className="text-xs font-black tracking-[0.16em] text-accent-gold">AUTOEVALUACIÓN GUIADA</div><p className="mt-2 text-xs leading-relaxed text-text-secondary">No busques coincidir palabra por palabra. Revisa la calidad de tu razonamiento.</p><div className="mt-4 grid gap-3 md:grid-cols-2">{MISSION_FIELDS.map(field => <div key={field.key} className="rounded-xl border border-border-subtle bg-bg-card/70 p-4"><div className="text-xs font-black text-text-primary">{field.label}</div><p className="mt-2 text-xs leading-relaxed text-text-secondary">{completedCase.reflection[field.key]}</p></div>)}</div></section></article>)}</div>
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-between"><button onClick={() => navigate('/journey')} className="rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-secondary hover:text-text-primary">Volver a mi recorrido</button><button onClick={() => navigate('/simulate')} className="flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white">Seguir entrenando <ArrowRight size={16} /></button></div>
+      {error && <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <button onClick={() => navigate('/missions')} className="flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white">Siguiente misión <ArrowRight size={16} /></button>
+        <button onClick={handleRetryMission} disabled={retrying} className="flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-secondary hover:text-text-primary disabled:opacity-50">
+          {retrying ? <><Loader2 size={16} className="animate-spin" /> Reiniciando...</> : 'Reintentar esta misión'}
+        </button>
+        <button onClick={() => navigate('/journey')} className="rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-secondary hover:text-text-primary">Ver resumen semanal</button>
+        <button onClick={() => navigate('/simulate')} className="rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-secondary hover:text-text-primary">Seguir entrenando</button>
+      </div>
     </div></Layout>;
   }
 
