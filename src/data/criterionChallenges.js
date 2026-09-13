@@ -1,68 +1,77 @@
+// Banco de Retos de Criterio S.E.T. — uno por día de la semana, vinculado por
+// mission_id a data/dailyMissions.js. Cada reto tiene una mecánica distinta
+// (ver `type`, solo metadata visual — el render en Missions.jsx es genérico:
+// prompt + 4 opciones de opción única) y las 4 alternativas de cada uno están
+// balanceadas en longitud a propósito, para que la correcta no se delate por
+// ser el único párrafo largo. Los distractores son errores tácticos reales
+// (pitch apresurado, validar sin conectar con la emoción, preguntas cerradas
+// que matan la conversación, confundir curiosidad con dolor real) — no
+// opciones absurdas o vacías fáciles de descartar a simple vista.
 export const CRITERION_CHALLENGES = {
   daily_lunes_apertura_outbound: {
     type: 'multiple_choice',
-    label: 'Elige la mejor respuesta',
-    prompt: 'Un lead frío en Instagram te responde "¿Quién eres?" después de tu primer mensaje. ¿Cuál es la MEJOR respuesta?',
+    label: 'Apertura táctica',
+    prompt: 'Un lead frío en Instagram te responde "¿Quién eres?" después de tu primer mensaje. ¿Cuál es la MEJOR apertura?',
     options: [
-      { id: 'a', text: '¡Hola! Soy Camila, vendo el programa X, te va a encantar 🚀' },
-      { id: 'b', text: 'Vi que sigues a [referencia] y ayudo a personas como tú a [resultado concreto]. ¿Te interesa saber más?' },
-      { id: 'c', text: 'jaja buena pregunta, ¿tú quién eres? 😄' },
-      { id: 'd', text: 'Disculpa la molestia, ¿tienes 2 minutos para una llamada rápida?' },
+      { id: 'a', text: '¡Hola! Vi tu perfil y creo que puedo ayudarte a escalar tu negocio, tengo el programa perfecto para ti.' },
+      { id: 'b', text: 'Vi que sigues a [referencia] y ayudo a personas como tú a lograr [resultado concreto]. ¿Te cuento cómo?' },
+      { id: 'c', text: 'Soy especialista en ventas digitales, llevo años ayudando a emprendedores a multiplicar sus ingresos.' },
+      { id: 'd', text: 'Hola, ¿tienes 5 minutos para que te cuente sobre mi servicio? Es una oportunidad realmente increíble.' },
     ],
     correctId: 'b',
-    explanation: 'Da contexto específico (por qué le escribes) y valor concreto antes de pedir nada, sin sonar genérico ni evasivo.',
+    explanation: 'Da contexto específico (por qué le escribes a él) y un resultado concreto antes de pedir nada — las demás son variaciones de "muy comercial" o "demasiado genérica" que no distinguen al lead de cualquier otro contacto.',
   },
   daily_martes_objecion_precio: {
-    type: 'error_spotting',
-    label: 'Detecta el error',
-    prompt: 'El lead pregunta "¿Cuánto cuesta?". El setter responde: "Cuesta $1,500, pero si me dices que sí hoy te lo dejo en $1,000 🔥". ¿Cuál es el error principal?',
+    type: 'diagnostico_set',
+    label: 'Diagnóstico S.E.T.',
+    prompt: 'El lead escribe: "Llevo 3 meses metiéndole a anuncios y no sale nada, ya no sé qué más hacer." El setter responde: "Te entiendo, los anuncios pueden ser complicados. ¿Qué tipo de anuncios has probado?" ¿Qué elemento del método S.E.T. está FALTANDO en la respuesta del setter?',
     options: [
-      { id: 'a', text: 'Dar el precio exacto sin calificar antes' },
-      { id: 'b', text: 'Ofrecer un descuento inmediato sin que el lead haya mostrado ningún compromiso' },
-      { id: 'c', text: 'Usar un emoji en la respuesta' },
-      { id: 'd', text: 'Responder demasiado rápido' },
+      { id: 'a', text: 'Situación — el setter no indagó en qué consistían exactamente esos anuncios que probó.' },
+      { id: 'b', text: 'Emoción — el setter ignoró el desgaste y la frustración que el lead mostró, y fue directo a lo técnico.' },
+      { id: 'c', text: 'Transición — el setter no propuso ningún siguiente paso concreto después de la pregunta.' },
+      { id: 'd', text: 'Movimiento — el mensaje del setter sonó demasiado formal para el tono que usó el lead.' },
     ],
     correctId: 'b',
-    explanation: 'Regalar un descuento antes de que el lead diga o haga algo que lo justifique entrena al lead a esperar rebajas y devalúa la oferta.',
+    explanation: '"Ya no sé qué más hacer" es una señal emocional clara (desgaste, frustración) que el setter saltó por completo para ir directo a lo técnico — sin nombrarla o validarla, el lead siente que le hablan a un formulario, no a una persona.',
   },
   daily_miercoles_reactivacion: {
-    type: 'multiple_choice',
-    label: 'Elige la mejor respuesta',
-    prompt: 'Retomas a un lead que dejó de responder hace 5 días. ¿Cuál es la MEJOR apertura de reactivación?',
+    type: 'espejo_control',
+    label: 'Espejo + control',
+    prompt: 'El lead responde: "No sé, suena bien pero no tengo tiempo para esto ahorita." ¿Cuál es la MEJOR respuesta usando espejo + pregunta de control?',
     options: [
-      { id: 'a', text: '¿Sigues ahí? 👀' },
-      { id: 'b', text: 'Hola de nuevo, seguimos con la promo si te interesa' },
-      { id: 'c', text: 'Retomando donde quedamos: la última vez hablábamos de [tema]. ¿Sigue siendo prioridad para ti?' },
-      { id: 'd', text: 'Última oportunidad antes de cerrar cupos' },
+      { id: 'a', text: 'No hay problema, cuando tengas tiempo me avisas y seguimos platicando sobre el programa.' },
+      { id: 'b', text: '¿No tienes tiempo... para esto? Cuéntame, ¿qué es lo que más tiempo te está consumiendo ahora mismo?' },
+      { id: 'c', text: 'Entiendo que estás ocupado, pero este programa realmente te va a ahorrar tiempo a largo plazo.' },
+      { id: 'd', text: '¿Prefieres que hablemos la próxima semana o el mes que entra, cuando tengas más disponibilidad?' },
     ],
-    correctId: 'c',
-    explanation: 'Retomar desde el último punto real de la conversación reduce fricción y no obliga al lead a repetir contexto.',
+    correctId: 'b',
+    explanation: 'Repetir la objeción en forma de pregunta ("¿para esto?") abre la conversación en vez de cerrarla, y la pregunta de control busca la causa real. Las otras ceden la iniciativa, empujan el pitch sin conectar, o hacen una pregunta cerrada que solo pospone el tema sin explorarlo.',
   },
   daily_jueves_cierre_agenda: {
-    type: 'error_spotting',
-    label: 'Detecta el error',
-    prompt: 'El lead dice "suena interesante, cuéntame más". El setter responde: "Perfecto, ¿tienes disponibilidad mañana a las 3pm para la llamada?". ¿Cuál es el error?',
+    type: 'calificacion_bant',
+    label: 'Calificación ligera',
+    prompt: 'El lead escribe: "Vi el anuncio y se ve interesante, ¿cuánto cuesta?" sin dar más contexto. ¿Esto es dolor real o solo curiosidad?',
     options: [
-      { id: 'a', text: 'Proponer un horario específico' },
-      { id: 'b', text: 'Saltar directo a agendar sin haber dado la información que el lead pidió' },
-      { id: 'c', text: 'Usar la palabra "perfecto"' },
-      { id: 'd', text: 'Responder en el mismo mensaje' },
+      { id: 'a', text: 'Dolor real — preguntar el precio ya es una señal de que está listo para comprar el programa.' },
+      { id: 'b', text: 'Curiosidad — preguntar el precio sin mencionar su situación real todavía no confirma un dolor concreto.' },
+      { id: 'c', text: 'Dolor real — si no le interesara de verdad, no habría comentado el anuncio en primer lugar.' },
+      { id: 'd', text: 'Curiosidad — y por eso no vale la pena invertir más tiempo en intentar calificarlo.' },
     ],
     correctId: 'b',
-    explanation: 'El lead pidió más información, no una cita. Saltarse el microcompromiso intermedio genera resistencia.',
+    explanation: 'Preguntar el precio es apenas una señal de interés inicial, no una confirmación de dolor — hay que indagar su situación antes de asumir que ya está listo para comprar (o descartarlo, que es el error opuesto).',
   },
   daily_viernes_simulacro_libre: {
-    type: 'multiple_choice',
-    label: 'Elige la mejor respuesta',
-    prompt: 'El lead confirma: "sí, me interesa, ¿cómo seguimos?". ¿Cuál es la MEJOR respuesta?',
+    type: 'puente_agendamiento',
+    label: 'Puente al agendamiento',
+    prompt: 'El lead confirma: "Ok, me interesa, ¿cómo seguimos?" ¿Cuál es la MEJOR transición hacia agendar sin sonar desesperado?',
     options: [
-      { id: 'a', text: 'Genial, te paso el link de pago' },
-      { id: 'b', text: 'Perfecto. Para asegurarnos de que es lo correcto para ti, agendemos una llamada de 15 min: ¿mañana a las 4pm o el jueves a las 10am?' },
-      { id: 'c', text: '🙌🙌🙌' },
-      { id: 'd', text: 'Cualquier duda me dices' },
+      { id: 'a', text: '¡Genial! Aquí está el link de pago, cualquier duda que tengas me avisas sin problema.' },
+      { id: 'b', text: 'Perfecto. Para ver si encaja contigo, agendemos una llamada de 15 min: ¿mañana 4pm o jueves 10am?' },
+      { id: 'c', text: 'Qué bueno que te interesó, dame unos minutitos para prepararte toda la información y ya te escribo.' },
+      { id: 'd', text: 'Podemos agendar cuando tú quieras, dime nada más qué día y hora te acomoda mejor a ti.' },
     ],
     correctId: 'b',
-    explanation: 'Ofrece el siguiente paso concreto (agenda) con opciones específicas, sin saltar a la venta directa ni dejar la iniciativa en el lead.',
+    explanation: 'Ofrece el siguiente paso concreto (agenda) con opciones específicas de horario — sin saltar directo a la venta, sin quedar vago y sin dejar toda la iniciativa (y la estructura) en manos del lead.',
   },
 };
 

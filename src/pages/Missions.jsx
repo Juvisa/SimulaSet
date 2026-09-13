@@ -24,6 +24,35 @@ const STATUS_META = {
   completed: { label: 'Completada', className: 'bg-green-500/10 text-green-400' },
 };
 
+// Shuffle determinista por alumno+día: misma semilla → mismo orden siempre
+// para ese usuario ese día (no cambia entre renders/recargas), pero distinto
+// entre alumnos y entre días — así la posición de la opción correcta deja de
+// ser predecible sin depender de aleatoriedad real (que rompería la
+// consistencia visual si el componente se re-renderiza). El índice de
+// validación no se toca: la corrección sigue comparando por `option.id`
+// contra `challenge.correctId`, nunca por posición.
+const hashSeed = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+};
+
+const seededShuffle = (array, seed) => {
+  const result = [...array];
+  let state = seed || 1;
+  const next = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0xffffffff;
+  };
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
 const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initialCorrect, userId, isoDate, onAnswered }) => {
   const [selected, setSelected] = useState(initialAnswer || null);
   const [correct, setCorrect] = useState(initialCorrect ?? null);
@@ -50,6 +79,11 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
     setRevealed(false);
   };
 
+  const shuffledOptions = useMemo(
+    () => seededShuffle(challenge.options, hashSeed(`${userId}:${isoDate}:${missionId}`)),
+    [challenge, userId, isoDate, missionId],
+  );
+
   return (
     <section className="mb-6 rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
       <div className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-text-primary">
@@ -58,7 +92,7 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
       <p className="mt-3 text-sm leading-relaxed text-text-primary">{challenge.prompt}</p>
 
       <div className="mt-4 space-y-2">
-        {challenge.options.map((option) => {
+        {shuffledOptions.map((option) => {
           const isSelected = selected === option.id;
           const showResult = revealed;
           const isCorrectOption = option.id === challenge.correctId;
