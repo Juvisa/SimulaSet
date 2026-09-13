@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Brain, CheckCircle2, Flame, Link as LinkIcon, Loader2, Target, Upload, XCircle } from 'lucide-react';
+import { ArrowRight, Brain, CheckCircle2, Flame, Loader2, Target, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getDailyMissionByIsoWeekday } from '../data/dailyMissions';
@@ -10,9 +10,8 @@ import {
   getBestSimulatorScoreForDate,
   getWeekMissionProgress,
   markMissionInProgress,
-  submitDailyMissionEvidence,
+  completeDailyMission,
   submitCriterionAnswer,
-  uploadMissionEvidenceFile,
   getUserStreak,
 } from '../utils/dailyMissions';
 
@@ -107,83 +106,6 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
   );
 };
 
-const EvidenceForm = ({ initialUrl, initialNote, canAct, scoreQualifies, criterionCorrect, submitting, userId, isoDate, onSubmit }) => {
-  const [url, setUrl] = useState(initialUrl);
-  const [note, setNote] = useState(initialNote);
-  const [uploading, setUploading] = useState(false);
-  const [localError, setLocalError] = useState('');
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    setLocalError('');
-    const { url: uploadedUrl, error: uploadError } = await uploadMissionEvidenceFile({ userId, isoDate, file });
-    setUploading(false);
-    if (uploadError) { setLocalError(uploadError); return; }
-    setUrl(uploadedUrl);
-  };
-
-  return (
-    <section className="rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
-      <h3 className="text-xs font-black tracking-[0.16em] text-text-primary">ENTREGA DE EVIDENCIA</h3>
-      {!scoreQualifies && canAct && (
-        <p className="mt-2 text-xs text-text-secondary">Alcanza el SET Score mínimo en el simulador para poder enviar tu evidencia.</p>
-      )}
-      {scoreQualifies && !criterionCorrect && canAct && (
-        <p className="mt-2 text-xs text-text-secondary">Responde correctamente el Reto de Criterio de arriba para poder enviar tu evidencia.</p>
-      )}
-      {localError && <p className="mt-2 text-xs text-red-400">{localError}</p>}
-
-      <div className="mt-4 space-y-4">
-        <div>
-          <span className="text-xs font-bold text-text-primary">Captura o link de tu conversación</span>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5">
-              <LinkIcon size={14} className="shrink-0 text-text-secondary" />
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={!canAct}
-                placeholder="Pega el link de tu captura o conversación..."
-                className="w-full bg-transparent text-base md:text-sm text-text-primary outline-none placeholder:text-text-secondary disabled:opacity-60"
-              />
-            </div>
-            <label className={`flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-3 py-2.5 text-xs font-bold text-text-secondary transition-colors ${canAct ? 'cursor-pointer hover:text-text-primary' : 'cursor-not-allowed opacity-50'}`}>
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              Subir captura
-              <input type="file" accept="image/*" className="hidden" disabled={!canAct || uploading} onChange={handleFileChange} />
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <span className="text-xs font-bold text-text-primary">Nota sobre la objeción enfrentada</span>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={!canAct}
-            rows={3}
-            placeholder="¿Qué objeción o situación enfrentaste y cómo la manejaste?"
-            className="mt-2 w-full resize-y rounded-xl border border-border-subtle bg-bg-input px-3 py-2.5 text-base md:text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary focus:border-accent-coral disabled:opacity-60"
-          />
-        </div>
-
-        {canAct && (
-          <button
-            onClick={() => onSubmit(url, note)}
-            disabled={submitting || uploading || !scoreQualifies || !criterionCorrect || !url.trim() || !note.trim()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white transition-opacity disabled:opacity-40 sm:w-auto"
-          >
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Enviando...</> : 'Enviar evidencia y completar misión'}
-          </button>
-        )}
-      </div>
-    </section>
-  );
-};
-
 const Missions = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -259,16 +181,14 @@ const Missions = () => {
     navigate('/simulate');
   };
 
-  const handleSubmitEvidence = async (evidenceUrl, evidenceNote) => {
+  const handleCompleteMission = async () => {
     setSubmitting(true);
     setError('');
     setSuccessMsg('');
-    const { progress: saved, streak: newStreak, error: submitError } = await submitDailyMissionEvidence({
+    const { progress: saved, streak: newStreak, error: submitError } = await completeDailyMission({
       userId: user.id,
       isoDate: selectedDay.isoDate,
       missionId: mission.id,
-      evidenceUrl,
-      evidenceNote,
       setScoreAchieved: bestScoreToday,
       minSetScore: mission.minSetScore,
       xpReward: mission.xpReward,
@@ -290,7 +210,7 @@ const Missions = () => {
           <div>
             <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral">Entrenamiento diario</div>
             <h1 className="mt-2 text-3xl font-black text-text-primary md:text-4xl">Misiones Diarias</h1>
-            <p className="mt-2 text-sm text-text-secondary">Una misión por día, lunes a viernes. Practica, entrega evidencia y mantén tu racha.</p>
+            <p className="mt-2 text-sm text-text-secondary">Una misión por día, lunes a viernes. Responde el Reto de Criterio, practica en el simulador y mantén tu racha.</p>
           </div>
           {streak && (
             <div className="flex items-center gap-2 rounded-2xl border border-accent-gold/30 bg-accent-gold/5 px-4 py-2.5">
@@ -389,18 +309,27 @@ const Missions = () => {
               />
             )}
 
-            <EvidenceForm
-              key={selectedDay.isoDate}
-              initialUrl={progress?.evidence_url || ''}
-              initialNote={progress?.evidence_note || ''}
-              canAct={canAct}
-              scoreQualifies={scoreQualifies}
-              criterionCorrect={criterionCorrect}
-              submitting={submitting}
-              userId={user.id}
-              isoDate={selectedDay.isoDate}
-              onSubmit={handleSubmitEvidence}
-            />
+            {canAct && (
+              <section className="rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
+                <h3 className="text-xs font-black tracking-[0.16em] text-text-primary">CIERRE DE LA MISIÓN</h3>
+                {!criterionCorrect && (
+                  <p className="mt-2 text-xs text-text-secondary">Responde correctamente el Reto de Criterio de arriba para poder completar la misión.</p>
+                )}
+                {criterionCorrect && !scoreQualifies && (
+                  <p className="mt-2 text-xs text-text-secondary">Practica en el simulador hasta alcanzar el SET Score mínimo de hoy para completar la misión.</p>
+                )}
+                {criterionCorrect && scoreQualifies && (
+                  <p className="mt-2 text-xs font-bold text-green-400">✓ Cumples los dos requisitos. ¡Completa tu misión!</p>
+                )}
+                <button
+                  onClick={handleCompleteMission}
+                  disabled={submitting || !scoreQualifies || !criterionCorrect}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white transition-opacity disabled:opacity-40 sm:w-auto"
+                >
+                  {submitting ? <><Loader2 size={16} className="animate-spin" /> Completando...</> : 'Marcar misión como completada'}
+                </button>
+              </section>
+            )}
           </article>
         )}
 

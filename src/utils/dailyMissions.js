@@ -132,28 +132,26 @@ const applyStreakAndXp = async ({ userId, isoDate, xpReward }) => {
   return { streak: data || null, error: error?.message };
 };
 
-export const submitDailyMissionEvidence = async ({
-  userId, isoDate, missionId, evidenceUrl, evidenceNote, setScoreAchieved, minSetScore, xpReward,
-}) => {
-  if (!evidenceUrl?.trim() || !evidenceNote?.trim()) {
-    return { progress: null, streak: null, error: 'Agrega la evidencia y una nota sobre la objeción enfrentada.' };
+// Cierra la misión por el flujo formativo: Reto de Criterio respondido
+// correctamente + SET Score del día por encima del mínimo de la misión, sin
+// depender de evidencia subida por el alumno (ver justificación de producto:
+// los alumnos nuevos no tienen leads reales activos para capturar, y el
+// análisis de chats reales ya vive en sus propios módulos — Analizador IA y
+// Leads Reales — no en Misiones Diarias).
+export const completeDailyMission = async ({ userId, isoDate, missionId, setScoreAchieved, minSetScore, xpReward }) => {
+  const clampedScore = Number.isFinite(setScoreAchieved) ? Math.max(0, Math.min(100, Math.round(setScoreAchieved))) : null;
+  if (clampedScore === null || clampedScore < minSetScore) {
+    return { progress: null, streak: null, error: `Necesitas un SET Score válido (≥ ${minSetScore}) en el simulador para completar la misión de hoy.` };
   }
 
-  const clampedScore = Number.isFinite(setScoreAchieved) ? Math.max(0, Math.min(100, Math.round(setScoreAchieved))) : null;
-  const scoreQualifies = clampedScore !== null && clampedScore >= minSetScore;
-  const status = scoreQualifies ? 'completed' : 'in_review';
   const now = new Date().toISOString();
-
   const payload = {
     user_id: userId,
     mission_date: isoDate,
     mission_id: missionId,
-    status,
+    status: 'completed',
     set_score_achieved: clampedScore,
-    evidence_url: evidenceUrl.trim(),
-    evidence_note: evidenceNote.trim(),
-    submitted_at: now,
-    completed_at: status === 'completed' ? now : null,
+    completed_at: now,
   };
 
   const { data, error } = await supabase
@@ -162,14 +160,7 @@ export const submitDailyMissionEvidence = async ({
     .select(PROGRESS_SELECT)
     .single();
 
-  if (error || !data) return { progress: null, streak: null, error: error?.message || 'No pudimos guardar tu evidencia.' };
-  if (!scoreQualifies) {
-    return {
-      progress: data,
-      streak: null,
-      error: `Aún no detectamos un SET Score válido (≥ ${minSetScore}) para hoy. Tu evidencia quedó guardada en revisión.`,
-    };
-  }
+  if (error || !data) return { progress: null, streak: null, error: error?.message || 'No pudimos completar la misión.' };
 
   const { streak, error: streakError } = await applyStreakAndXp({ userId, isoDate, xpReward });
   return { progress: data, streak, error: streakError };
@@ -192,17 +183,6 @@ export const submitCriterionAnswer = async ({ userId, isoDate, missionId, answer
     .single();
 
   return { progress: data || null, error: error?.message };
-};
-
-const sanitizeFileName = (name) => name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-
-export const uploadMissionEvidenceFile = async ({ userId, isoDate, file }) => {
-  const path = `${userId}/${isoDate}-${Date.now()}-${sanitizeFileName(file.name)}`;
-  const { error: uploadError } = await supabase.storage.from('mission-evidence').upload(path, file, { upsert: false });
-  if (uploadError) return { url: null, error: uploadError.message };
-
-  const { data } = supabase.storage.from('mission-evidence').getPublicUrl(path);
-  return { url: data?.publicUrl || null, error: data?.publicUrl ? undefined : 'No pudimos generar el enlace de tu captura.' };
 };
 
 export const isValidDailyMissionStatus = (status) => VALID_STATUSES.has(status);
