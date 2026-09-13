@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { saveSession, updateUserStats } from '../utils/storage';
 import { saveSimulatorSession } from '../utils/simulatorSessions';
 import { getProjectById } from '../utils/projects';
 import { callClaude, generateProspectProfile } from '../utils/anthropic';
@@ -300,11 +299,9 @@ const Simulator = () => {
       prospectProfile,
       createdAt: new Date().toISOString(),
     };
-    saveSession(session);
-    const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) : 0;
-    updateUserStats(user.id, avg);
-    // Persistencia en Supabase (fuente de verdad del SET Score para Opportunity Hub).
-    // No se espera esta llamada para no retrasar la navegación al reporte.
+    // Persistencia en Supabase (fuente de verdad del SET Score para Opportunity Hub
+    // y para el gate de SET Score de Misiones Diarias). No se espera esta llamada
+    // para no retrasar la navegación al reporte.
     saveSimulatorSession({
       userId: user.id,
       projectId: config.projectId,

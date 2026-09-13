@@ -1,9 +1,4 @@
 import { supabase } from '../lib/supabase';
-import {
-  deleteProject as deleteLocalProject,
-  getProjects as getLocalProjects,
-  saveProject as saveLocalProject,
-} from './storage';
 
 const PROJECT_FIELDS = 'id, created_by, name, expert_name, niche, promise, price, avatar_business, avatar_current_situation, avatar_pain, avatar_desire, avatar_description, common_objections, testimonials, resources, recursos, created_at, updated_at';
 
@@ -67,45 +62,8 @@ const toDatabase = (project, { includeId = false, createdBy } = {}) => {
 
 const formatError = (error) => error?.message || 'Error inesperado al consultar proyectos.';
 
-export const migrateLocalProjects = async (userId) => {
-  const localProjects = getLocalProjects(userId);
-  if (!supabase || localProjects.length === 0) return { migrated: 0, errors: [] };
-
-  const ids = [...new Set(localProjects.map(project => project.id).filter(Boolean))];
-  const { data: existingRows, error: lookupError } = await supabase
-    .from('projects')
-    .select('id')
-    .in('id', ids);
-
-  if (lookupError) return { migrated: 0, errors: [formatError(lookupError)] };
-
-  const existingIds = new Set((existingRows || []).map(row => row.id));
-  let migrated = 0;
-  const errors = [];
-
-  for (const project of localProjects) {
-    if (!project.id || existingIds.has(project.id)) continue;
-    const { error } = await supabase
-      .from('projects')
-      .insert(toDatabase(project, { includeId: true, createdBy: userId }));
-
-    if (error) {
-      const uuidConflict = error.code === '23505';
-      errors.push(uuidConflict
-        ? `El UUID ${project.id} ya pertenece a otro proyecto y no fue sobrescrito.`
-        : `No se pudo migrar “${project.name || project.id}”: ${formatError(error)}`);
-      continue;
-    }
-    existingIds.add(project.id);
-    migrated += 1;
-  }
-
-  return { migrated, errors };
-};
-
 export const getProjects = async (userId) => {
-  const migration = await migrateLocalProjects(userId);
-  if (!supabase) return { projects: getLocalProjects(userId), error: 'Supabase no está configurado.', migrationErrors: migration.errors };
+  if (!supabase) return { projects: [], error: 'Supabase no está configurado.' };
 
   const { data, error } = await supabase
     .from('projects')
@@ -114,10 +72,8 @@ export const getProjects = async (userId) => {
     .eq('project_setters.active', true)
     .order('updated_at', { ascending: false });
 
-  if (error) {
-    return { projects: getLocalProjects(userId), error: formatError(error), migrationErrors: migration.errors };
-  }
-  return { projects: (data || []).map(fromDatabase), error: null, migrationErrors: migration.errors };
+  if (error) return { projects: [], error: formatError(error) };
+  return { projects: (data || []).map(fromDatabase), error: null };
 };
 
 export const getProjectById = async (id) => {
@@ -146,9 +102,7 @@ export const createProject = async (project, userId) => {
         : formatError(error),
     };
   }
-  const savedProject = fromDatabase(data);
-  saveLocalProject(savedProject);
-  return { project: savedProject, error: null };
+  return { project: fromDatabase(data), error: null };
 };
 
 export const updateProject = async (id, project) => {
@@ -161,9 +115,7 @@ export const updateProject = async (id, project) => {
     .single();
 
   if (error) return { project: null, error: formatError(error) };
-  const savedProject = fromDatabase(data);
-  saveLocalProject(savedProject);
-  return { project: savedProject, error: null };
+  return { project: fromDatabase(data), error: null };
 };
 
 const sanitizeFileName = (name) => name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
@@ -189,6 +141,5 @@ export const deleteProject = async (id) => {
 
   if (error) return { deletedId: null, error: formatError(error) };
   if (!data) return { deletedId: null, error: 'No tienes permiso para eliminar este proyecto.' };
-  deleteLocalProject(id);
   return { deletedId: data.id, error: null };
 };

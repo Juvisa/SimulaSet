@@ -1,5 +1,4 @@
 ﻿import { supabase } from '../lib/supabase';
-import { getSessions } from './storage';
 import { getUserStreak } from './xp';
 
 export { getUserStreak };
@@ -50,20 +49,24 @@ export const previousBusinessDayIso = (isoDate) => {
   return toIsoDate(date);
 };
 
-export const getBestSimulatorScoreForDate = (userId, isoDate) => {
-  const sessions = getSessions(userId).filter((session) => {
-    if (!session.createdAt) return false;
-    return toIsoDate(new Date(session.createdAt)) === isoDate;
-  });
-  if (sessions.length === 0) return null;
+// isoDate es un día calendario LOCAL (ver toIsoDate); se construyen los límites
+// de ese día en hora local y se convierten a ISO/UTC para filtrar created_at
+// (timestamptz) en simulator_sessions — la única fuente real de sesiones desde
+// que Simulator.jsx dejó de escribir también en localStorage.
+export const getBestSimulatorScoreForDate = async (userId, isoDate) => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
 
-  const scoresForSession = (session) => {
-    if (!Array.isArray(session.scores) || session.scores.length === 0) return 0;
-    const avg = session.scores.reduce((a, b) => a + b, 0) / session.scores.length;
-    return Math.round(avg * 10);
-  };
+  const { data, error } = await supabase
+    .from('simulator_sessions')
+    .select('average_score')
+    .eq('user_id', userId)
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString());
 
-  return Math.max(...sessions.map(scoresForSession));
+  if (error || !data || data.length === 0) return null;
+  return Math.max(...data.map((row) => row.average_score ?? 0));
 };
 
 export const getWeekMissionProgress = async ({ userId, isoDates }) => {

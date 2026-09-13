@@ -14,10 +14,10 @@ const Projects = () => {
 
   useEffect(() => {
     let active = true;
-    getProjects(user.id).then(({ projects: rows, error: queryError, migrationErrors }) => {
+    getProjects(user.id).then(({ projects: rows, error: queryError }) => {
       if (!active) return;
       setProjects(rows);
-      setError(migrationErrors[0] || queryError || '');
+      setError(queryError || '');
     });
     return () => { active = false; };
   }, [user.id]);

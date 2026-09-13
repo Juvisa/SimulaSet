@@ -118,6 +118,7 @@ const Missions = () => {
 
   const [progressByDate, setProgressByDate] = useState({});
   const [streak, setStreak] = useState(null);
+  const [bestScoreToday, setBestScoreToday] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -143,12 +144,17 @@ const Missions = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
 
+  useEffect(() => {
+    let active = true;
+    const eligible = selectedDay.isToday || selectedDay.isPast;
+    const scorePromise = eligible ? getBestSimulatorScoreForDate(user.id, selectedDay.isoDate) : Promise.resolve(null);
+    scorePromise.then((score) => { if (active) setBestScoreToday(score); });
+    return () => { active = false; };
+  }, [user.id, selectedDay.isoDate, selectedDay.isToday, selectedDay.isPast]);
+
   const progress = progressByDate[selectedDay.isoDate] || null;
   const status = progress?.status || 'pending';
   const completed = status === 'completed';
-  const bestScoreToday = (selectedDay.isToday || selectedDay.isPast)
-    ? getBestSimulatorScoreForDate(user.id, selectedDay.isoDate)
-    : null;
   const scoreQualifies = Number.isFinite(bestScoreToday) && bestScoreToday >= mission.minSetScore;
   const canAct = selectedDay.isToday && !completed;
   // El Reto de Criterio es un quiz de conocimiento, no requiere el SET Score del
