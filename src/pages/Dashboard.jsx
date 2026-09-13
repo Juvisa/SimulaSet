@@ -148,7 +148,13 @@ const Dashboard = () => {
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const levelInfo = getLevelInfo(user.level || 1);
-  const progress = getProgressToNext(user);
+  // Antes: getProgressToNext(user), que leía user.totalSessions/totalScore —
+  // campos que nunca existieron en profiles (solo en el viejo shape de
+  // localStorage), así que esto daba siempre 0% sin importar cuánto practicara
+  // el alumno. Ahora se le pasan las métricas reales: conteo real de
+  // simulator_sessions (sessions.length) y el mismo user.set_score que ya se
+  // muestra en la tarjeta de al lado.
+  const progress = getProgressToNext({ level: user.level || 1, sessions: sessions.length, avgScore: user.set_score || 0 });
   const avgScore = sessions.length > 0
     ? Math.round(sessions.reduce((sum, s) => sum + (s.averageScore || 0), 0) / sessions.length)
     : 0;
@@ -230,7 +236,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-7 mb-4">
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Nivel actual</div>
-              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-color-success/30 bg-color-success/10 px-2.5 py-1 text-sm md:text-lg font-bold text-color-success">SET Rookie 🌱</div>
+              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-color-success/30 bg-color-success/10 px-2.5 py-1 text-sm md:text-lg font-bold text-color-success">{levelInfo.name} {levelInfo.icon}</div>
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">SET Score</div>
@@ -238,11 +244,17 @@ const Dashboard = () => {
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Próximo nivel</div>
-              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-accent-gold/30 bg-accent-gold/10 px-2.5 py-1 text-sm md:text-lg font-bold text-accent-gold">SET Operator ⚡</div>
+              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-accent-gold/30 bg-accent-gold/10 px-2.5 py-1 text-sm md:text-lg font-bold text-accent-gold">{progress.next ? `${progress.next.name} ${progress.next.icon}` : 'Nivel máximo'}</div>
             </div>
           </div>
-          <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full w-[8%] bg-gradient-to-r from-accent-coral to-accent-gold rounded-full" /></div>
-          <p className="text-text-secondary text-xs mt-2">Estás a 3 entrenamientos de desbloquear tu primera insignia.</p>
+          <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-accent-coral to-accent-gold rounded-full transition-all duration-500" style={{ width: `${progress.percent}%` }} /></div>
+          <p className="text-text-secondary text-xs mt-2">
+            {!progress.next
+              ? '¡Alcanzaste el nivel máximo! 👑'
+              : progress.sessionsToGo > 0
+                ? `Estás a ${progress.sessionsToGo} entrenamiento${progress.sessionsToGo === 1 ? '' : 's'} de subir a ${progress.next.name}.`
+                : `Sube tu promedio a ${progress.next.minAvg}+ para subir a ${progress.next.name}.`}
+          </p>
         </div>
       </section>
 

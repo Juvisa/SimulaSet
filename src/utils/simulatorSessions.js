@@ -30,6 +30,18 @@ export const getSimulatorSessions = async (userId) => {
   };
 };
 
+// Conteo liviano (HEAD request, sin traer filas) para widgets que solo
+// necesitan el número total de sesiones — ej. la barra de progreso de nivel
+// en el Sidebar, visible en cada página.
+export const getSimulatorSessionCount = async (userId) => {
+  const { count, error } = await supabase
+    .from('simulator_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  return { count: count || 0, error: error?.message };
+};
+
 export const saveSimulatorSession = async ({ userId, projectId, projectName, mode, scores, finalState }) => {
   const averageScore = Array.isArray(scores) && scores.length > 0
     ? Math.max(0, Math.min(100, Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10)))

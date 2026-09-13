@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSeguimientosPendientes } from '../utils/followUps';
 import { getLevelInfo, getProgressToNext } from '../utils/levels';
+import { getSimulatorSessionCount } from '../utils/simulatorSessions';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
   BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles,
@@ -81,6 +82,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [pendingFollowUpCount, setPendingFollowUpCount] = useState(0);
+  const [sessionCount, setSessionCount] = useState(0);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -91,6 +93,13 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     refresh();
     const interval = setInterval(refresh, 5 * 60 * 1000);
     return () => { active = false; clearInterval(interval); };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let active = true;
+    getSimulatorSessionCount(user.id).then(({ count }) => { if (active) setSessionCount(count); });
+    return () => { active = false; };
   }, [user?.id]);
 
   const trainingItems = [
@@ -159,7 +168,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     .toUpperCase();
 
   const levelInfo = getLevelInfo(user?.level || 1);
-  const progress = getProgressToNext(user);
+  const progress = getProgressToNext({ level: user?.level || 1, sessions: sessionCount, avgScore: user?.set_score || 0 });
 
   return (
     <>

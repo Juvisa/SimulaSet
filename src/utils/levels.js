@@ -22,21 +22,29 @@ export const deriveLevelFromStats = (sessions, avgScore) => {
   return result;
 };
 
-export const getProgressToNext = (user) => {
-  const level = Number.isFinite(user?.level) ? user.level : 1;
-  const totalSessions = Number.isFinite(user?.totalSessions) ? user.totalSessions : 0;
-  const totalScore = Number.isFinite(user?.totalScore) ? user.totalScore : 0;
-  const next = LEVELS.find(item => item.level === level + 1);
-  if (!next) return { percent: 100, label: 'Nivel máximo alcanzado' };
+// Antes recibía el objeto `user` completo y leía user.totalSessions/totalScore
+// — campos del viejo shape de localStorage (simulaset_users) que NUNCA
+// existieron en profiles (PROFILE_FIELDS de AuthContext no los incluye), así
+// que esto daba siempre 0% sin importar cuánto practicara el alumno. Ahora
+// recibe explícitamente las métricas reales: sessions = conteo real de
+// simulator_sessions, avgScore = profiles.set_score (mismo dato que ya se
+// muestra en pantalla).
+export const getProgressToNext = ({ level, sessions, avgScore }) => {
+  const currentLevel = Number.isFinite(level) ? level : 1;
+  const totalSessions = Number.isFinite(sessions) ? sessions : 0;
+  const avg = Number.isFinite(avgScore) ? avgScore : 0;
+  const next = LEVELS.find(item => item.level === currentLevel + 1);
+  if (!next) return { percent: 100, label: 'Nivel máximo alcanzado', next: null };
 
-  const avg = totalSessions > 0 ? totalScore / totalSessions : 0;
   const sessionPct = Math.min(100, (totalSessions / next.minSessions) * 100);
   const avgPct = Math.min(100, (avg / next.minAvg) * 100);
   const percent = Math.round((sessionPct + avgPct) / 2);
+  const sessionsToGo = Math.max(0, next.minSessions - totalSessions);
 
   return {
     percent,
     label: `${next.name}: ${totalSessions}/${next.minSessions} sesiones, promedio ${Math.round(avg)}/${next.minAvg}`,
+    sessionsToGo,
     next,
   };
 };

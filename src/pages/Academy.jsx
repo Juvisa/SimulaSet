@@ -189,6 +189,18 @@ const Academy = () => {
   const startProgressPercent = Math.round((completedCount / lessons.length) * 100);
   const startCompleted = completedCount === lessons.length;
 
+  // "Progreso del programa" agrega TODAS las clases publicadas (Módulo 0 +
+  // semanas + labs + módulos adicionales), no solo el Módulo 0 — antes este
+  // bloque estaba fijo en "0%" sin leer `progress` en absoluto.
+  const allLessonKeys = [
+    ...lessons.map(lesson => progressKey(START_MODULE_ID, lesson.id)),
+    ...weekGroups.flatMap(group => group.lessons.map(lesson => progressKey(group.moduleId, lesson.id))),
+    ...labLessons.map(lesson => progressKey('practical-labs', lesson.id)),
+    ...additionalModuleGroups.flatMap(group => group.lessons.map(lesson => progressKey(group.moduleId, lesson.id))),
+  ];
+  const totalCompletedCount = allLessonKeys.filter(key => progress[key] === 'completed').length;
+  const overallProgressPercent = allLessonKeys.length > 0 ? Math.round((totalCompletedCount / allLessonKeys.length) * 100) : 0;
+
   const handleMarkComplete = async (moduleId, lessonId) => {
     const key = progressKey(moduleId, lessonId);
     const wasCompleted = progress[key] === 'completed';
@@ -311,10 +323,10 @@ const Academy = () => {
       <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 mb-6">
         <div className="flex justify-between text-sm mb-3">
           <span className="font-semibold text-text-primary">Progreso del programa</span>
-          <span className="font-black text-accent-coral">0%</span>
+          <span className="font-black text-accent-coral">{overallProgressPercent}%</span>
         </div>
         <div className="h-2 bg-bg-input rounded-full overflow-hidden">
-          <div className="h-full bg-accent-coral rounded-full" style={{ width: '0%' }} />
+          <div className="h-full bg-accent-coral rounded-full transition-all duration-500" style={{ width: `${overallProgressPercent}%` }} />
         </div>
       </div>
 

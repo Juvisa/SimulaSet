@@ -108,10 +108,19 @@ function calcularCurvaProgreso(sesiones) {
     if (!porSemana[sem]) porSemana[sem] = [];
     porSemana[sem].push(sessionScore(s));
   });
-  return Object.entries(porSemana)
+  const semanas = Object.entries(porSemana)
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-8) // last 8 weeks
     .map(([semana, sc]) => ({ semana, promedio: avg(sc) }));
+
+  // Con menos de 3 semanas distintas, una curva agregada por semana no tiene
+  // sentido (1-2 puntos no muestran tendencia) — antes esto hacía que
+  // Analytics.jsx mostrara el empty state "practica al menos 3 sesiones"
+  // incluso con 4+ sesiones reales, solo porque todas cayeron en la MISMA
+  // semana calendario. Con menos de 3 semanas se usa la curva por sesión
+  // individual en su lugar, que sí refleja el progreso ya hecho.
+  if (semanas.length >= 3) return semanas;
+  return sesiones.slice(-8).map((s, index) => ({ semana: `#${index + 1}`, promedio: sessionScore(s) }));
 }
 
 function calcularMetricasLeads(leads) {
