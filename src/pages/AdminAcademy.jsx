@@ -74,6 +74,7 @@ const AdminAcademy = () => {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [saveRawError, setSaveRawError] = useState(null);
   const [deletingLessonId, setDeletingLessonId] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [videoFile, setVideoFile] = useState(null);
@@ -100,6 +101,7 @@ const AdminAcademy = () => {
     setEditingLesson(null);
     setForm({ ...EMPTY_FORM, resources: [] });
     setSaveError('');
+    setSaveRawError(null);
     setVideoFile(null);
     setUploadError('');
     setUploadProgress(0);
@@ -119,6 +121,7 @@ const AdminAcademy = () => {
       published: lesson.published,
     });
     setSaveError('');
+    setSaveRawError(null);
     setVideoFile(null);
     setUploadError('');
     setUploadProgress(0);
@@ -200,6 +203,8 @@ const AdminAcademy = () => {
       published: form.published,
     };
 
+    console.error('[AdminAcademy] handleSubmit → payload construido:', payload);
+
     const result = editingLesson
       ? await updateAcademyLesson(editingLesson.id, payload)
       : await createAcademyLesson({
@@ -208,11 +213,15 @@ const AdminAcademy = () => {
         lesson_id: normalizedLessonId,
       });
 
+    console.error('[AdminAcademy] handleSubmit → resultado:', result);
+
     setSaving(false);
     if (result.error || !result.lesson) {
       setSaveError(`No se pudo guardar la clase: ${result.error || 'Respuesta inesperada'}`);
+      setSaveRawError(result.rawError || null);
       return;
     }
+    setSaveRawError(null);
 
     setLessons(current => sortLessons(editingLesson
       ? current.map(lesson => lesson.id === result.lesson.id ? result.lesson : lesson)
@@ -375,6 +384,12 @@ const AdminAcademy = () => {
         </label>
       </div>
       {saveError && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{saveError}</div>}
+      {saveRawError && (
+        <div className="mt-2 overflow-x-auto rounded-xl border border-red-500/20 bg-black/30 p-3">
+          <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-red-400/80">Error crudo de Supabase (sin filtros)</p>
+          <pre className="whitespace-pre-wrap break-all text-xs text-red-300/90">{JSON.stringify(saveRawError, null, 2)}</pre>
+        </div>
+      )}
       <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <button type="button" onClick={closeForm} disabled={saving} className="min-h-12 w-full rounded-xl bg-bg-input px-5 text-sm font-bold text-text-primary disabled:opacity-50 sm:w-auto">Cancelar</button>
         <button type="submit" disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto">

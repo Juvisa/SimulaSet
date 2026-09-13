@@ -16,6 +16,13 @@ const friendlyError = (error) => {
   return error.message || 'Error inesperado al guardar la clase.';
 };
 
+// Objeto de error crudo de PostgREST/Postgres (code, message, details, hint)
+// para mostrarlo sin filtrar en pantalla y en consola — friendlyError() solo
+// da un resumen legible, esto es lo que realmente devolvió Supabase.
+const toRawError = (error) => error
+  ? { code: error.code || null, message: error.message || null, details: error.details || null, hint: error.hint || null }
+  : null;
+
 export const getAllAcademyLessons = async () => {
   try {
     const { data, error } = await supabase
@@ -35,50 +42,62 @@ export const getAllAcademyLessons = async () => {
 };
 
 export const createAcademyLesson = async (lesson) => {
+  const payload = {
+    course_id: 'set-academy',
+    module_id: lesson.module_id,
+    lesson_id: lesson.lesson_id,
+    title: lesson.title,
+    description: lesson.description,
+    position: lesson.position,
+    topics: lesson.topics,
+    resources: lesson.resources,
+    published: lesson.published,
+    scheduled_at: lesson.scheduled_at,
+  };
+  console.error('[adminAcademyLessons] createAcademyLesson → payload enviado a Supabase:', payload);
   try {
     const { data, error } = await supabase
       .from('academy_lessons')
-      .insert({
-        course_id: 'set-academy',
-        module_id: lesson.module_id,
-        lesson_id: lesson.lesson_id,
-        title: lesson.title,
-        description: lesson.description,
-        position: lesson.position,
-        topics: lesson.topics,
-        resources: lesson.resources,
-        published: lesson.published,
-        scheduled_at: lesson.scheduled_at,
-      })
+      .insert(payload)
       .select(ADMIN_LESSON_FIELDS)
       .single();
 
-    return { lesson: data || null, error: friendlyError(error) };
+    if (error) console.error('[adminAcademyLessons] createAcademyLesson → error de Supabase:', error);
+    else console.error('[adminAcademyLessons] createAcademyLesson → insert OK:', data);
+
+    return { lesson: data || null, error: friendlyError(error), rawError: toRawError(error) };
   } catch (error) {
-    return { lesson: null, error: error instanceof Error ? error.message : 'Error inesperado' };
+    console.error('[adminAcademyLessons] createAcademyLesson → excepción:', error);
+    return { lesson: null, error: error instanceof Error ? error.message : 'Error inesperado', rawError: null };
   }
 };
 
 export const updateAcademyLesson = async (id, lesson) => {
+  const payload = {
+    title: lesson.title,
+    description: lesson.description,
+    position: lesson.position,
+    topics: lesson.topics,
+    resources: lesson.resources,
+    published: lesson.published,
+    scheduled_at: lesson.scheduled_at,
+  };
+  console.error('[adminAcademyLessons] updateAcademyLesson → payload enviado a Supabase:', { id, ...payload });
   try {
     const { data, error } = await supabase
       .from('academy_lessons')
-      .update({
-        title: lesson.title,
-        description: lesson.description,
-        position: lesson.position,
-        topics: lesson.topics,
-        resources: lesson.resources,
-        published: lesson.published,
-        scheduled_at: lesson.scheduled_at,
-      })
+      .update(payload)
       .eq('id', id)
       .select(ADMIN_LESSON_FIELDS)
       .single();
 
-    return { lesson: data || null, error: friendlyError(error) };
+    if (error) console.error('[adminAcademyLessons] updateAcademyLesson → error de Supabase:', error);
+    else console.error('[adminAcademyLessons] updateAcademyLesson → update OK:', data);
+
+    return { lesson: data || null, error: friendlyError(error), rawError: toRawError(error) };
   } catch (error) {
-    return { lesson: null, error: error instanceof Error ? error.message : 'Error inesperado' };
+    console.error('[adminAcademyLessons] updateAcademyLesson → excepción:', error);
+    return { lesson: null, error: error instanceof Error ? error.message : 'Error inesperado', rawError: null };
   }
 };
 
