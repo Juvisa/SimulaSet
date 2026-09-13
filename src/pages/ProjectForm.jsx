@@ -17,6 +17,8 @@ const emptyRecursos = () => ({
   scripts_apertura: { outbound: '', inbound: '', reactivacion: '' },
 });
 
+const WHEN_OPTIONS = ['inbound', 'reactivacion', 'seguimiento', 'outbound'];
+
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
 const SELECT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary text-sm focus:border-accent-coral transition-colors";
@@ -439,6 +441,8 @@ ${form.avatarDescription ? 'Detalles adicionales: ' + form.avatarDescription : '
                       <option value="video">Video</option>
                       <option value="clase">Clase</option>
                       <option value="ebook">Ebook</option>
+                      <option value="checklist">Checklist</option>
+                      <option value="plantilla">Plantilla</option>
                     </select>
                   </div>
                 </div>
@@ -466,12 +470,25 @@ ${form.avatarDescription ? 'Detalles adicionales: ' + form.avatarDescription : '
                 </div>
                 <div>
                   <label className={LABEL}>¿Para qué momento usarlo?</label>
-                  <select value={r.when} onChange={e => updateResource(idx, 'when', e.target.value)} className={SELECT}>
+                  <select
+                    value={WHEN_OPTIONS.includes(r.when) ? r.when : 'otro'}
+                    onChange={e => updateResource(idx, 'when', e.target.value === 'otro' ? '' : e.target.value)}
+                    className={SELECT}
+                  >
                     <option value="inbound">Inbound (antes de la llamada)</option>
                     <option value="reactivacion">Reactivación</option>
                     <option value="seguimiento">Seguimiento general</option>
                     <option value="outbound">Outbound</option>
+                    <option value="otro">Personalizado / Otro</option>
                   </select>
+                  {!WHEN_OPTIONS.includes(r.when) && (
+                    <input
+                      value={r.when}
+                      onChange={e => updateResource(idx, 'when', e.target.value)}
+                      className={`${INPUT} mt-2`}
+                      placeholder="Describe el momento, ej: 'Antes de la llamada de cierre'"
+                    />
+                  )}
                 </div>
               </div>
             ))}

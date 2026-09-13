@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
 import { getRealLeads } from '../utils/realLeads';
+import { uploadAvatarFile } from '../utils/avatar';
 import Layout from '../components/Layout';
-import { Lock, LogOut, Check, AlertTriangle } from 'lucide-react';
+import { Lock, LogOut, Check, AlertTriangle, Camera, Loader2 } from 'lucide-react';
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors outline-none";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
@@ -17,7 +18,7 @@ const NIVEL_LABELS = {
 };
 
 const Profile = () => {
-  const { user, logout, updatePassword } = useAuth();
+  const { user, logout, updatePassword, updateAvatar } = useAuth();
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [pwError, setPwError] = useState('');
@@ -25,6 +26,9 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +48,24 @@ const Profile = () => {
     if (!user.created_at) return 'N/A';
     return new Date(user.created_at).toLocaleDateString('es', { month: 'long', year: 'numeric' });
   })();
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAvatarError('');
+    setAvatarUploading(true);
+    const { url, error: uploadError } = await uploadAvatarFile({ userId: user.id, file });
+    if (uploadError || !url) {
+      setAvatarUploading(false);
+      setAvatarError(uploadError || 'No pudimos subir tu foto.');
+      return;
+    }
+    const { error: saveError } = await updateAvatar(url);
+    setAvatarUploading(false);
+    if (saveError) { setAvatarError(saveError); return; }
+    setAvatarFailed(false);
+  };
 
   const handleChangePw = async (e) => {
     e.preventDefault();
@@ -68,9 +90,24 @@ const Profile = () => {
         {/* Avatar + info */}
         <div className="bg-bg-card border border-border-subtle rounded-2xl p-6 mb-4">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 rounded-full bg-accent-coral/20 border border-accent-coral/30 flex items-center justify-center text-xl font-black text-accent-coral flex-shrink-0">
-              {(user.name || '?')[0].toUpperCase()}
-            </div>
+            <label className="relative w-14 h-14 flex-shrink-0 cursor-pointer group">
+              {user.avatar_url && !avatarFailed ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.name}
+                  onError={() => setAvatarFailed(true)}
+                  className="w-14 h-14 rounded-full object-cover border border-accent-coral/30"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-accent-coral/20 border border-accent-coral/30 flex items-center justify-center text-xl font-black text-accent-coral">
+                  {(user.name || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                {avatarUploading ? <Loader2 size={16} className="animate-spin text-white" /> : <Camera size={16} className="text-white" />}
+              </div>
+              <input type="file" accept="image/*" className="hidden" disabled={avatarUploading} onChange={handleAvatarChange} />
+            </label>
             <div>
               <div className="font-bold text-text-primary text-lg">{user.name}</div>
               <div className="text-text-secondary text-sm">{user.email}</div>
@@ -80,6 +117,11 @@ const Profile = () => {
               </div>
             </div>
           </div>
+          {avatarError && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 mb-3 text-red-400 text-xs">
+              <AlertTriangle size={12} /> {avatarError}
+            </div>
+          )}
           <div className="text-xs text-text-secondary border-t border-border-subtle pt-3">
             Miembro desde {fechaRegistro}
           </div>

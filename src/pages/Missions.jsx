@@ -229,6 +229,14 @@ const Missions = () => {
     : null;
   const scoreQualifies = Number.isFinite(bestScoreToday) && bestScoreToday >= mission.minSetScore;
   const canAct = selectedDay.isToday && !completed;
+  // El Reto de Criterio es un quiz de conocimiento, no requiere el SET Score del
+  // día ni bloquear días pasados como "Ir a Simular"/evidencia (que sí exigen
+  // hoy): se puede responder hoy o en cualquier día ya transcurrido de la
+  // semana, igual que bestScoreToday ya permite consultar el score de días
+  // pasados. Si no fuera así, un alumno que abre la app en fin de semana (sin
+  // ningún día marcado "hoy" en el selector lunes-viernes) nunca podría
+  // interactuar con el reto de un día pendiente.
+  const canAnswerCriterion = (selectedDay.isToday || selectedDay.isPast) && !completed;
   const modeColor = MODE_COLORS[mission.mode] || '#E0605E';
   const challenge = getCriterionChallengeByMissionId(mission.id);
   const criterionCorrect = progress?.criterion_correct === true;
@@ -372,7 +380,7 @@ const Missions = () => {
                 key={`challenge-${selectedDay.isoDate}`}
                 challenge={challenge}
                 missionId={mission.id}
-                canAct={canAct}
+                canAct={canAnswerCriterion}
                 initialAnswer={progress?.criterion_answer || null}
                 initialCorrect={progress?.criterion_correct ?? null}
                 userId={user.id}

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext(null);
-const PROFILE_FIELDS = 'id, email, name, role, level, set_score, active, created_at';
+const PROFILE_FIELDS = 'id, email, name, role, level, set_score, active, created_at, avatar_url';
 
 const fetchProfile = async (userId) => supabase
   .from('profiles')
@@ -133,6 +133,14 @@ export const AuthProvider = ({ children }) => {
     return { user: data, error: error?.message };
   };
 
+  const updateAvatar = async (avatarUrl) => {
+    if (!supabase) return { error: 'Supabase no está configurado.' };
+    const { data, error } = await supabase.from('profiles')
+      .update({ avatar_url: avatarUrl }).eq('id', user.id).select(PROFILE_FIELDS).single();
+    if (!error) setUser(current => ({ ...current, ...data }));
+    return { user: data, error: error?.message };
+  };
+
   const updatePassword = async (password) => {
     if (!supabase) return { error: 'Supabase no está configurado.' };
     const { error } = await supabase.auth.updateUser({ password });
@@ -183,7 +191,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updatePassword, requestPasswordReset, completeOnboarding, loading, authError }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updateAvatar, updatePassword, requestPasswordReset, completeOnboarding, loading, authError }}>
       {children}
     </AuthContext.Provider>
   );
