@@ -8,6 +8,20 @@ export const LEVELS = [
 
 export const getLevelInfo = (level) => LEVELS.find(item => item.level === level) || LEVELS[0];
 
+// Deriva el nivel a partir de métricas reales (sesiones + SET Score promedio)
+// en vez de un profiles.level ya guardado — útil para mostrar la insignia de
+// OTRO alumno (ej. el autor de un post en SET WINS) a partir de lo que expone
+// leaderboard_stats, sin depender de que ese cálculo esté replicado ahí.
+export const deriveLevelFromStats = (sessions, avgScore) => {
+  const totalSessions = Number.isFinite(sessions) ? sessions : 0;
+  const avg = Number.isFinite(avgScore) ? avgScore : 0;
+  let result = LEVELS[0];
+  LEVELS.forEach(item => {
+    if (totalSessions >= item.minSessions && avg >= item.minAvg) result = item;
+  });
+  return result;
+};
+
 export const getProgressToNext = (user) => {
   const level = Number.isFinite(user?.level) ? user.level : 1;
   const totalSessions = Number.isFinite(user?.totalSessions) ? user.totalSessions : 0;

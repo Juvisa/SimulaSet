@@ -8,7 +8,8 @@ export const POST_TYPES = {
   criterio: { label: 'Criterio / Hallazgo', emoji: '💡', xp: 20, color: '#2563EB' },
 };
 
-const POST_SELECT = 'id, user_id, author_name, post_type, content, niche, evidence_url, created_at';
+const POST_SELECT = 'id, user_id, author_name, post_type, content, niche, victory_type, evidence_url, created_at';
+const AUTHOR_STATS_SELECT = 'user_id, avatar_url, set_score, simulaciones_realizadas';
 
 const sanitizeFileName = (name) => name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
 
@@ -43,10 +44,17 @@ export const getFeed = async ({ limit = 30 } = {}) => {
   if (!posts || posts.length === 0) return { posts: [], error: undefined };
 
   const postIds = posts.map((p) => p.id);
+  const authorIds = [...new Set(posts.map((p) => p.user_id))];
 
-  const [{ data: reactions }, { data: comments }] = await Promise.all([
+  // leaderboard_stats (ver getWeeklyVictoryLeaderboard) resuelve avatar + SET
+  // Score + sesiones de CUALQUIER autor del feed sin chocar con la RLS de
+  // profiles, que bloquea leer perfiles ajenos para un alumno regular. Si un
+  // autor no aparece ahí (ej. admin, cuenta inactiva), el post simplemente
+  // no trae avatar/insignia y el frontend cae al círculo de iniciales.
+  const [{ data: reactions }, { data: comments }, { data: authorStats }] = await Promise.all([
     supabase.from('community_post_reactions').select('post_id, user_id').in('post_id', postIds),
     supabase.from('community_post_comments').select('id, post_id').in('post_id', postIds),
+    supabase.from('leaderboard_stats').select(AUTHOR_STATS_SELECT).in('user_id', authorIds),
   ]);
 
   const fireCountByPost = {};
@@ -57,13 +65,20 @@ export const getFeed = async ({ limit = 30 } = {}) => {
   (comments || []).forEach((c) => {
     commentCountByPost[c.post_id] = (commentCountByPost[c.post_id] || 0) + 1;
   });
+  const statsByAuthor = Object.fromEntries((authorStats || []).map((s) => [s.user_id, s]));
 
   return {
-    posts: posts.map((post) => ({
-      ...post,
-      fireCount: fireCountByPost[post.id] || 0,
-      commentCount: commentCountByPost[post.id] || 0,
-    })),
+    posts: posts.map((post) => {
+      const stats = statsByAuthor[post.user_id];
+      return {
+        ...post,
+        fireCount: fireCountByPost[post.id] || 0,
+        commentCount: commentCountByPost[post.id] || 0,
+        authorAvatarUrl: stats?.avatar_url || null,
+        authorSetScore: stats?.set_score ?? null,
+        authorSessions: stats?.simulaciones_realizadas ?? null,
+      };
+    }),
     error: undefined,
   };
 };
@@ -79,10 +94,10 @@ export const getMyReactions = async ({ userId, postIds }) => {
   return { reactedPostIds: new Set((data || []).map((r) => r.post_id)), error: undefined };
 };
 
-export const createPost = async ({ userId, authorName, postType, content, niche, evidenceUrl }) => {
+export const createPost = async ({ userId, authorName, postType, content, niche, victoryType, evidenceUrl }) => {
   if (!content?.trim()) return { post: null, error: 'Escribe el contenido de tu publicación.' };
-  if (postType === 'victoria' && (!niche?.trim() || !evidenceUrl?.trim())) {
-    return { post: null, error: 'Para una Victoria necesitas nicho y captura/link.' };
+  if (postType === 'victoria' && (!niche?.trim() || !victoryType?.trim() || !evidenceUrl?.trim())) {
+    return { post: null, error: 'Para una Victoria necesitas nicho, tipo de logro y captura/link.' };
   }
 
   const payload = {
@@ -91,6 +106,7 @@ export const createPost = async ({ userId, authorName, postType, content, niche,
     post_type: postType,
     content: content.trim(),
     niche: niche?.trim() || null,
+    victory_type: postType === 'victoria' ? victoryType?.trim() || null : null,
     evidence_url: evidenceUrl?.trim() || null,
   };
 

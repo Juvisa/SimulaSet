@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
   Trophy, LifeBuoy, Lightbulb, Flame, MessageCircle, Link as LinkIcon,
-  Upload, Loader2, Send, Crown, Trash2,
+  Upload, Loader2, Send, Crown, Trash2, Copy, Check,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { deriveLevelFromStats } from '../utils/levels';
 import {
   POST_TYPES, formatRelativeTime, getFeed, getMyReactions, createPost,
   uploadPostEvidenceFile, toggleFireReaction, getComments, addComment, getWeeklyVictoryLeaderboard,
@@ -23,14 +24,29 @@ const CONTENT_LABEL = {
   criterio: '¿Qué ajuste táctico funcionó?',
 };
 
+const VICTORY_TYPES = [
+  { key: 'llamada_agendada', label: 'Llamada Agendada' },
+  { key: 'comision_generada', label: 'Comisión Generada' },
+  { key: 'hito_simulador', label: 'Hito en Simulador' },
+  { key: 'otro', label: 'Otro Logro' },
+];
+const VICTORY_TYPE_LABELS = Object.fromEntries(VICTORY_TYPES.map((v) => [v.key, v.label]));
+
 const getInitials = (name) => (name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
 const isImageUrl = (url) => /\.(png|jpe?g|gif|webp)$/i.test(url || '');
+
+const buildAchievementShareText = (post) => {
+  const typeLabel = VICTORY_TYPE_LABELS[post.victory_type] || 'Victoria';
+  const heading = post.niche ? `${typeLabel} · ${post.niche}` : typeLabel;
+  return `🔥 ¡Victoria desbloqueada en Terminal Táctica! ${heading}\n${post.content}`;
+};
 
 const Composer = ({ userId, authorName, onPosted }) => {
   const [activeTab, setActiveTab] = useState('victoria');
   const [content, setContent] = useState('');
   const [niche, setNiche] = useState('');
+  const [victoryType, setVictoryType] = useState('');
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -40,6 +56,7 @@ const Composer = ({ userId, authorName, onPosted }) => {
     setActiveTab(key);
     setContent('');
     setNiche('');
+    setVictoryType('');
     setEvidenceUrl('');
     setError('');
   };
@@ -59,17 +76,21 @@ const Composer = ({ userId, authorName, onPosted }) => {
     setPosting(true);
     setError('');
     const { post, error: postError } = await createPost({
-      userId, authorName, postType: activeTab, content, niche: activeTab === 'victoria' ? niche : '', evidenceUrl,
+      userId, authorName, postType: activeTab, content,
+      niche: activeTab === 'victoria' ? niche : '',
+      victoryType: activeTab === 'victoria' ? victoryType : '',
+      evidenceUrl,
     });
     setPosting(false);
     if (postError) { setError(postError); return; }
     onPosted(post, POST_TYPES[activeTab].xp);
     setContent('');
     setNiche('');
+    setVictoryType('');
     setEvidenceUrl('');
   };
 
-  const canPublish = content.trim() && (activeTab !== 'victoria' || (niche.trim() && evidenceUrl.trim()));
+  const canPublish = content.trim() && (activeTab !== 'victoria' || (niche.trim() && victoryType.trim() && evidenceUrl.trim()));
 
   return (
     <div className="rounded-3xl border border-border-subtle bg-bg-card p-5 md:p-6">
@@ -96,12 +117,22 @@ const Composer = ({ userId, authorName, onPosted }) => {
 
       <div className="mt-5 space-y-3">
         {activeTab === 'victoria' && (
-          <input
-            value={niche}
-            onChange={(e) => setNiche(e.target.value)}
-            placeholder="Nicho (ej. Coaching de negocios, Fitness online...)"
-            className="w-full rounded-xl border border-border-subtle bg-bg-input px-3.5 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-secondary focus:border-accent-coral"
-          />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={victoryType}
+              onChange={(e) => setVictoryType(e.target.value)}
+              className="w-full rounded-xl border border-border-subtle bg-bg-input px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent-coral sm:w-56"
+            >
+              <option value="" disabled>Tipo de logro...</option>
+              {VICTORY_TYPES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+            </select>
+            <input
+              value={niche}
+              onChange={(e) => setNiche(e.target.value)}
+              placeholder="Nicho (ej. Coaching de negocios, Fitness online...)"
+              className="w-full flex-1 rounded-xl border border-border-subtle bg-bg-input px-3.5 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-secondary focus:border-accent-coral"
+            />
+          </div>
         )}
 
         <textarea
@@ -225,11 +256,24 @@ const CommentsSection = ({ postId, userId, authorName, isAdmin }) => {
   );
 };
 
+const AuthorLevelBadge = ({ sessions, setScore }) => {
+  const level = deriveLevelFromStats(sessions, setScore);
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-bg-input px-2 py-0.5 text-[10px] font-bold" style={{ color: level.color }}>
+      {level.icon} {level.name}
+    </span>
+  );
+};
+
 const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, onDeletePost }) => {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const [copied, setCopied] = useState(false);
   const meta = POST_TYPES[post.post_type];
   const canDelete = isAdmin || post.user_id === userId;
+  const isVictory = post.post_type === 'victoria';
+  const victoryTypeLabel = VICTORY_TYPE_LABELS[post.victory_type];
 
   const handleDelete = async () => {
     if (!window.confirm('¿Eliminar esta publicación? Esta acción no se puede deshacer.')) return;
@@ -237,18 +281,38 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
     await onDeletePost(post.id);
   };
 
+  const handleCopyAchievement = async () => {
+    try {
+      await navigator.clipboard.writeText(buildAchievementShareText(post));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard no disponible/denegado — se ignora, el botón simplemente no confirma */ }
+  };
+
   return (
-    <article className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-5">
+    <article className={isVictory ? 'card-tactical rounded-2xl border-accent-gold/40 p-4 md:p-5' : 'rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-5'}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-input text-xs font-bold text-text-primary">{getInitials(post.author_name)}</div>
+          {post.authorAvatarUrl && !avatarFailed ? (
+            <img
+              src={post.authorAvatarUrl}
+              alt={post.author_name}
+              onError={() => setAvatarFailed(true)}
+              className="h-9 w-9 rounded-full border border-border-subtle object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-input text-xs font-bold text-text-primary">{getInitials(post.author_name)}</div>
+          )}
           <div>
-            <div className="text-sm font-bold text-text-primary">{post.author_name}</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-sm font-bold text-text-primary">{post.author_name}</span>
+              {post.authorSessions != null && <AuthorLevelBadge sessions={post.authorSessions} setScore={post.authorSetScore} />}
+            </div>
             <div className="text-xs text-text-secondary">{formatRelativeTime(post.created_at)}</div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: meta.color }}>
+          <span className={`rounded-full text-white ${isVictory ? 'px-3 py-1.5 text-xs font-black' : 'px-2.5 py-1 text-[11px] font-bold'}`} style={{ backgroundColor: meta.color }}>
             {meta.emoji} {meta.label}
           </span>
           {canDelete && (
@@ -265,8 +329,17 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
       </div>
 
       <div className="mt-3">
-        {post.post_type === 'victoria' && post.niche && (
-          <span className="mb-2 inline-block rounded-full border border-accent-gold/30 bg-accent-gold/5 px-2.5 py-1 text-[11px] font-bold text-accent-gold">{post.niche}</span>
+        {isVictory && (victoryTypeLabel || post.niche) && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {victoryTypeLabel && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-accent-gold/40 bg-accent-gold/10 px-2.5 py-1 text-[11px] font-black text-accent-gold">
+                <Trophy size={12} /> {victoryTypeLabel}
+              </span>
+            )}
+            {post.niche && (
+              <span className="inline-block rounded-full border border-accent-gold/30 bg-accent-gold/5 px-2.5 py-1 text-[11px] font-bold text-accent-gold">{post.niche}</span>
+            )}
+          </div>
         )}
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{post.content}</p>
         {post.evidence_url && (
@@ -278,7 +351,7 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
         )}
       </div>
 
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           onClick={() => onToggleFire(post.id)}
           className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${reacted ? 'bg-accent-coral/10 text-accent-coral' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
@@ -291,6 +364,14 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
         >
           <MessageCircle size={14} /> {post.commentCount || 0}
         </button>
+        {isVictory && (
+          <button
+            onClick={handleCopyAchievement}
+            className="ml-auto flex items-center gap-1.5 rounded-full border border-accent-gold/30 px-3 py-1.5 text-xs font-bold text-accent-gold transition-colors hover:bg-accent-gold/10"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? '¡Copiado!' : 'Copiar logro'}
+          </button>
+        )}
       </div>
 
       {commentsOpen && <CommentsSection postId={post.id} userId={userId} authorName={authorName} isAdmin={isAdmin} />}
