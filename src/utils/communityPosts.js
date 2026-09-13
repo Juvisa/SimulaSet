@@ -134,10 +134,12 @@ export const toggleFireReaction = async ({ postId, userId, reacted }) => {
   return { reacted: true, error: error?.message };
 };
 
+const COMMENT_SELECT = 'id, post_id, user_id, author_name, content, created_at';
+
 export const getComments = async (postId) => {
   const { data, error } = await supabase
     .from('community_post_comments')
-    .select('id, post_id, author_name, content, created_at')
+    .select(COMMENT_SELECT)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
@@ -150,7 +152,7 @@ export const addComment = async ({ postId, userId, authorName, content }) => {
   const { data, error } = await supabase
     .from('community_post_comments')
     .insert({ post_id: postId, user_id: userId, author_name: authorName, content: content.trim() })
-    .select('id, post_id, author_name, content, created_at')
+    .select(COMMENT_SELECT)
     .single();
 
   return { comment: data || null, error: error?.message };
@@ -159,21 +161,54 @@ export const addComment = async ({ postId, userId, authorName, content }) => {
 export const getWeeklyVictoryLeaderboard = async () => {
   const { data, error } = await supabase
     .from('community_posts')
-    .select('author_name')
+    .select('user_id, author_name')
     .eq('post_type', 'victoria')
     .gte('created_at', getStartOfWeekIso());
 
   if (error) return { leaderboard: [], error: error.message };
 
-  const countByAuthor = {};
-  (data || []).forEach(({ author_name }) => {
-    countByAuthor[author_name] = (countByAuthor[author_name] || 0) + 1;
+  const countByUser = {};
+  const fallbackNameByUser = {};
+  (data || []).forEach(({ user_id, author_name }) => {
+    countByUser[user_id] = (countByUser[user_id] || 0) + 1;
+    fallbackNameByUser[user_id] = author_name;
   });
 
-  const leaderboard = Object.entries(countByAuthor)
-    .map(([authorName, count]) => ({ authorName, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 3);
+  const rankedUserIds = Object.entries(countByUser)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([userId]) => userId);
+
+  if (rankedUserIds.length === 0) return { leaderboard: [], error: undefined };
+
+  // leaderboard_stats es una vista de solo lectura evaluada con los privilegios
+  // de su dueño (ver 202609110003_create_leaderboard_view.sql): permite resolver
+  // el nombre ACTUAL de cualquier alumno de la cohorte sin depender del
+  // author_name desnormalizado en cada post (que queda desactualizado si el
+  // alumno cambia su nombre) ni chocar con la RLS de profiles, que bloquea leer
+  // perfiles ajenos para un alumno regular. Si un user_id no aparece ahí (p.ej.
+  // quedó inactivo), se usa el author_name del post como respaldo.
+  const { data: profiles } = await supabase
+    .from('leaderboard_stats')
+    .select('user_id, name')
+    .in('user_id', rankedUserIds);
+  const nameByUser = Object.fromEntries((profiles || []).map((p) => [p.user_id, p.name]));
+
+  const leaderboard = rankedUserIds.map((userId) => ({
+    userId,
+    authorName: nameByUser[userId] || fallbackNameByUser[userId],
+    count: countByUser[userId],
+  }));
 
   return { leaderboard, error: undefined };
+};
+
+export const deletePost = async (postId) => {
+  const { error } = await supabase.from('community_posts').delete().eq('id', postId);
+  return { error: error?.message };
+};
+
+export const deleteComment = async (commentId) => {
+  const { error } = await supabase.from('community_post_comments').delete().eq('id', commentId);
+  return { error: error?.message };
 };

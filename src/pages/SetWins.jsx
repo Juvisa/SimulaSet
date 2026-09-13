@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   Trophy, LifeBuoy, Lightbulb, Flame, MessageCircle, Link as LinkIcon,
-  Upload, Loader2, Send, Crown,
+  Upload, Loader2, Send, Crown, Trash2,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import {
   POST_TYPES, formatRelativeTime, getFeed, getMyReactions, createPost,
   uploadPostEvidenceFile, toggleFireReaction, getComments, addComment, getWeeklyVictoryLeaderboard,
+  deletePost, deleteComment,
 } from '../utils/communityPosts';
 
 const TABS = [
@@ -143,11 +144,12 @@ const Composer = ({ userId, authorName, onPosted }) => {
   );
 };
 
-const CommentsSection = ({ postId, userId, authorName }) => {
+const CommentsSection = ({ postId, userId, authorName, isAdmin }) => {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -170,6 +172,14 @@ const CommentsSection = ({ postId, userId, authorName }) => {
     }
   };
 
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('¿Eliminar este comentario?')) return;
+    setDeletingId(commentId);
+    const { error } = await deleteComment(commentId);
+    setDeletingId(null);
+    if (!error) setComments((prev) => prev.filter((c) => c.id !== commentId));
+  };
+
   return (
     <div className="mt-4 border-t border-border-subtle pt-4">
       {loading ? (
@@ -177,12 +187,24 @@ const CommentsSection = ({ postId, userId, authorName }) => {
       ) : (
         <div className="space-y-3">
           {comments.map((c) => (
-            <div key={c.id} className="flex gap-2 text-sm">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-input text-[10px] font-bold text-text-primary">{getInitials(c.author_name)}</div>
-              <div>
-                <span className="font-bold text-text-primary">{c.author_name}</span>{' '}
-                <span className="text-text-secondary">{c.content}</span>
+            <div key={c.id} className="group flex items-start justify-between gap-2 text-sm">
+              <div className="flex gap-2">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-input text-[10px] font-bold text-text-primary">{getInitials(c.author_name)}</div>
+                <div>
+                  <span className="font-bold text-text-primary">{c.author_name}</span>{' '}
+                  <span className="text-text-secondary">{c.content}</span>
+                </div>
               </div>
+              {(isAdmin || c.user_id === userId) && (
+                <button
+                  onClick={() => handleDeleteComment(c.id)}
+                  disabled={deletingId === c.id}
+                  className="shrink-0 text-text-secondary opacity-0 transition-opacity hover:text-red-400 disabled:opacity-50 group-hover:opacity-100"
+                  aria-label="Eliminar comentario"
+                >
+                  {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -203,9 +225,17 @@ const CommentsSection = ({ postId, userId, authorName }) => {
   );
 };
 
-const PostCard = ({ post, userId, authorName, reacted, onToggleFire }) => {
+const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, onDeletePost }) => {
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const meta = POST_TYPES[post.post_type];
+  const canDelete = isAdmin || post.user_id === userId;
+
+  const handleDelete = async () => {
+    if (!window.confirm('¿Eliminar esta publicación? Esta acción no se puede deshacer.')) return;
+    setDeleting(true);
+    await onDeletePost(post.id);
+  };
 
   return (
     <article className="rounded-2xl border border-border-subtle bg-bg-card p-4 md:p-5">
@@ -217,9 +247,21 @@ const PostCard = ({ post, userId, authorName, reacted, onToggleFire }) => {
             <div className="text-xs text-text-secondary">{formatRelativeTime(post.created_at)}</div>
           </div>
         </div>
-        <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: meta.color }}>
-          {meta.emoji} {meta.label}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded-full px-2.5 py-1 text-[11px] font-bold text-white" style={{ backgroundColor: meta.color }}>
+            {meta.emoji} {meta.label}
+          </span>
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="text-text-secondary transition-colors hover:text-red-400 disabled:opacity-50"
+              aria-label="Eliminar publicación"
+            >
+              {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-3">
@@ -251,7 +293,7 @@ const PostCard = ({ post, userId, authorName, reacted, onToggleFire }) => {
         </button>
       </div>
 
-      {commentsOpen && <CommentsSection postId={post.id} userId={userId} authorName={authorName} />}
+      {commentsOpen && <CommentsSection postId={post.id} userId={userId} authorName={authorName} isAdmin={isAdmin} />}
     </article>
   );
 };
@@ -264,7 +306,7 @@ const Leaderboard = ({ leaderboard }) => {
       <div className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-accent-gold"><Crown size={16} /> TOP AGENDADORES DE LA SEMANA</div>
       <div className="mt-3 space-y-2">
         {leaderboard.map((entry, index) => (
-          <div key={entry.authorName} className="flex items-center justify-between rounded-xl bg-bg-card/60 px-3 py-2">
+          <div key={entry.userId} className="flex items-center justify-between rounded-xl bg-bg-card/60 px-3 py-2">
             <span className="flex items-center gap-2 text-sm font-bold text-text-primary">{medals[index]} {entry.authorName}</span>
             <span className="text-sm font-black text-accent-gold">{entry.count} victoria{entry.count === 1 ? '' : 's'}</span>
           </div>
@@ -276,6 +318,7 @@ const Leaderboard = ({ leaderboard }) => {
 
 const SetWins = () => {
   const { user } = useAuth();
+  const isAdmin = user.role === 'admin';
   const [posts, setPosts] = useState([]);
   const [reactedPostIds, setReactedPostIds] = useState(new Set());
   const [leaderboard, setLeaderboard] = useState([]);
@@ -319,6 +362,12 @@ const SetWins = () => {
     await toggleFireReaction({ postId, userId: user.id, reacted });
   };
 
+  const handleDeletePost = async (postId) => {
+    const { error: deleteError } = await deletePost(postId);
+    if (deleteError) { setError(`No pudimos eliminar la publicación: ${deleteError}`); return; }
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  };
+
   return (
     <Layout>
       <div className="mx-auto max-w-3xl animate-fade-in">
@@ -349,8 +398,10 @@ const SetWins = () => {
                 post={post}
                 userId={user.id}
                 authorName={user.name}
+                isAdmin={isAdmin}
                 reacted={reactedPostIds.has(post.id)}
                 onToggleFire={handleToggleFire}
+                onDeletePost={handleDeletePost}
               />
             ))}
           </div>
