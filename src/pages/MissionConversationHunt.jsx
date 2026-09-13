@@ -131,8 +131,11 @@ const MissionConversationHunt = () => {
     return <Layout><div className="mx-auto max-w-3xl animate-fade-in">
       <section className="card-tactical rounded-2xl border-green-500/30 p-5 text-center md:p-6">
         <CheckCircle2 size={32} className="mx-auto text-green-400" />
-        <div className="mt-3 text-xs font-black tracking-[0.25em] text-green-400">MISIÓN COMPLETADA</div>
+        <div className="mt-3 text-xs font-black tracking-[0.25em] text-green-400">EJERCICIO INTRODUCTORIO COMPLETADO</div>
         <h1 className="mt-1.5 text-lg font-black text-text-primary md:text-xl">Primera evidencia S.E.T. registrada.</h1>
+        <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-text-secondary">
+          Esto es un ejercicio de práctica de una sola vez — <strong className="text-text-primary">no cuenta como tu misión diaria</strong>. Para completar la misión de hoy sigues necesitando responder el Reto de Criterio y practicar en el Simulador desde Misiones Diarias.
+        </p>
       </section>
 
       <section className="card-tactical mt-4 rounded-2xl border-accent-coral/30 p-5 md:p-6">
@@ -172,7 +175,7 @@ const MissionConversationHunt = () => {
       {error && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <button onClick={() => navigate('/missions')} className="flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white">Siguiente misión <ArrowRight size={16} /></button>
+        <button onClick={() => navigate('/missions')} className="flex items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white">Ir a mi misión de hoy <ArrowRight size={16} /></button>
         <button onClick={handleRetryMission} disabled={retrying} className="flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-secondary hover:text-text-primary disabled:opacity-50">
           {retrying ? <><Loader2 size={16} className="animate-spin" /> Reiniciando...</> : 'Reintentar esta misión'}
         </button>

@@ -277,7 +277,35 @@ const Missions = () => {
               </div>
             </div>
 
-            <div className="my-6 flex flex-wrap items-center gap-3 rounded-2xl border border-border-subtle bg-bg-input/50 p-4">
+            {mission.tip && (
+              <p className="mb-6 rounded-xl border border-accent-gold/20 bg-accent-gold/5 px-4 py-3 text-xs leading-relaxed text-text-secondary">
+                💡 {mission.tip}
+              </p>
+            )}
+
+            <div className="mb-2 flex items-center gap-2 text-xs font-black tracking-[0.16em] text-text-secondary">
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${criterionCorrect ? 'bg-green-500/20 text-green-400' : 'bg-bg-input text-text-secondary'}`}>{criterionCorrect ? <CheckCircle2 size={13} /> : '1'}</span>
+              PASO 1 · CRITERIO TÁCTICO
+            </div>
+            {challenge && (
+              <CriterionChallenge
+                key={`challenge-${selectedDay.isoDate}`}
+                challenge={challenge}
+                missionId={mission.id}
+                canAct={canAnswerCriterion}
+                initialAnswer={progress?.criterion_answer || null}
+                initialCorrect={progress?.criterion_correct ?? null}
+                userId={user.id}
+                isoDate={selectedDay.isoDate}
+                onAnswered={handleCriterionAnswered}
+              />
+            )}
+
+            <div className="mb-2 flex items-center gap-2 text-xs font-black tracking-[0.16em] text-text-secondary">
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${scoreQualifies ? 'bg-green-500/20 text-green-400' : 'bg-bg-input text-text-secondary'}`}>{scoreQualifies ? <CheckCircle2 size={13} /> : '2'}</span>
+              PASO 2 · SIMULACIÓN
+            </div>
+            <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-border-subtle bg-bg-input/50 p-4">
               <Target size={18} className="text-accent-coral" />
               <span className="text-sm font-bold text-text-primary">Requisito: SET Score ≥ {mission.minSetScore}</span>
               <span className="text-sm text-text-secondary">
@@ -295,29 +323,9 @@ const Missions = () => {
               </button>
             )}
 
-            {mission.tip && (
-              <p className="mb-6 rounded-xl border border-accent-gold/20 bg-accent-gold/5 px-4 py-3 text-xs leading-relaxed text-text-secondary">
-                💡 {mission.tip}
-              </p>
-            )}
-
-            {challenge && (
-              <CriterionChallenge
-                key={`challenge-${selectedDay.isoDate}`}
-                challenge={challenge}
-                missionId={mission.id}
-                canAct={canAnswerCriterion}
-                initialAnswer={progress?.criterion_answer || null}
-                initialCorrect={progress?.criterion_correct ?? null}
-                userId={user.id}
-                isoDate={selectedDay.isoDate}
-                onAnswered={handleCriterionAnswered}
-              />
-            )}
-
             {canAct && (
               <section className="rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
-                <h3 className="text-xs font-black tracking-[0.16em] text-text-primary">CIERRE DE LA MISIÓN</h3>
+                <h3 className="text-xs font-black tracking-[0.16em] text-text-primary">SELLAR EL DÍA</h3>
                 {!criterionCorrect && (
                   <p className="mt-2 text-xs text-text-secondary">Responde correctamente el Reto de Criterio de arriba para poder completar la misión.</p>
                 )}
@@ -343,7 +351,7 @@ const Missions = () => {
           onClick={() => navigate('/missions/mission_01_conversation_hunt')}
           className="mt-6 text-xs font-medium text-text-secondary underline-offset-4 hover:text-text-primary hover:underline"
         >
-          Ejercicio de práctica adicional: Caza Conversaciones →
+          Ejercicio introductorio (una sola vez, no cuenta como tu misión de hoy): Caza Conversaciones →
         </button>
       </div>
     </Layout>
