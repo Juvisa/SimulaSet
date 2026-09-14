@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { saveSimulatorSession } from '../utils/simulatorSessions';
@@ -61,10 +61,16 @@ const ScoreBadge = ({ score }) => {
   );
 };
 
+// Compartido entre el panel lateral/drawer y la tarjeta inline en el chat —
+// evita recalcular la misma lógica mode-dependiente en dos lugares.
+const getProbInfo = (mode, coaching) => ({
+  label: mode === 'reactivacion' ? 'Probabilidad reagendamiento' : 'Probabilidad asistencia',
+  value: mode === 'reactivacion' ? coaching?.probabilidad_reagendamiento : coaching?.probabilidad_asistencia,
+});
+
 const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   if (!coaching) return null;
-  const probLabel = mode === 'reactivacion' ? 'Probabilidad reagendamiento' : 'Probabilidad asistencia';
-  const prob = mode === 'reactivacion' ? coaching.probabilidad_reagendamiento : coaching.probabilidad_asistencia;
+  const { label: probLabel, value: prob } = getProbInfo(mode, coaching);
 
   return (
     <>
@@ -158,6 +164,34 @@ const CoachingContent = ({ coaching, probLabel, prob }) => {
         {prob !== undefined && (
           <FomoBar value={prob} label={probLabel} />
         )}
+      </div>
+    </div>
+  );
+};
+
+// Tarjeta de coaching EN EL FLUJO del chat, justo debajo del mensaje del
+// setter que la generó. Antes el único lugar donde vivía el feedback era el
+// panel lateral (desktop) o un drawer inferior que había que abrir a mano
+// (mobile) — en conversaciones largas, el autoscroll lleva la vista al fondo
+// del chat para mostrar la respuesta del prospecto, pero en mobile el drawer
+// se abre como overlay fijo cubriendo justo esa misma zona inferior de la
+// pantalla (bottom-24, hasta 60vh), compitiendo por el mismo espacio que el
+// mensaje recién scrolleado — el alumno termina cerrando el drawer para leer
+// al prospecto, y sin drawer abierto siente que "dejó de evaluar". Poner la
+// tarjeta dentro del propio flujo de mensajes hace que el mismo
+// scrollIntoView que ya trae la respuesta del prospecto a la vista traiga
+// también el coaching, sin overlay que compita por pantalla.
+const InlineCoachingCard = ({ coaching, mode }) => {
+  if (!coaching) return null;
+  const { label: probLabel, value: prob } = getProbInfo(mode, coaching);
+  return (
+    <div className="flex justify-start animate-fade-in">
+      <div className="w-full max-w-xs overflow-hidden rounded-2xl border border-accent-coral/30 bg-bg-card md:max-w-sm lg:max-w-md">
+        <div className="flex items-center justify-between gap-2 px-4 pt-3.5">
+          <span className="text-[10px] font-black uppercase tracking-wider text-accent-coral">Coaching de este mensaje</span>
+          <ScoreBadge score={coaching.puntuacion_mensaje} />
+        </div>
+        <CoachingContent coaching={coaching} probLabel={probLabel} prob={prob} />
       </div>
     </div>
   );
@@ -275,7 +309,12 @@ const Simulator = () => {
       setLeadState(response.estado_lead);
       setScores(prev => [...prev, response.coaching?.puntuacion_mensaje || 0]);
       setLastFomo(response.coaching?.nivel_fomo || 0);
-      setCoachingVisible(true);
+      // Ya NO se auto-abre el drawer mobile: el coaching de este turno queda
+      // visible inline en el propio flujo del chat (InlineCoachingCard). El
+      // drawer se deja para consulta opcional bajo demanda (FOMO, probabilidad,
+      // recurso sugerido) — abrirlo automáticamente lo ponía como overlay fijo
+      // justo sobre la zona donde el autoscroll acababa de traer la respuesta
+      // del prospecto, obligando a elegir entre ver el coaching o el chat.
 
       // Check if simulation ended naturally
       const terminalStates = ['pidio_llamada', 'cerrado', 'confirmado_con_entusiasmo', 'quiere_reagendar', 'cancelo'];
@@ -384,28 +423,38 @@ const Simulator = () => {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-36 md:pb-24">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'setter' ? 'justify-end' : msg.role === 'system' ? 'justify-center' : 'justify-start'} animate-fade-in`}
-            >
-              {msg.role === 'system' ? (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-xl max-w-sm text-center break-words">
-                  {msg.content}
+          {messages.map((msg, index) => {
+            // La coaching de un turno llega junto con la respuesta del
+            // prospecto (mismo objeto response), pero visualmente pertenece
+            // al mensaje del setter que la generó — se ancla mirando un paso
+            // adelante en el array, no al propio msg.
+            const nextMsg = messages[index + 1];
+            const turnCoaching = msg.role === 'setter' && nextMsg?.role === 'prospect' ? nextMsg.coaching : null;
+            return (
+              <Fragment key={msg.id}>
+                <div
+                  className={`flex ${msg.role === 'setter' ? 'justify-end' : msg.role === 'system' ? 'justify-center' : 'justify-start'} animate-fade-in`}
+                >
+                  {msg.role === 'system' ? (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-2 rounded-xl max-w-sm text-center break-words">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className={`max-w-xs md:max-w-sm lg:max-w-md ${msg.role === 'setter' ? 'items-end' : 'items-start'} flex flex-col`}>
+                      <div className={`px-4 py-2.5 text-sm leading-relaxed break-words ${msg.role === 'setter' ? 'bubble-sent text-white' : 'bubble-received text-text-primary'}`}>
+                        {msg.content}
+                      </div>
+                      <div className="flex items-center gap-1 mt-1 px-1">
+                        <span className="text-text-secondary text-xs">{msg.time}</span>
+                        {msg.role === 'setter' && <span className="text-blue-400 text-xs">✓✓</span>}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className={`max-w-xs md:max-w-sm lg:max-w-md ${msg.role === 'setter' ? 'items-end' : 'items-start'} flex flex-col`}>
-                  <div className={`px-4 py-2.5 text-sm leading-relaxed break-words ${msg.role === 'setter' ? 'bubble-sent text-white' : 'bubble-received text-text-primary'}`}>
-                    {msg.content}
-                  </div>
-                  <div className="flex items-center gap-1 mt-1 px-1">
-                    <span className="text-text-secondary text-xs">{msg.time}</span>
-                    {msg.role === 'setter' && <span className="text-blue-400 text-xs">✓✓</span>}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+                {turnCoaching && <InlineCoachingCard coaching={turnCoaching} mode={mode} />}
+              </Fragment>
+            );
+          })}
           {sending && (
             <div className="flex justify-start animate-fade-in">
               <div className="bubble-received px-4 py-3 flex gap-1">
