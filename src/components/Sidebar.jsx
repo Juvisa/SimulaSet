@@ -107,7 +107,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     { to: '/simulate', icon: Dumbbell, label: 'Simulador IA' },
     { to: '/leads-reales', icon: Zap, label: 'SET Copilot', badge: pendingFollowUpCount },
     { to: '/value-builder', icon: Sparkles, label: 'SET Value Builder' },
-    { to: '/academy', icon: BookOpen, label: 'SET Academy' },
+    { to: adminView ? '/admin/academy' : '/academy', icon: BookOpen, label: 'SET Academy' },
   ];
 
   const trackingItems = [
