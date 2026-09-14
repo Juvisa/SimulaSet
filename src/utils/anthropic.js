@@ -8,14 +8,23 @@ const RETRYABLE_SET_ERRORS = new Set([
   SET_ENGINE_ERROR_CODES.MAX_TOKENS,
 ]);
 
-const DIRECT_MODEL = 'claude-sonnet-4-5';
+// Debe mantenerse en sync con MODELS en api/anthropic.js — este mapa solo se
+// usa en el path de desarrollo directo (VITE_ANTHROPIC_API_KEY en local, sin
+// pasar por el serverless function).
+const MODEL_IDS = {
+  sonnet: 'claude-sonnet-4-5',
+  haiku: 'claude-haiku-4-5-20251001',
+};
 const DIRECT_ANTHROPIC_VERSION = '2023-06-01';
 const devApiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const useDirectAnthropicCall = import.meta.env.DEV && !!devApiKey;
 
-const requestClaudeDirect = async ({ systemPrompt, messages, maxTokens, mode }) => {
-  const body = { model: DIRECT_MODEL, max_tokens: maxTokens, messages };
-  if (systemPrompt !== undefined) body.system = systemPrompt;
+const requestClaudeDirect = async ({ systemPrompt, messages, maxTokens, mode, model }) => {
+  const resolvedModel = MODEL_IDS[model] || MODEL_IDS.sonnet;
+  const body = { model: resolvedModel, max_tokens: maxTokens, messages };
+  if (systemPrompt !== undefined) {
+    body.system = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
+  }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -38,14 +47,15 @@ const requestClaudeDirect = async ({ systemPrompt, messages, maxTokens, mode }) 
   return mode === 'set_engine' ? { text, stop_reason: data.stop_reason } : { text };
 };
 
-const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
+const requestClaude = async ({ systemPrompt, messages, maxTokens, mode, model }) => {
   if (useDirectAnthropicCall) {
-    const { text, stop_reason } = await requestClaudeDirect({ systemPrompt, messages, maxTokens, mode });
+    const { text, stop_reason } = await requestClaudeDirect({ systemPrompt, messages, maxTokens, mode, model });
     return mode === 'set_engine' ? { text, stop_reason } : text;
   }
 
   const payload = { systemPrompt, messages, maxTokens };
   if (mode !== undefined) payload.mode = mode;
+  if (model !== undefined) payload.model = model;
   const response = await fetch('/api/anthropic', {
     method: 'POST',
     headers: {
@@ -65,8 +75,16 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens, mode }) => {
   return mode === 'set_engine' ? data : data.text || '';
 };
 
-export const callClaude = async (systemPrompt, messages) => {
-  const text = await requestClaude({ systemPrompt, messages, maxTokens: MAX_TOKENS });
+// options.model/options.maxTokens son opcionales — sin ellos el comportamiento
+// es idéntico al de siempre (Sonnet, 1500 tokens), así que todos los callers
+// existentes (reporte final, analizador, briefing, follow-ups) no necesitan
+// tocarse. Solo el chat turno a turno del simulador pasa { model: 'haiku' }
+// explícitamente (ver Simulator.jsx) — es, por lejos, el mayor volumen de
+// llamadas de toda la app (una por cada mensaje del setter en cada sesión),
+// y no requiere el razonamiento profundo que sí necesita la evaluación final.
+export const callClaude = async (systemPrompt, messages, options = {}) => {
+  const { model = 'sonnet', maxTokens = MAX_TOKENS } = options;
+  const text = await requestClaude({ systemPrompt, messages, maxTokens, model });
 
   // Parse JSON from response
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -125,9 +143,12 @@ RESPONDE EN JSON (sin markdown):
 }
 `;
 
+  // Generación de un perfil ficticio estructurado (6 campos cortos) — no
+  // requiere razonamiento profundo, así que también va en Haiku.
   const text = await requestClaude({
     messages: [{ role: 'user', content: prompt }],
     maxTokens: 500,
+    model: 'haiku',
   });
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Perfil inválido');

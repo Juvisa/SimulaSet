@@ -15,6 +15,16 @@ import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, F
 
 const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#DC2626' };
 
+// Chat turno a turno del prospecto: Haiku en vez de Sonnet (mismo modelo para
+// TODO se disparó a $11 USD/24h en Anthropic). 600 tokens en vez de los 1500
+// genéricos de callClaude — la respuesta trae respuesta_prospecto + 4 campos
+// de texto de coaching (ver prompts.js), así que 150-250 se quedaba corto y
+// corría el riesgo de truncar el JSON a mitad de sesión (rompería el chat en
+// vivo, algo peor que el ahorro). max_tokens es solo un techo de seguridad —
+// no se cobra por tokens no generados — así que 600 no cuesta más que lo que
+// el modelo realmente responde, solo evita una salida descontrolada.
+const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 600 };
+
 const buildSystemPrompt = (mode, project, prospectProfile) => {
   if (mode === 'outbound') return buildOutboundSystemPrompt(project, prospectProfile);
   if (mode === 'inbound') return buildInboundSystemPrompt(project, prospectProfile);
@@ -195,7 +205,7 @@ const Simulator = () => {
       const systemPrompt = buildSystemPrompt(mode, proj, { ...profile, ...config });
       // Get initial message
       const initMessages = [{ role: 'user', content: 'START_SIMULATION' }];
-      const response = await callClaude(systemPrompt, initMessages);
+      const response = await callClaude(systemPrompt, initMessages, CHAT_MODEL_OPTIONS);
       const prospectMsg = {
         id: crypto.randomUUID(),
         role: 'prospect',
@@ -251,7 +261,7 @@ const Simulator = () => {
     try {
       const systemPrompt = buildSystemPrompt(mode, project, { ...prospectProfile, ...config });
       const apiMessages = buildAPIMessages(messages, text);
-      const response = await callClaude(systemPrompt, apiMessages);
+      const response = await callClaude(systemPrompt, apiMessages, CHAT_MODEL_OPTIONS);
 
       const prospectMsg = {
         id: crypto.randomUUID(),
