@@ -88,7 +88,9 @@ const PracticeCta = ({ available = true, completed, marking, onGoSimulate, onMar
 // no sirve directo en un <iframe>, cada plataforma exige su propia ruta
 // /embed/. Si no reconoce la plataforma, usa la URL tal cual (algunos
 // proveedores sí aceptan el link directo).
-const toEmbedUrl = (url) => {
+const toEmbedUrl = (rawUrl) => {
+  const url = rawUrl || '';
+  if (!url) return '';
   try {
     const parsed = new URL(url);
     if (parsed.hostname.includes('youtube.com') || parsed.hostname === 'youtu.be') {
@@ -96,7 +98,7 @@ const toEmbedUrl = (url) => {
       return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
     }
     if (parsed.hostname.includes('vimeo.com')) {
-      const videoId = parsed.pathname.split('/').filter(Boolean).pop();
+      const videoId = (parsed.pathname.split('/').filter(Boolean).pop()) || '';
       return videoId ? `https://player.vimeo.com/video/${videoId}` : url;
     }
     if (parsed.hostname.includes('loom.com')) {
@@ -111,10 +113,12 @@ const toEmbedUrl = (url) => {
 // Disponible si hay video listo por CUALQUIERA de los dos caminos: Mux
 // procesado, o un link externo (Loom/YouTube/Vimeo) pegado en AdminAcademy —
 // no se exige que sean excluyentes ni que Mux termine de procesar si ya hay
-// un link externo funcionando.
-const isLessonAvailable = (lesson) => lesson.video_status === 'ready' || Boolean(lesson.video_url);
+// un link externo funcionando. Optional chaining por si `lesson` llega
+// incompleto en algún estado transitorio del fetch.
+const isLessonAvailable = (lesson) => lesson?.video_status === 'ready' || Boolean(lesson?.video_url);
 
 const LessonVideo = ({ lesson }) => {
+  if (!lesson) return null;
   if (lesson.video_status === 'ready' && lesson.mux_playback_id) {
     return (
       <div className="mt-4 overflow-hidden rounded-xl bg-black">

@@ -60,24 +60,10 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  // La cuenta admin es exclusivamente administrativa — el alumno tiene su
+  // propia cuenta separada, así que ya no hay toggle "Vista Alumno/Admin":
+  // un admin siempre ve solo navegación administrativa, sin excepción.
   const isAdmin = user?.role === 'admin';
-
-  const [viewMode, setViewMode] = useState(() => {
-    try {
-      return localStorage.getItem('ds_view_mode') || 'alumno';
-    } catch {
-      return 'alumno';
-    }
-  });
-  useEffect(() => {
-    if (!isAdmin) return;
-    try {
-      localStorage.setItem('ds_view_mode', viewMode);
-    } catch {
-      /* almacenamiento no disponible, se ignora */
-    }
-  }, [viewMode, isAdmin]);
-  const adminView = isAdmin && viewMode === 'admin';
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -85,7 +71,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   const [sessionCount, setSessionCount] = useState(0);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || isAdmin) return undefined;
     let active = true;
     const refresh = () => getSeguimientosPendientes(user.id).then(({ total_activos }) => {
       if (active) setPendingFollowUpCount(total_activos);
@@ -93,31 +79,34 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     refresh();
     const interval = setInterval(refresh, 5 * 60 * 1000);
     return () => { active = false; clearInterval(interval); };
-  }, [user?.id]);
+  }, [user?.id, isAdmin]);
 
   useEffect(() => {
-    if (!user?.id) return undefined;
+    if (!user?.id || isAdmin) return undefined;
     let active = true;
     getSimulatorSessionCount(user.id).then(({ count }) => { if (active) setSessionCount(count); });
     return () => { active = false; };
-  }, [user?.id]);
+  }, [user?.id, isAdmin]);
+
+  const adminItems = [
+    { to: '/admin', icon: Shield, label: 'Pulso de Cohorte' },
+    { to: '/admin/academy', icon: BookOpen, label: 'SET Academy' },
+    { to: '/admin/analytics', icon: TrendingUp, label: 'Analítica' },
+    { to: '/admin/rewards', icon: Gift, label: 'Canjes de Recompensas' },
+    { to: '/empresa', icon: ShieldCheck, label: 'Centro de Auditoría' },
+  ];
 
   const trainingItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Panel / Inicio' },
     { to: '/simulate', icon: Dumbbell, label: 'Simulador IA' },
     { to: '/leads-reales', icon: Zap, label: 'SET Copilot', badge: pendingFollowUpCount },
     { to: '/value-builder', icon: Sparkles, label: 'SET Value Builder' },
-    { to: adminView ? '/admin/academy' : '/academy', icon: BookOpen, label: 'SET Academy' },
+    { to: '/academy', icon: BookOpen, label: 'SET Academy' },
   ];
 
   const trackingItems = [
-    ...(adminView ? [
-      { to: '/admin', icon: Shield, label: 'Pulso de Cohorte' },
-      { to: '/empresa', icon: ShieldCheck, label: 'Centro de Auditoría' },
-      { to: '/admin/rewards', icon: Gift, label: 'Canjes de Recompensas' },
-    ] : []),
     { to: '/missions', icon: ListChecks, label: 'Misiones & Tareas' },
-    { to: adminView ? '/admin/analytics' : '/analytics', icon: TrendingUp, label: 'Analítica' },
+    { to: '/analytics', icon: TrendingUp, label: 'Analítica' },
     { to: '/oportunidades', icon: BriefcaseBusiness, label: 'Bolsa de Empleo' },
   ];
 
@@ -126,7 +115,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     { to: '/recompensas', icon: Gift, label: 'Tienda de Recompensas' },
   ];
 
-  const allSearchable = [...trainingItems, ...trackingItems, ...communityItems].filter((item) => item.to);
+  const allSearchable = (isAdmin ? adminItems : [...trainingItems, ...trackingItems, ...communityItems]).filter((item) => item.to);
   const searchQuery = query.trim().toLowerCase();
   const filteredResults = searchQuery
     ? allSearchable.filter((item) => item.label.toLowerCase().includes(searchQuery))
@@ -187,7 +176,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
         {/* Header */}
         <div className="p-4 border-b border-border-subtle">
           <div className="flex items-center justify-between">
-            <Link to="/dashboard" onClick={handleNavigate} className="flex items-center gap-1">
+            <Link to={isAdmin ? '/admin' : '/dashboard'} onClick={handleNavigate} className="flex items-center gap-1">
               <span className="text-xl font-black text-accent-coral">DIGITAL</span>
               <span className="text-xl font-black text-text-primary">SET</span>
             </Link>
@@ -204,34 +193,19 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
             <span className="flex-1 text-left">Buscar...</span>
             <kbd className="text-[10px] border border-border-subtle rounded px-1.5 py-0.5">Ctrl K</kbd>
           </button>
-
-          {isAdmin && (
-            <div className="mt-3 flex items-center gap-1 bg-bg-input rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('alumno')}
-                className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${
-                  !adminView ? 'bg-accent-coral text-white' : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Vista Alumno
-              </button>
-              <button
-                onClick={() => setViewMode('admin')}
-                className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${
-                  adminView ? 'bg-accent-coral text-white' : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Vista Admin
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <NavSection title="Entrenamiento" items={trainingItems} pathname={location.pathname} onNavigate={handleNavigate} />
-          <NavSection title="Seguimiento & Cohorte" items={trackingItems} pathname={location.pathname} onNavigate={handleNavigate} />
-          <NavSection title="Comunidad" items={communityItems} pathname={location.pathname} onNavigate={handleNavigate} />
+          {isAdmin ? (
+            <NavSection title="Administración" items={adminItems} pathname={location.pathname} onNavigate={handleNavigate} />
+          ) : (
+            <>
+              <NavSection title="Entrenamiento" items={trainingItems} pathname={location.pathname} onNavigate={handleNavigate} />
+              <NavSection title="Seguimiento & Cohorte" items={trackingItems} pathname={location.pathname} onNavigate={handleNavigate} />
+              <NavSection title="Comunidad" items={communityItems} pathname={location.pathname} onNavigate={handleNavigate} />
+            </>
+          )}
         </nav>
 
         {/* Footer: perfil */}
@@ -243,21 +217,29 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
           >
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-              style={{ backgroundColor: levelInfo.color }}
+              style={{ backgroundColor: isAdmin ? '#E0605E' : levelInfo.color }}
             >
               {initials}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-text-primary truncate">{user?.name || 'Usuario'}</p>
-              <p className="text-xs text-text-secondary truncate flex items-center gap-1">
-                <GraduationCap size={11} /> Nivel {user?.level || 1} · {levelInfo.name}
-              </p>
-              <div className="mt-1 h-1 rounded-full bg-bg-input overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, progress.percent || 0))}%`, backgroundColor: levelInfo.color }}
-                />
-              </div>
+              {isAdmin ? (
+                <p className="text-xs text-text-secondary truncate flex items-center gap-1">
+                  <Shield size={11} /> Administrador
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-text-secondary truncate flex items-center gap-1">
+                    <GraduationCap size={11} /> Nivel {user?.level || 1} · {levelInfo.name}
+                  </p>
+                  <div className="mt-1 h-1 rounded-full bg-bg-input overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, Math.max(0, progress.percent || 0))}%`, backgroundColor: levelInfo.color }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </Link>
           <button

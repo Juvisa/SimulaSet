@@ -202,7 +202,7 @@ const AdminAcademy = () => {
       return;
     }
 
-    const normalizedVideoUrl = form.video_url.trim();
+    const normalizedVideoUrl = (form.video_url || '').trim();
     if (normalizedVideoUrl && !isValidResourceUrl(normalizedVideoUrl)) {
       setSaveError('La URL del video debe empezar con http:// o https://.');
       return;
@@ -381,7 +381,7 @@ const AdminAcademy = () => {
           </div>
         </div>
         <label className="md:col-span-2 text-sm font-semibold text-text-primary">URL del video (Loom / YouTube / Vimeo)
-          <input type="url" placeholder="https://www.loom.com/share/... o https://youtu.be/..." value={form.video_url} onChange={event => updateField('video_url', event.target.value)} className={`${inputClass} mt-2`} />
+          <input type="url" placeholder="https://www.loom.com/share/... o https://youtu.be/..." value={form.video_url || ''} onChange={event => updateField('video_url', event.target.value)} className={`${inputClass} mt-2`} />
           <span className="mt-1 block text-xs font-normal text-text-secondary">Alternativa a subir un MP4 a Mux abajo — con cualquiera de los dos la clase queda disponible en /academy.</span>
         </label>
         {editingLesson && (

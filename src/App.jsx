@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Login from './pages/Login';
@@ -36,6 +36,27 @@ import OpportunityHub from './pages/OpportunityHub';
 import TalentVault from './pages/TalentVault';
 import ValueBuilder from './pages/ValueBuilder';
 
+// La cuenta admin es exclusivamente administrativa — al entrar a "/" o a
+// cualquier ruta no reconocida, se la manda a su panel en vez de al
+// dashboard de alumno (que además ya la rebotaría por studentOnly en
+// ProtectedRoute, pero así evita el salto doble).
+const HomeRedirect = () => {
+  const { user, loading } = useAuth();
+  // Espera a que resuelva la sesión antes de decidir el destino — si no,
+  // "user" llega null en el primer render y siempre manda a /dashboard,
+  // aunque termine siendo admin (ProtectedRoute lo rebotaría después de
+  // todos modos por studentOnly, pero con un salto extra innecesario).
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <div className="text-accent-coral text-2xl font-black animate-pulse">SimulaSET</div>
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -46,34 +67,36 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<ProtectedRoute onboardingOnly><Onboarding /></ProtectedRoute>} />
 
-          {/* Setter routes */}
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-          <Route path="/projects/new" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-          <Route path="/projects/:id/edit" element={<ProtectedRoute><ProjectForm /></ProtectedRoute>} />
-          <Route path="/simulate" element={<ProtectedRoute><ModeSelector /></ProtectedRoute>} />
-          <Route path="/simulator" element={<ProtectedRoute><Simulator /></ProtectedRoute>} />
-          <Route path="/simulation-report" element={<ProtectedRoute><SimulationReport /></ProtectedRoute>} />
-          <Route path="/analyzer" element={<ProtectedRoute><Analyzer /></ProtectedRoute>} />
+          {/* Setter routes — studentOnly: la cuenta admin nunca debe quedar en
+              estas pantallas, sin importar cómo llegue (link, marcador, URL a
+              mano). El alumno tiene su propia cuenta separada para esto. */}
+          <Route path="/dashboard" element={<ProtectedRoute studentOnly><Dashboard /></ProtectedRoute>} />
+          <Route path="/projects" element={<ProtectedRoute studentOnly><Projects /></ProtectedRoute>} />
+          <Route path="/projects/new" element={<ProtectedRoute studentOnly><ProjectForm /></ProtectedRoute>} />
+          <Route path="/projects/:id/edit" element={<ProtectedRoute studentOnly><ProjectForm /></ProtectedRoute>} />
+          <Route path="/simulate" element={<ProtectedRoute studentOnly><ModeSelector /></ProtectedRoute>} />
+          <Route path="/simulator" element={<ProtectedRoute studentOnly><Simulator /></ProtectedRoute>} />
+          <Route path="/simulation-report" element={<ProtectedRoute studentOnly><SimulationReport /></ProtectedRoute>} />
+          <Route path="/analyzer" element={<ProtectedRoute studentOnly><Analyzer /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/academy" element={<ProtectedRoute><Academy /></ProtectedRoute>} />
-          <Route path="/opportunities" element={<ProtectedRoute><Opportunities /></ProtectedRoute>} />
-          <Route path="/journey" element={<ProtectedRoute><Journey /></ProtectedRoute>} />
-          <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
-          <Route path="/missions/mission_01_conversation_hunt" element={<ProtectedRoute><MissionConversationHunt /></ProtectedRoute>} />
-          <Route path="/set-wins" element={<ProtectedRoute><SetWins /></ProtectedRoute>} />
-          <Route path="/recompensas" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
-          <Route path="/oportunidades" element={<ProtectedRoute><OpportunityHub /></ProtectedRoute>} />
+          <Route path="/academy" element={<ProtectedRoute studentOnly><Academy /></ProtectedRoute>} />
+          <Route path="/opportunities" element={<ProtectedRoute studentOnly><Opportunities /></ProtectedRoute>} />
+          <Route path="/journey" element={<ProtectedRoute studentOnly><Journey /></ProtectedRoute>} />
+          <Route path="/missions" element={<ProtectedRoute studentOnly><Missions /></ProtectedRoute>} />
+          <Route path="/missions/mission_01_conversation_hunt" element={<ProtectedRoute studentOnly><MissionConversationHunt /></ProtectedRoute>} />
+          <Route path="/set-wins" element={<ProtectedRoute studentOnly><SetWins /></ProtectedRoute>} />
+          <Route path="/recompensas" element={<ProtectedRoute studentOnly><Rewards /></ProtectedRoute>} />
+          <Route path="/oportunidades" element={<ProtectedRoute studentOnly><OpportunityHub /></ProtectedRoute>} />
           <Route path="/empresa" element={<ProtectedRoute adminOnly><TalentVault /></ProtectedRoute>} />
-          <Route path="/value-builder" element={<ProtectedRoute><ValueBuilder /></ProtectedRoute>} />
+          <Route path="/value-builder" element={<ProtectedRoute studentOnly><ValueBuilder /></ProtectedRoute>} />
 
           {/* Copiloto en Vivo / Leads Reales */}
-          <Route path="/leads-reales" element={<ProtectedRoute><RealLeads /></ProtectedRoute>} />
-          <Route path="/leads-reales/nuevo" element={<ProtectedRoute><RealLeadForm /></ProtectedRoute>} />
-          <Route path="/leads-reales/:leadId" element={<ProtectedRoute><RealLeadConversation /></ProtectedRoute>} />
+          <Route path="/leads-reales" element={<ProtectedRoute studentOnly><RealLeads /></ProtectedRoute>} />
+          <Route path="/leads-reales/nuevo" element={<ProtectedRoute studentOnly><RealLeadForm /></ProtectedRoute>} />
+          <Route path="/leads-reales/:leadId" element={<ProtectedRoute studentOnly><RealLeadConversation /></ProtectedRoute>} />
 
           {/* Analytics */}
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute studentOnly><Analytics /></ProtectedRoute>} />
 
           {/* Admin routes */}
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
@@ -86,8 +109,8 @@ function App() {
           <Route path="/migrate" element={<Migrate />} />
           <Route path="/restore" element={<RestoreData />} />
 
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="*" element={<HomeRedirect />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
