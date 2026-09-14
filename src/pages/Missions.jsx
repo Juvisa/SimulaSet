@@ -407,23 +407,49 @@ const Missions = () => {
               <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${scoreQualifies ? 'bg-green-500/20 text-green-400' : 'bg-bg-input text-text-secondary'}`}>{scoreQualifies ? <CheckCircle2 size={13} /> : '2'}</span>
               PASO 2 · SIMULACIÓN
             </div>
-            <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-border-subtle bg-bg-input/50 p-4">
-              <Target size={18} className="text-accent-coral" />
-              <span className="text-sm font-bold text-text-primary">Requisito: SET Score ≥ {mission.minSetScore}</span>
-              <span className="text-sm text-text-secondary">
-                · Tu mejor score {selectedDay.isToday ? 'de hoy' : 'de ese día'}: {Number.isFinite(bestScoreToday) ? bestScoreToday : '—'}
-              </span>
-              {scoreQualifies && <span className="text-xs font-bold text-green-400">✓ Requisito cumplido</span>}
-            </div>
+            {/* El botón "Ir al Simulador" vivía suelto DEBAJO de esta caja de
+                requisito, separado del texto que explica qué hacer — en la
+                grabación de una alumna quedó claro que no lo relacionaba con
+                el Paso 2 ("¿dónde piso?"). Ahora el CTA vive dentro de la
+                misma caja, pegado al requisito que resuelve. */}
+            <div className="mb-6 rounded-2xl border border-border-subtle bg-bg-input/50 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Target size={18} className="text-accent-coral" />
+                <span className="text-sm font-bold text-text-primary">Requisito: SET Score ≥ {mission.minSetScore}</span>
+                <span className="text-sm text-text-secondary">
+                  · Tu mejor score {selectedDay.isToday ? 'de hoy' : 'de ese día'}: {Number.isFinite(bestScoreToday) ? bestScoreToday : '—'}
+                </span>
+                {scoreQualifies && <span className="text-xs font-bold text-green-400">✓ Requisito cumplido</span>}
+              </div>
 
-            {canAct && (
-              <button
-                onClick={handleGoSimulate}
-                className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 sm:w-auto"
-              >
-                Ir a Simular <ArrowRight size={16} />
-              </button>
-            )}
+              {!completed && selectedDay.isToday && (
+                <button
+                  onClick={handleGoSimulate}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 sm:w-auto"
+                >
+                  Ir al Simulador IA <ArrowRight size={16} />
+                </button>
+              )}
+
+              {/* Un día pasado ya no puede validarse: cualquier sesión nueva
+                  en el simulador se registra con la fecha de HOY, nunca con
+                  la del día que se está viendo aquí. Se deja practicar de
+                  todos modos, pero con el aviso explícito para que no crea
+                  que así sella la misión pasada. */}
+              {!completed && selectedDay.isPast && (
+                <>
+                  <p className="mt-3 text-xs text-text-secondary">
+                    Este día ya pasó — el score que consigas ahora se registra hoy y no valida esta misión pasada, pero puedes practicar libremente.
+                  </p>
+                  <button
+                    onClick={() => navigate('/simulate')}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-accent-coral/40 bg-transparent px-5 py-3 text-sm font-bold text-accent-coral transition-colors hover:bg-accent-coral/10 sm:w-auto"
+                  >
+                    Practicar en el Simulador IA <ArrowRight size={16} />
+                  </button>
+                </>
+              )}
+            </div>
 
             {canAct && (
               <section className="rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
