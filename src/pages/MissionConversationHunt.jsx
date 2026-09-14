@@ -5,23 +5,73 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { MISSION_01, MISSION_FIELDS, isMissionCaseComplete, isMissionComplete } from '../data/missions';
 import { getMissionProgress, saveMissionProgress, startMissionProgress } from '../utils/missionProgress';
+import { extractJsonSlice, parseJsonLoose, stripMarkdownFence } from '../utils/jsonRepair';
 
 const EMPTY_RESPONSE = Object.fromEntries(MISSION_FIELDS.map(field => [field.key, '']));
 const buildEvaluatorPayload = responses => MISSION_01.cases.map(missionCase => ({ id: missionCase.id, industry: missionCase.industry, context: missionCase.context, leadMessage: missionCase.leadMessage, student: responses[missionCase.id], reference: missionCase.reference }));
 
+const EVALUATOR_DIMENSION_KEYS = ['situacion', 'emocion', 'transicion', 'movimiento'];
+
+const isValidEvaluatorShape = parsed => Boolean(
+  parsed
+  && Number.isFinite(parsed.setScore)
+  && parsed.dimensions
+  && parsed.mainOpportunity
+  && EVALUATOR_DIMENSION_KEYS.every(key => Number.isFinite(parsed.dimensions[key]?.score) && typeof parsed.dimensions[key]?.feedback === 'string'),
+);
+
+// Último recurso cuando ni el parseo directo ni el reparado (parseJsonLoose)
+// producen un objeto válido: en vez de dejar al alumno sin evaluación,
+// extrae por regex tolerante los campos mínimos indispensables directo del
+// texto crudo. Un score/feedback aproximado (o un placeholder cuando ni eso
+// se pudo recuperar) es preferible a bloquear la sesión con un error.
+const extractEvaluatorFieldsLoosely = slice => {
+  const scoreMatch = slice.match(/"setScore"\s*:\s*(\d+(?:\.\d+)?)/);
+  if (!scoreMatch) return null;
+
+  const levelMatch = slice.match(/"level"\s*:\s*"([^"]*)"/);
+  const opportunityMatch = slice.match(/"mainOpportunity"\s*:\s*"([\s\S]*?)"\s*,?\s*"dimensions"/);
+  const fallbackScore = Math.round(Number(scoreMatch[1]));
+
+  const dimensions = Object.fromEntries(EVALUATOR_DIMENSION_KEYS.map(key => {
+    const blockMatch = slice.match(new RegExp(`"${key}"\\s*:\\s*\\{([^}]*)\\}`));
+    const block = blockMatch?.[1] || '';
+    const scoreForDimension = block.match(/"score"\s*:\s*(\d+(?:\.\d+)?)/);
+    const feedbackForDimension = block.match(/"feedback"\s*:\s*"([^"]*)"/);
+    return [key, {
+      score: scoreForDimension ? Math.round(Number(scoreForDimension[1])) : fallbackScore,
+      feedback: feedbackForDimension ? feedbackForDimension[1].replace(/\\"/g, '"') : 'No pudimos recuperar el detalle de esta dimensión — revisa el resumen general.',
+    }];
+  }));
+
+  return {
+    setScore: fallbackScore,
+    level: levelMatch?.[1] || '',
+    mainOpportunity: opportunityMatch ? opportunityMatch[1].replace(/\\"/g, '"') : 'No pudimos recuperar el detalle completo, pero tu SET Score sí se calculó correctamente.',
+    dimensions,
+  };
+};
+
 const parseEvaluatorJson = text => {
-  const raw = String(text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  const parsed = JSON.parse(start >= 0 && end >= start ? raw.slice(start, end + 1) : raw);
-  const keys = ['situacion', 'emocion', 'transicion', 'movimiento'];
-  if (!Number.isFinite(parsed?.setScore) || !parsed?.dimensions || !parsed?.mainOpportunity) throw new Error('Formato incompleto');
-  keys.forEach(key => { if (!Number.isFinite(parsed.dimensions[key]?.score) || typeof parsed.dimensions[key]?.feedback !== 'string') throw new Error('Formato de dimensión incompleto'); });
+  const raw = String(text || '');
+  let parsed = parseJsonLoose(raw);
+
+  if (!isValidEvaluatorShape(parsed)) {
+    const slice = extractJsonSlice(stripMarkdownFence(raw));
+    const recovered = extractEvaluatorFieldsLoosely(slice);
+    if (!recovered) throw new Error('La IA no devolvió un formato reconocible. Puedes reintentar.');
+    if (!parsed) console.warn('[MissionConversationHunt] SET Evaluator devolvió JSON inválido, se usó extracción por regex como respaldo.');
+    parsed = recovered;
+  }
+
   return {
     setScore: Math.max(0, Math.min(100, Math.round(parsed.setScore))),
     level: typeof parsed.level === 'string' ? parsed.level : '',
     mainOpportunity: String(parsed.mainOpportunity),
-    dimensions: Object.fromEntries(keys.map(key => [key, { score: Math.max(0, Math.min(100, Math.round(parsed.dimensions[key].score))), feedback: parsed.dimensions[key].feedback.trim() }])),
+    dimensions: Object.fromEntries(EVALUATOR_DIMENSION_KEYS.map(key => [key, {
+      score: Math.max(0, Math.min(100, Math.round(parsed.dimensions[key].score))),
+      feedback: String(parsed.dimensions[key].feedback).trim(),
+    }])),
   };
 };
 
