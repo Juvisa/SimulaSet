@@ -234,10 +234,19 @@ REGLAS:
 // sesiones maestras del programa u otro historial del setter). Hoy SET Coach
 // responde 100% desde la metodología S.E.T., sin depender de ningún dato
 // por-usuario ni de tablas de mentoría 1 a 1.
+// Fase 2 de la optimización de costos: el widget vive en MainLayout y está
+// disponible en cada pantalla de la app para cualquier setter en cualquier
+// momento — a diferencia de los generadores on-demand (Briefing, Follow-up),
+// su patrón de uso es el mismo que el chat del simulador (conversacional,
+// potencialmente frecuente), así que también migra a Haiku. La respuesta es
+// texto libre (no JSON), así que no hay riesgo de truncar un contrato — el
+// system prompt ya pide explícitamente "breve y directo", 450 tokens es
+// margen de sobra para 1-2 frases de diagnóstico + 1-2 opciones de respuesta.
 export const askSetCoach = async (userId, query) => {
   return requestClaude({
     systemPrompt: SET_COACH_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: query }],
-    maxTokens: 800,
+    maxTokens: 450,
+    model: 'haiku',
   });
 };
