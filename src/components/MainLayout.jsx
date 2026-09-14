@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import SetCoachWidget from './SetCoachWidget';
+import ErrorBoundary from './ErrorBoundary';
 
 const MainLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -27,7 +28,7 @@ const MainLayout = ({ children }) => {
       <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
 
       <main className="flex-1 overflow-y-auto p-6 md:p-8 pt-20 md:pt-8 bg-transparent">
-        {children}
+        <ErrorBoundary>{children}</ErrorBoundary>
       </main>
 
       <SetCoachWidget />

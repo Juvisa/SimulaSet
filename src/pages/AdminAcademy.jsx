@@ -289,19 +289,23 @@ const AdminAcademy = () => {
     setUploadingVideo(true);
     setUploadProgress(0);
     setUploadError('');
+    console.error('[AdminAcademy] handleVideoUpload → iniciando para lessonId:', editingLesson.id, 'archivo:', { name: videoFile.name, size: videoFile.size, type: videoFile.type });
     try {
       const directUpload = await createMuxDirectUpload(editingLesson.id);
+      console.error('[AdminAcademy] handleVideoUpload → createMuxDirectUpload OK:', directUpload);
       const pendingLesson = { ...editingLesson, ...directUpload.lesson };
       setEditingLesson(pendingLesson);
       setLessons(current => current.map(lesson => lesson.id === pendingLesson.id ? { ...lesson, ...pendingLesson } : lesson));
 
       await uploadFileToMux(directUpload.uploadUrl, videoFile, setUploadProgress);
+      console.error('[AdminAcademy] handleVideoUpload → uploadFileToMux OK');
       const processingLesson = { ...pendingLesson, video_status: 'processing' };
       setEditingLesson(processingLesson);
       setLessons(current => current.map(lesson => lesson.id === processingLesson.id ? { ...lesson, video_status: 'processing' } : lesson));
       setVideoFile(null);
       setUploadProgress(100);
     } catch (uploadFailure) {
+      console.error('[AdminAcademy] handleVideoUpload → excepción:', uploadFailure);
       setUploadError(uploadFailure instanceof Error ? uploadFailure.message : 'No se pudo subir la grabación.');
     } finally {
       setUploadingVideo(false);
@@ -388,7 +392,25 @@ const AdminAcademy = () => {
           <div className="md:col-span-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 sm:p-4">
             <h3 className="text-sm font-semibold text-text-primary">Grabación de la clase (Mux)</h3>
             <p className="mt-1 text-xs text-text-secondary">El MP4 se sube directamente a Mux y se procesa en segundo plano.</p>
-            <input id={`mux-video-file-${editingLesson.id}`} type="file" accept="video/mp4,.mp4" disabled={uploadingVideo} onChange={event => { setVideoFile(event.target.files?.[0] || null); setUploadError(''); setUploadProgress(0); }} className="sr-only" />
+            <input
+              id={`mux-video-file-${editingLesson.id}`}
+              type="file"
+              accept="video/mp4,.mp4"
+              disabled={uploadingVideo}
+              onChange={event => {
+                try {
+                  const selected = event.target.files?.[0] || null;
+                  console.error('[AdminAcademy] archivo seleccionado:', selected ? { name: selected.name, size: selected.size, type: selected.type } : null);
+                  setVideoFile(selected);
+                  setUploadError('');
+                  setUploadProgress(0);
+                } catch (selectionError) {
+                  console.error('[AdminAcademy] error al seleccionar archivo:', selectionError);
+                  setUploadError(selectionError instanceof Error ? selectionError.message : 'No se pudo leer el archivo seleccionado.');
+                }
+              }}
+              className="sr-only"
+            />
             <label htmlFor={`mux-video-file-${editingLesson.id}`} className={`mt-4 flex min-h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-accent-coral/50 bg-bg-input px-4 py-4 text-center transition-colors hover:border-accent-coral ${uploadingVideo ? 'cursor-not-allowed opacity-50' : ''}`}>
               <Upload size={22} className="mb-2 text-accent-coral" />
               <span className="text-sm font-bold text-text-primary">Seleccionar video MP4</span>
