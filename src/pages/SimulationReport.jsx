@@ -82,6 +82,25 @@ const SimulationReport = () => {
   const score = report?.puntuacion_global || 0;
   const scoreColor = score >= 80 ? '#1D9E75' : score >= 60 ? '#C9920A' : '#DC2626';
 
+  // Ronald reportó que al salir de la simulación no podía volver a copiar la
+  // conversación para analizarla (el simulador no guarda el chat en ningún
+  // lugar al que el alumno pueda regresar). Se arma acá el mismo formato de
+  // transcript que ya usa BriefingModal y se manda como state al navegar a
+  // /analyzer, para que el Analizador llegue pre-cargado sin copiar/pegar a
+  // mano. Se descartan mensajes 'system' (errores de la API) — no son parte
+  // real de la conversación con el prospecto.
+  const conversationTranscript = (session?.messages || [])
+    .filter((m) => m.role === 'setter' || m.role === 'prospect')
+    .map((m) => `${m.role === 'setter' ? 'Setter' : 'Prospecto'}: ${m.content}`)
+    .join('\n');
+  const goToAnalyzer = () => navigate('/analyzer', {
+    state: {
+      projectId: session?.projectId,
+      mode: session?.mode,
+      conversationText: conversationTranscript,
+    },
+  });
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
@@ -105,10 +124,19 @@ const SimulationReport = () => {
 
         <button
           onClick={() => navigate('/missions')}
-          className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3.5 text-sm font-black text-white transition-opacity hover:opacity-90"
+          className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3.5 text-sm font-black text-white transition-opacity hover:opacity-90"
         >
           <ListChecks size={17} /> Volver a Misiones y Sellar mi Día
         </button>
+
+        {conversationTranscript && (
+          <button
+            onClick={goToAnalyzer}
+            className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl border border-accent-coral/30 bg-accent-coral/10 px-5 py-3.5 text-sm font-black text-accent-coral transition-opacity hover:opacity-90"
+          >
+            <BarChart2 size={17} /> Analizar esta conversación con IA
+          </button>
+        )}
 
         <div className="text-center mb-8 animate-slide-up">
           <div className="text-6xl font-black mb-2" style={{ color: scoreColor }}>
@@ -242,7 +270,7 @@ const SimulationReport = () => {
             <span className="text-xs">Practicar</span>
           </button>
           <button
-            onClick={() => navigate('/analyzer')}
+            onClick={goToAnalyzer}
             className="flex flex-col items-center gap-2 bg-bg-card border border-border-subtle py-4 rounded-xl text-text-secondary hover:text-text-primary transition-all"
           >
             <BarChart2 size={20} />

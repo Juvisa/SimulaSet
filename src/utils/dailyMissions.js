@@ -199,10 +199,20 @@ export const completeDailyMission = async ({ userId, isoDate, missionId, setScor
 };
 
 export const submitCriterionAnswer = async ({ userId, isoDate, missionId, answerId, correct }) => {
+  // Se incluye status: 'in_progress' explícitamente — antes solo se guardaban
+  // las columnas criterion_*, así que el status de la fila quedaba en 'pending'
+  // (o se insertaba con el default 'pending' si era la primera interacción del
+  // día) aunque el alumno ya hubiera respondido el Reto de Criterio. Esto hacía
+  // que el punto del selector semanal y cualquier lectura futura del status
+  // crudo mostraran "sin avance" pese a haber avance real. El único caller
+  // (CriterionChallenge en Missions.jsx) ya bloquea esta función una vez la
+  // misión está 'completed' (canAnswerCriterion excluye ese caso), así que
+  // nunca puede pisar un status más avanzado.
   const payload = {
     user_id: userId,
     mission_date: isoDate,
     mission_id: missionId,
+    status: 'in_progress',
     criterion_answer: answerId,
     criterion_correct: correct,
     criterion_completed_at: new Date().toISOString(),

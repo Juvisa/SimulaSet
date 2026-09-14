@@ -42,9 +42,12 @@ const Analyzer = () => {
   const [projects, setProjects] = useState([]);
   const [form, setForm] = useState({
     projectId: location.state?.projectId || '',
-    mode: 'outbound',
+    mode: location.state?.mode || 'outbound',
     inputType: 'text',
-    conversationText: '',
+    // Prellenado cuando se llega desde "Analizar esta conversación con IA"
+    // en SimulationReport — evita que el alumno tenga que volver a abrir la
+    // simulación (ya cerrada) para copiar el texto a mano.
+    conversationText: location.state?.conversationText || '',
   });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);

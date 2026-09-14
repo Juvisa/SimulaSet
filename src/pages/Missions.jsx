@@ -32,6 +32,8 @@ const STATUS_META = {
   pending: { label: 'Pendiente', className: 'bg-bg-input text-text-secondary' },
   in_progress: { label: 'En Curso', className: 'bg-accent-gold/10 text-accent-gold' },
   in_review: { label: 'En Revisión', className: 'bg-blue-500/10 text-blue-400' },
+  step1_done: { label: 'Paso 1/2 · Falta simular', className: 'bg-accent-gold/10 text-accent-gold' },
+  ready: { label: 'Listo para sellar', className: 'bg-blue-500/10 text-blue-400' },
   completed: { label: 'Completada', className: 'bg-green-500/10 text-green-400' },
 };
 
@@ -246,6 +248,18 @@ const Missions = () => {
   const modeColor = MODE_COLORS[mission.mode] || '#E0605E';
   const challenge = getCriterionChallengeByMissionId(mission.id);
   const criterionCorrect = progress?.criterion_correct === true;
+  // El badge de cabecera no puede mostrar el `status` crudo tal cual: un
+  // alumno que ya respondió bien el Reto de Criterio pero no llegó al SET
+  // Score mínimo seguía viendo "Pendiente" a secas (el reporte de Pilar), que
+  // no comunica que ya hay avance real ni qué falta. Se deriva un estado de
+  // visualización a partir de los dos requisitos reales de la misión.
+  const displayStatusKey = completed
+    ? 'completed'
+    : criterionCorrect && scoreQualifies
+      ? 'ready'
+      : criterionCorrect
+        ? 'step1_done'
+        : status;
 
   const handleCriterionAnswered = (savedProgress) => {
     if (savedProgress) setProgressByDate((prev) => ({ ...prev, [selectedDay.isoDate]: savedProgress }));
@@ -360,8 +374,8 @@ const Missions = () => {
                 <h2 className="mt-2 text-2xl font-black text-text-primary">{mission.title}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-text-secondary">{mission.objective}</p>
               </div>
-              <div className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${STATUS_META[status].className}`}>
-                {STATUS_META[status].label}
+              <div className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${STATUS_META[displayStatusKey].className}`}>
+                {STATUS_META[displayStatusKey].label}
               </div>
             </div>
 
