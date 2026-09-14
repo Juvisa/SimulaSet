@@ -79,6 +79,73 @@ export const CRITERION_CHALLENGES = {
     correctId: 'b',
     explanation: 'Ofrece el siguiente paso concreto (agenda) con opciones específicas de horario — sin saltar directo a la venta, sin quedar vago y sin dejar toda la iniciativa (y la estructura) en manos del lead.',
   },
+
+  // ── Semana 2 (14-18 sept) — Calificación y dolor ─────────────────────────
+  daily_w2_lunes_monosilabos: {
+    type: 'ruptura_monosilabo',
+    label: 'Ruptura de monosílabo',
+    prompt: 'Le escribes a un lead frío y responde solo "ok", sin decir nada más. ¿Cuál es la MEJOR forma de reabrir la conversación?',
+    options: [
+      { id: 'a', text: '¿Sigues interesado en lo que te comenté o ya no es para ti en este momento?', feedback: 'Pregunta cerrada que casi obliga a un "no": le das al lead la salida más fácil para cerrar la conversación de un tirón.' },
+      { id: 'b', text: '¿Ese "ok" es de "sigo leyendo" o de "ya déjame tranquilo"? Cuéntame qué te llamó la atención.' },
+      { id: 'c', text: '¡Perfecto! Entonces te cuento ya mismo todos los detalles para que decidas rápido.', feedback: 'Pitch apresurado: un "ok" seco no es luz verde para soltar el discurso completo, es apenas una señal ambigua.' },
+      { id: 'd', text: '¿Por qué respondiste solo "ok"? ¿Ya no te interesa lo que hablamos antes?', feedback: 'Interrogatorio directo que suena a reclamo — pones al lead a la defensiva en vez de invitarlo a abrirse.' },
+    ],
+    correctId: 'b',
+    explanation: 'Nombrar el monosílabo con humor y sin acusar, seguido de una pregunta abierta, invita al lead a explicarse sin sentirse presionado ni juzgado — las otras opciones cierran la puerta (pregunta cerrada), la empujan (pitch) o la señalan como un error suyo (interrogatorio).',
+  },
+  daily_w2_martes_objecion_info: {
+    type: 'desarme_objecion',
+    label: 'Desarme de objeción',
+    prompt: 'El lead escribe: "Se ve interesante, mejor mándame la info por aquí o un PDF y ahí te digo." ¿Cuál es la MEJOR respuesta?',
+    options: [
+      { id: 'a', text: 'Claro, en un momento te paso toda la información y cualquier duda me escribes.', feedback: 'Cedes el control por completo: le entregas el material y pierdes cualquier posibilidad de seguir guiando la conversación.' },
+      { id: 'b', text: 'Antes de mandarte algo genérico, cuéntame tu situación así te comparto justo lo que aplica a ti.' },
+      { id: 'c', text: 'Te cuento todo por aquí mismo: el programa incluye [detalles] y el precio es [precio].', feedback: 'Pitch apresurado en formato de folleto — sueltas todo el contenido sin saber siquiera si aplica a su situación real.' },
+      { id: 'd', text: '¿Prefieres que te mande el PDF o que mejor agendemos ya una llamada rápida?', feedback: 'Pregunta cerrada que sigue dejando el PDF como opción válida — no desarma la objeción, solo la disfraza de elección.' },
+    ],
+    correctId: 'b',
+    explanation: 'Pedir contexto antes de compartir cualquier material mantiene la conversación viva y te permite personalizar lo que sea que envíes después — entregar sin indagar, soltar el pitch completo, o dejar el PDF como opción "válida" son formas distintas de la misma trampa: perder el control de la conversación.',
+  },
+  daily_w2_miercoles_urgencia_real: {
+    type: 'diagnostico_set',
+    label: 'Urgencia vs. curiosidad',
+    prompt: 'El lead dice: "Sí me interesaría en algún momento, no hay prisa." ¿Cuál es la MEJOR forma de profundizar en S.E.T. antes de avanzar?',
+    options: [
+      { id: 'a', text: 'Perfecto, cuando tengas prisa me avisas y seguimos platicando con toda calma.', feedback: 'Validas sin indagar: aceptas la falta de urgencia tal cual, sin explorar si de verdad no hay dolor o solo no lo ha nombrado.' },
+      { id: 'b', text: '¿Qué tendría que pasar para que esto se vuelva una prioridad real para ti ahora mismo?' },
+      { id: 'c', text: '¿Entonces no es urgente para ti en este momento, cierto que no?', feedback: 'Pregunta de interrogatorio que solo busca confirmar lo que ya dijo — no abre ningún espacio nuevo para indagar.' },
+      { id: 'd', text: 'Te entiendo, pero esta oportunidad no va a estar disponible siempre, ¿sabes?', feedback: 'Pitch de escasez apresurado: presionas con urgencia artificial en vez de indagar si hay una urgencia real detrás.' },
+    ],
+    correctId: 'b',
+    explanation: 'Preguntar qué convertiría el tema en prioridad revela si el "no hay prisa" es indiferencia real o solo falta de una razón concreta para actuar ahora — validar sin indagar, presionar con escasez, o solo confirmar lo obvio no profundizan en nada nuevo.',
+  },
+  daily_w2_jueves_autoridad: {
+    type: 'calificacion_autoridad',
+    label: 'Cualificación de autoridad',
+    prompt: 'Llevas dos mensajes con un lead que parece interesado, pero no sabes si decide solo o con alguien más. ¿Cuál es la MEJOR forma de indagarlo?',
+    options: [
+      { id: 'a', text: '¿Tú eres quien decide esto o tengo que hablar con alguien más arriba?', feedback: 'Interrogatorio directo que suena a desconfianza y puede sentirse como un cuestionamiento a su importancia.' },
+      { id: 'b', text: 'Cuando ya tengas claridad, ¿la decisión la tomas tú solo o la conversas con alguien más?' },
+      { id: 'c', text: 'Como veo que te interesa, asumo que tú decides esto sin consultarlo con nadie.', feedback: 'Asumir sin preguntar: das por hecho la autoridad del lead, y si te equivocas, planeas todo el cierre sobre una base falsa.' },
+      { id: 'd', text: 'No te preocupes por eso ahora, primero veamos si te gusta el programa.', feedback: 'Evitas el tema por completo — pospones una pregunta clave que necesitas resuelta antes de invertir más tiempo en el cierre.' },
+    ],
+    correctId: 'b',
+    explanation: 'Preguntar por el PROCESO de decisión (no por la persona directamente) obtiene la misma información sin sonar a desconfianza — interrogar, asumir sin preguntar, o evitar el tema dejan el punto más importante de la calificación sin resolver.',
+  },
+  daily_w2_viernes_puente_valor: {
+    type: 'puente_agendamiento',
+    label: 'Puente de valor',
+    prompt: 'El lead ya mostró dolor real, urgencia y autoridad para decidir. ¿Cuál es la MEJOR transición para llevarlo a una llamada?',
+    options: [
+      { id: 'a', text: 'Perfecto, entonces te paso el link para que te inscribas directamente ya mismo.', feedback: 'Saltas directo a la venta sin una llamada de por medio, ignorando que el siguiente paso lógico es confirmar el encaje, no cerrar de una vez.' },
+      { id: 'b', text: 'Con todo lo que me compartiste, lo justo es hablar 15 min para ver el mejor camino: ¿hoy o mañana?' },
+      { id: 'c', text: 'Genial, dame un momento para preparar todo y en un rato te aviso cómo seguimos.', feedback: 'Respuesta vaga sin ningún siguiente paso concreto — pierdes el momentum justo cuando el lead ya calificó completo.' },
+      { id: 'd', text: 'Cuando tú quieras podemos hablar, nada más dime qué día y hora te queda mejor.', feedback: 'Cedes toda la iniciativa y la estructura al lead — después de calificarlo bien, esto se lee como falta de dirección.' },
+    ],
+    correctId: 'b',
+    explanation: 'Un lead ya calificado (dolor, urgencia, autoridad) merece un siguiente paso concreto y con opciones específicas — saltar a la venta, quedar vago, o ceder la estructura desperdician la calificación que ya lograste durante la semana.',
+  },
 };
 
 export const getCriterionChallengeByMissionId = (missionId) => CRITERION_CHALLENGES[missionId] || null;

@@ -22,6 +22,22 @@ const addDays = (date, amount) => {
   return next;
 };
 
+// Lunes de la Semana 1 de la Cohorte GEN 01 — ancla oficial del programa.
+// getCohortWeekNumber() nunca depende de "hoy" salvo como default: siempre
+// recibe una fecha explícita y calcula cuántas semanas completas pasaron
+// desde este lunes. Se ancla a la fecha (medianoche local), no a la hora
+// exacta, para que el resultado no varíe según a qué hora del día se llame.
+const COHORT_1_START_ISO = '2026-09-07';
+
+export const getCohortWeekNumber = (date = new Date()) => {
+  const [startYear, startMonth, startDay] = COHORT_1_START_ISO.split('-').map(Number);
+  const cohortStart = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+  const evaluated = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+  const diffDays = Math.floor((evaluated - cohortStart) / 86400000);
+  const weekNumber = Math.floor(diffDays / 7) + 1;
+  return Math.min(4, Math.max(1, weekNumber));
+};
+
 export const getWeekDays = (referenceDate = new Date()) => {
   const monday = addDays(referenceDate, 1 - getIsoWeekday(referenceDate));
   const todayIso = toIsoDate(new Date());

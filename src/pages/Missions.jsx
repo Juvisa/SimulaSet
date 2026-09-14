@@ -8,6 +8,7 @@ import { getCriterionChallengeByMissionId } from '../data/criterionChallenges';
 import {
   getWeekDays,
   getBestSimulatorScoreForDate,
+  getCohortWeekNumber,
   getWeekMissionProgress,
   markMissionInProgress,
   completeDailyMission,
@@ -16,6 +17,16 @@ import {
 } from '../utils/dailyMissions';
 
 const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#DC2626' };
+
+// Semana 1 y 2 tienen banco propio de misiones/retos; 3 y 4 aún caen de
+// vuelta al contenido de la Semana 1 (ver data/dailyMissions.js), así que por
+// ahora solo se les da una etiqueta genérica hasta que se escriba su banco.
+const WEEK_THEME_LABELS = {
+  1: 'Fundamentos S.E.T.',
+  2: 'Calificación y dolor',
+  3: 'Semana 3',
+  4: 'Semana 4',
+};
 
 const STATUS_META = {
   pending: { label: 'Pendiente', className: 'bg-bg-input text-text-secondary' },
@@ -176,7 +187,11 @@ const Missions = () => {
   const todayIndex = weekDays.findIndex((d) => d.isToday);
   const [selectedIndex, setSelectedIndex] = useState(todayIndex === -1 ? 0 : todayIndex);
   const selectedDay = weekDays[selectedIndex];
-  const mission = getDailyMissionByIsoWeekday(selectedDay.isoWeekday);
+  // Se calcula sobre la fecha REALMENTE visible en el selector (no un "ahora"
+  // implícito) para que el banco de contenido correcto (Semana 1, 2, etc.) se
+  // resuelva a partir de lo que el alumno está viendo en pantalla.
+  const weekNumber = getCohortWeekNumber(selectedDay.date);
+  const mission = getDailyMissionByIsoWeekday(selectedDay.isoWeekday, weekNumber);
 
   const [progressByDate, setProgressByDate] = useState({});
   const [streak, setStreak] = useState(null);
@@ -282,7 +297,12 @@ const Missions = () => {
       <div className="mx-auto max-w-3xl animate-fade-in">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral">Entrenamiento diario</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-accent-coral">Entrenamiento diario</div>
+              <span className="rounded-full border border-accent-gold/30 bg-accent-gold/5 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-accent-gold">
+                Semana {weekNumber} · {WEEK_THEME_LABELS[weekNumber] || `Semana ${weekNumber}`}
+              </span>
+            </div>
             <h1 className="mt-2 text-3xl font-black text-text-primary md:text-4xl">Misiones Diarias</h1>
             <p className="mt-2 text-sm text-text-secondary">Una misión por día, lunes a viernes. Responde el Reto de Criterio, practica en el simulador y mantén tu racha.</p>
           </div>
@@ -300,7 +320,7 @@ const Missions = () => {
         {/* Selector semanal */}
         <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
           {weekDays.map((day, index) => {
-            const dayMission = getDailyMissionByIsoWeekday(day.isoWeekday);
+            const dayMission = getDailyMissionByIsoWeekday(day.isoWeekday, getCohortWeekNumber(day.date));
             const dayStatus = progressByDate[day.isoDate]?.status || 'pending';
             const isSelected = index === selectedIndex;
             return (
