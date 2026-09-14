@@ -8,7 +8,7 @@ import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import FomoBar from '../components/FomoBar';
 import LevelBadge from '../components/LevelBadge';
-import { Play, BarChart2, Home, Loader2, Trophy, AlertTriangle, CheckCircle, BookOpen, FileText } from 'lucide-react';
+import { Play, BarChart2, Home, ListChecks, Loader2, Trophy, AlertTriangle, CheckCircle, BookOpen, FileText } from 'lucide-react';
 import BriefingModal from '../components/BriefingModal';
 
 const SimulationReport = () => {
@@ -102,6 +102,13 @@ const SimulationReport = () => {
             <Play size={15} /> Nueva simulación
           </button>
         </div>
+
+        <button
+          onClick={() => navigate('/missions')}
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3.5 text-sm font-black text-white transition-opacity hover:opacity-90"
+        >
+          <ListChecks size={17} /> Volver a Misiones y Sellar mi Día
+        </button>
 
         <div className="text-center mb-8 animate-slide-up">
           <div className="text-6xl font-black mb-2" style={{ color: scoreColor }}>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Brain, CheckCircle2, Flame, Loader2, Target, XCircle } from 'lucide-react';
+import { ArrowRight, Brain, CheckCircle2, Flame, Loader2, PartyPopper, Target, Trophy, X, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getDailyMissionByIsoWeekday } from '../data/dailyMissions';
@@ -83,6 +83,7 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
     () => seededShuffle(challenge.options, hashSeed(`${userId}:${isoDate}:${missionId}`)),
     [challenge, userId, isoDate, missionId],
   );
+  const selectedOption = challenge.options.find((option) => option.id === selected);
 
   return (
     <section className="mb-6 rounded-2xl border border-border-subtle bg-bg-input/30 p-4 md:p-5">
@@ -121,7 +122,13 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
       {revealed ? (
         <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card/70 p-3">
           <p className="text-xs font-bold text-text-primary">{correct ? '✓ ¡Correcto!' : '✗ No era esa. La respuesta correcta era otra.'}</p>
-          <p className="mt-1 text-xs leading-relaxed text-text-secondary">{challenge.explanation}</p>
+          {!correct && selectedOption?.feedback && (
+            <div className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5">
+              <p className="text-[10px] font-black uppercase tracking-wide text-red-400">Tu error táctico</p>
+              <p className="mt-1 text-xs leading-relaxed text-red-300">{selectedOption.feedback}</p>
+            </div>
+          )}
+          <p className="mt-2 text-xs leading-relaxed text-text-secondary">{challenge.explanation}</p>
           {!correct && canAct && (
             <button onClick={handleRetry} className="mt-2 text-xs font-bold text-accent-coral hover:underline">Intentar de nuevo</button>
           )}
@@ -140,6 +147,27 @@ const CriterionChallenge = ({ challenge, missionId, canAct, initialAnswer, initi
   );
 };
 
+const WeekCompleteModal = ({ streak, onClose, onCelebrate }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
+    <div className="card-tactical w-full max-w-sm rounded-2xl border-accent-gold/40 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+      <button onClick={onClose} className="ml-auto flex text-text-secondary hover:text-text-primary" aria-label="Cerrar"><X size={18} /></button>
+      <PartyPopper size={40} className="mx-auto text-accent-gold" />
+      <h3 className="mt-4 text-xl font-black text-text-primary">¡Semana de Misiones Completada!</h3>
+      <p className="mt-2 text-sm text-text-secondary">Sellaste los 5 días de la semana con criterio y práctica real. Esa consistencia es lo que separa a un Setter de alto nivel.</p>
+      {streak && (
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-accent-gold/30 bg-accent-gold/5 px-4 py-2.5">
+          <Flame size={16} className="text-accent-gold" />
+          <span className="text-sm font-black text-accent-gold">{streak.current_streak} día{streak.current_streak === 1 ? '' : 's'} de racha</span>
+        </div>
+      )}
+      <button onClick={onCelebrate} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-coral px-5 py-3 text-sm font-black text-white">
+        <Trophy size={16} /> Celebrar en SET WINS
+      </button>
+      <button onClick={onClose} className="mt-3 text-xs font-bold text-text-secondary hover:text-text-primary">Seguir en Misiones</button>
+    </div>
+  </div>
+);
+
 const Missions = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -157,6 +185,7 @@ const Missions = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showWeekComplete, setShowWeekComplete] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -234,7 +263,12 @@ const Missions = () => {
       xpReward: mission.xpReward,
     });
     setSubmitting(false);
-    if (saved) setProgressByDate((prev) => ({ ...prev, [selectedDay.isoDate]: saved }));
+    if (saved) {
+      const updatedProgressByDate = { ...progressByDate, [selectedDay.isoDate]: saved };
+      setProgressByDate(updatedProgressByDate);
+      const weekFullyCompleted = weekDays.every((d) => updatedProgressByDate[d.isoDate]?.status === 'completed');
+      if (weekFullyCompleted) setShowWeekComplete(true);
+    }
     if (newStreak) {
       setStreak(newStreak);
       setSuccessMsg(`¡Misión completada! 🔥 Racha: ${newStreak.current_streak} día(s) · +${mission.xpReward} XP`);
@@ -388,6 +422,14 @@ const Missions = () => {
           Ejercicio introductorio (una sola vez, no cuenta como tu misión de hoy): Caza Conversaciones →
         </button>
       </div>
+
+      {showWeekComplete && (
+        <WeekCompleteModal
+          streak={streak}
+          onClose={() => setShowWeekComplete(false)}
+          onCelebrate={() => navigate('/set-wins')}
+        />
+      )}
     </Layout>
   );
 };

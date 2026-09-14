@@ -147,6 +147,19 @@ export const completeDailyMission = async ({ userId, isoDate, missionId, setScor
     return { progress: null, streak: null, error: `Necesitas un SET Score válido (≥ ${minSetScore}) en el simulador para completar la misión de hoy.` };
   }
 
+  // Guardia de idempotencia: si el día ya estaba 'completed' (doble clic,
+  // reintento de red tras un timeout, etc.), NO se vuelve a upsertear ni se
+  // llama a applyStreakAndXp — evita duplicar XP y, más grave, resetear la
+  // racha (applyStreakAndXp compara last_completed_date contra el día ANTERIOR
+  // a isoDate; en una segunda llamada ese valor ya es isoDate mismo, así que
+  // la racha se reiniciaría a 1 en vez de mantenerse).
+  const { progress: existing, error: readError } = await getDailyMissionProgress({ userId, isoDate });
+  if (readError) return { progress: null, streak: null, error: readError };
+  if (existing?.status === 'completed') {
+    const { streak, error: streakError } = await getUserStreak(userId);
+    return { progress: existing, streak, error: streakError };
+  }
+
   const now = new Date().toISOString();
   const payload = {
     user_id: userId,
