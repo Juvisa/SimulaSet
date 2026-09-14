@@ -83,21 +83,68 @@ const PracticeCta = ({ available = true, completed, marking, onGoSimulate, onMar
   </div>
 );
 
+// Convierte un link "para compartir" de Loom/YouTube/Vimeo a su URL de embed
+// — pegar el link normal (youtu.be/..., vimeo.com/123, loom.com/share/...)
+// no sirve directo en un <iframe>, cada plataforma exige su propia ruta
+// /embed/. Si no reconoce la plataforma, usa la URL tal cual (algunos
+// proveedores sí aceptan el link directo).
+const toEmbedUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('youtube.com') || parsed.hostname === 'youtu.be') {
+      const videoId = parsed.hostname === 'youtu.be' ? parsed.pathname.slice(1) : parsed.searchParams.get('v');
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    }
+    if (parsed.hostname.includes('vimeo.com')) {
+      const videoId = parsed.pathname.split('/').filter(Boolean).pop();
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : url;
+    }
+    if (parsed.hostname.includes('loom.com')) {
+      return url.replace('/share/', '/embed/');
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
+// Disponible si hay video listo por CUALQUIERA de los dos caminos: Mux
+// procesado, o un link externo (Loom/YouTube/Vimeo) pegado en AdminAcademy —
+// no se exige que sean excluyentes ni que Mux termine de procesar si ya hay
+// un link externo funcionando.
+const isLessonAvailable = (lesson) => lesson.video_status === 'ready' || Boolean(lesson.video_url);
+
 const LessonVideo = ({ lesson }) => {
-  if (lesson.video_status !== 'ready' || !lesson.mux_playback_id) return null;
-  return (
-    <div className="mt-4 overflow-hidden rounded-xl bg-black">
-      <MuxPlayer
-        playbackId={lesson.mux_playback_id}
-        metadataVideoTitle={lesson.title}
-        streamType="on-demand"
-        autoPlay={false}
-        playsInline
-        className="aspect-video w-full"
-        style={{ aspectRatio: '16 / 9', width: '100%' }}
-      />
-    </div>
-  );
+  if (lesson.video_status === 'ready' && lesson.mux_playback_id) {
+    return (
+      <div className="mt-4 overflow-hidden rounded-xl bg-black">
+        <MuxPlayer
+          playbackId={lesson.mux_playback_id}
+          metadataVideoTitle={lesson.title}
+          streamType="on-demand"
+          autoPlay={false}
+          playsInline
+          className="aspect-video w-full"
+          style={{ aspectRatio: '16 / 9', width: '100%' }}
+        />
+      </div>
+    );
+  }
+  if (lesson.video_url) {
+    return (
+      <div className="mt-4 overflow-hidden rounded-xl bg-black">
+        <iframe
+          src={toEmbedUrl(lesson.video_url)}
+          title={lesson.title}
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+          className="aspect-video w-full"
+          style={{ aspectRatio: '16 / 9', width: '100%', border: 0 }}
+        />
+      </div>
+    );
+  }
+  return null;
 };
 
 const progressKey = (moduleId, lessonId) => `${moduleId}:${lessonId}`;
@@ -302,7 +349,7 @@ const Academy = () => {
                     <div className="border-t border-border-subtle px-4 pb-4 pt-4">
                       <p className="mt-2 text-sm leading-relaxed text-text-secondary">{lesson.description}</p>
                       <LessonVideo lesson={lesson} />
-                      {lesson.video_status !== 'ready' && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
+                      {!isLessonAvailable(lesson) && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
                       {Array.isArray(lesson.topics) && lesson.topics.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{lesson.topics.map(topic => <span key={topic} className="max-w-full rounded-full border border-border-subtle bg-bg-input px-3 py-1.5 text-xs text-text-secondary">{topic}</span>)}</div>}
                       <PracticeCta
                         completed={completed}
@@ -334,7 +381,7 @@ const Academy = () => {
         {weekGroups.map((group) => (
           <div key={group.moduleId} className="space-y-4">
             {group.lessons.map((lesson) => {
-              const available = lesson.video_status === 'ready';
+              const available = isLessonAvailable(lesson);
               const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (
@@ -372,7 +419,7 @@ const Academy = () => {
           <h2 className="mb-4 text-xl font-black text-text-primary">Labs prácticos</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {labLessons.map((lesson) => {
-              const available = lesson.video_status === 'ready';
+              const available = isLessonAvailable(lesson);
               const completed = progress[progressKey('practical-labs', lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey('practical-labs', lesson.id);
               return (
@@ -410,7 +457,7 @@ const Academy = () => {
           <h2 className="mb-4 text-xl font-black text-text-primary">{group.moduleId}</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {group.lessons.map((lesson) => {
-              const available = lesson.video_status === 'ready';
+              const available = isLessonAvailable(lesson);
               const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (

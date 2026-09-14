@@ -7,7 +7,7 @@ import { createMuxDirectUpload, uploadFileToMux } from '../utils/muxUploads';
 
 const EMPTY_FORM = {
   title: '', description: '', module_id: '', lesson_id: '', position: 1,
-  scheduled_at: '', topics: '', resources: [], published: false,
+  scheduled_at: '', topics: '', resources: [], published: false, video_url: '',
 };
 
 const RESOURCE_TYPES = [
@@ -58,10 +58,11 @@ const sortLessons = (rows) => [...rows].sort((a, b) => (
   || a.lesson_id.localeCompare(b.lesson_id)
 ));
 
-const getVideoState = (status) => {
-  if (status === 'ready') return { label: 'Video listo', className: 'bg-green-500/10 text-green-400' };
+const getVideoState = (status, videoUrl) => {
+  if (status === 'ready') return { label: 'Video listo (Mux)', className: 'bg-green-500/10 text-green-400' };
   if (status === 'errored') return { label: 'Error', className: 'bg-red-500/10 text-red-400' };
   if (['waiting_for_upload', 'uploading', 'processing'].includes(status)) return { label: 'Procesando', className: 'bg-amber-500/10 text-amber-400' };
+  if (videoUrl) return { label: 'Video listo (link externo)', className: 'bg-green-500/10 text-green-400' };
   return { label: 'Sin video', className: 'bg-bg-input text-text-secondary' };
 };
 
@@ -119,6 +120,7 @@ const AdminAcademy = () => {
       topics: Array.isArray(lesson.topics) ? lesson.topics.join('\n') : '',
       resources: Array.isArray(lesson.resources) ? lesson.resources.map(resource => ({ ...resource, id: resource.id || createResourceId() })) : [],
       published: lesson.published,
+      video_url: lesson.video_url || '',
     });
     setSaveError('');
     setSaveRawError(null);
@@ -168,12 +170,26 @@ const AdminAcademy = () => {
       return;
     }
 
-    if (!editingLesson && lessons.some(lesson => (
-      lesson.module_id.trim() === normalizedModuleId
-      && lesson.lesson_id.trim() === normalizedLessonId
-    ))) {
-      setSaveError('Ya existe una clase con este módulo e ID de lección. Usa identificadores diferentes.');
-      return;
+    // Si ya existe una clase con este módulo+lección (ej. la Semana 2 sembrada
+    // de fábrica), en vez de bloquear sin salida se le ofrece al admin
+    // actualizar esa clase existente con los datos que acaba de llenar —
+    // confirmado explícitamente, nunca en silencio.
+    let updateTargetId = editingLesson?.id || null;
+    if (!editingLesson) {
+      const collision = lessons.find(lesson => (
+        lesson.module_id.trim() === normalizedModuleId
+        && lesson.lesson_id.trim() === normalizedLessonId
+      ));
+      if (collision) {
+        const confirmed = window.confirm(
+          `Ya existe una clase con este Módulo/Lesson ID: "${collision.title}".\n\n¿Quieres actualizar esa clase con los datos que acabas de llenar, en vez de crear una nueva?`
+        );
+        if (!confirmed) {
+          setSaveError('Ya existe una clase con este módulo e ID de lección. Cambia el identificador o confirma la actualización.');
+          return;
+        }
+        updateTargetId = collision.id;
+      }
     }
 
     const invalidResource = form.resources.find(resource => (
@@ -183,6 +199,12 @@ const AdminAcademy = () => {
     ));
     if (invalidResource) {
       setSaveError('Completa el título, tipo y una URL válida http:// o https:// en cada recurso.');
+      return;
+    }
+
+    const normalizedVideoUrl = form.video_url.trim();
+    if (normalizedVideoUrl && !isValidResourceUrl(normalizedVideoUrl)) {
+      setSaveError('La URL del video debe empezar con http:// o https://.');
       return;
     }
 
@@ -201,12 +223,14 @@ const AdminAcademy = () => {
         url: resource.url.trim(),
       })),
       published: form.published,
+      video_url: normalizedVideoUrl || null,
     };
 
     console.error('[AdminAcademy] handleSubmit → payload construido:', payload);
 
-    const result = editingLesson
-      ? await updateAcademyLesson(editingLesson.id, payload)
+    const isUpdate = Boolean(updateTargetId);
+    const result = isUpdate
+      ? await updateAcademyLesson(updateTargetId, payload)
       : await createAcademyLesson({
         ...payload,
         module_id: normalizedModuleId,
@@ -223,13 +247,16 @@ const AdminAcademy = () => {
     }
     setSaveRawError(null);
 
-    setLessons(current => sortLessons(editingLesson
+    setLessons(current => sortLessons(isUpdate
       ? current.map(lesson => lesson.id === result.lesson.id ? result.lesson : lesson)
       : [...current, result.lesson]));
     if (editingLesson) {
+      // Edición normal de una clase ya abierta: cierra el formulario.
       setForm(null);
       setEditingLesson(null);
     } else {
+      // Clase nueva, o colisión resuelta como actualización: entra a modo
+      // edición para poder subir el video/recording de inmediato.
       openEdit(result.lesson);
     }
   };
@@ -353,9 +380,13 @@ const AdminAcademy = () => {
             ))}
           </div>
         </div>
+        <label className="md:col-span-2 text-sm font-semibold text-text-primary">URL del video (Loom / YouTube / Vimeo)
+          <input type="url" placeholder="https://www.loom.com/share/... o https://youtu.be/..." value={form.video_url} onChange={event => updateField('video_url', event.target.value)} className={`${inputClass} mt-2`} />
+          <span className="mt-1 block text-xs font-normal text-text-secondary">Alternativa a subir un MP4 a Mux abajo — con cualquiera de los dos la clase queda disponible en /academy.</span>
+        </label>
         {editingLesson && (
           <div className="md:col-span-2 rounded-xl border border-border-subtle bg-bg-input/40 p-3 sm:p-4">
-            <h3 className="text-sm font-semibold text-text-primary">Grabación de la clase</h3>
+            <h3 className="text-sm font-semibold text-text-primary">Grabación de la clase (Mux)</h3>
             <p className="mt-1 text-xs text-text-secondary">El MP4 se sube directamente a Mux y se procesa en segundo plano.</p>
             <input id={`mux-video-file-${editingLesson.id}`} type="file" accept="video/mp4,.mp4" disabled={uploadingVideo} onChange={event => { setVideoFile(event.target.files?.[0] || null); setUploadError(''); setUploadProgress(0); }} className="sr-only" />
             <label htmlFor={`mux-video-file-${editingLesson.id}`} className={`mt-4 flex min-h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-accent-coral/50 bg-bg-input px-4 py-4 text-center transition-colors hover:border-accent-coral ${uploadingVideo ? 'cursor-not-allowed opacity-50' : ''}`}>
@@ -435,7 +466,7 @@ const AdminAcademy = () => {
                 <div className="space-y-3">
                   {moduleLessons.map((lesson) => {
                     if (editingLessonId === lesson.id) return renderLessonForm(true);
-                    const videoState = getVideoState(lesson.video_status);
+                    const videoState = getVideoState(lesson.video_status, lesson.video_url);
                     return (
                       <article key={lesson.id} className="rounded-2xl border border-border-subtle bg-bg-card p-4 sm:p-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

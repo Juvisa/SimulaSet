@@ -4,7 +4,7 @@ export const getPublishedAcademyLessons = async (courseId) => {
   try {
     const { data, error } = await supabase
       .from('academy_lessons')
-      .select('id, course_id, module_id, lesson_id, title, description, position, topics, resources, scheduled_at, video_provider, mux_playback_id, mux_playback_policy, video_status, duration_seconds')
+      .select('id, course_id, module_id, lesson_id, title, description, position, topics, resources, scheduled_at, video_provider, mux_playback_id, mux_playback_policy, video_status, duration_seconds, video_url')
       .eq('course_id', courseId)
       .eq('published', true)
       .order('module_id', { ascending: true })

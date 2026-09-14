@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const ADMIN_LESSON_FIELDS = 'id, course_id, module_id, lesson_id, title, description, position, topics, resources, published, scheduled_at, video_status';
+const ADMIN_LESSON_FIELDS = 'id, course_id, module_id, lesson_id, title, description, position, topics, resources, published, scheduled_at, video_status, video_url';
 
 // 23505 = unique_violation (Postgres). El único UNIQUE real de la tabla es
 // (course_id, module_id, lesson_id) — si llega aquí es porque ya existe una
@@ -53,6 +53,7 @@ export const createAcademyLesson = async (lesson) => {
     resources: lesson.resources,
     published: lesson.published,
     scheduled_at: lesson.scheduled_at,
+    video_url: lesson.video_url,
   };
   console.error('[adminAcademyLessons] createAcademyLesson → payload enviado a Supabase:', payload);
   try {
@@ -81,6 +82,7 @@ export const updateAcademyLesson = async (id, lesson) => {
     resources: lesson.resources,
     published: lesson.published,
     scheduled_at: lesson.scheduled_at,
+    video_url: lesson.video_url,
   };
   console.error('[adminAcademyLessons] updateAcademyLesson → payload enviado a Supabase:', { id, ...payload });
   try {
