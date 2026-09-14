@@ -8,6 +8,8 @@ import MatchCelebrationModal from '../components/MatchCelebrationModal';
 import { useAuth } from '../context/AuthContext';
 import { calculateMatchScore } from '../utils/matchingAlgorithm';
 import { getUserTalentMetrics } from '../utils/talentMetrics';
+import { getSimulatorSessionCount } from '../utils/simulatorSessions';
+import { deriveLevelFromStats } from '../utils/levels';
 import {
   getOpenVacancies, getMyCommercialProfile, upsertCommercialProfile,
   getMyMatches, requestMatch,
@@ -269,13 +271,21 @@ const OpportunityHub = () => {
     let active = true;
     Promise.all([
       getMyCommercialProfile(user.id),
-      getUserTalentMetrics({ userId: user.id, level: user.level }),
+      getUserTalentMetrics({ userId: user.id }),
       getOpenVacancies(),
       getMyMatches(user.id),
-    ]).then(([profileResult, metricsResult, vacanciesResult, matchesResult]) => {
+      getSimulatorSessionCount(user.id),
+    ]).then(([profileResult, metricsResult, vacanciesResult, matchesResult, sessionCountResult]) => {
       if (!active) return;
       setProfile(profileResult.profile);
-      setMetrics(metricsResult);
+      // user.level nunca se actualiza en profiles (ver detalle en
+      // Dashboard.jsx) — calculateMatchScore usa metrics.level para el bonus
+      // de nivel en el % de match (streakOrLevelBonus), así que sin esto un
+      // alumno con nivel real alto nunca recibía ese bonus. avgSetScore ya
+      // venía correcto (getUserTalentMetrics lo lee en vivo de profiles.set_score),
+      // solo level quedaba congelado.
+      const derivedLevel = deriveLevelFromStats(sessionCountResult.count, metricsResult.avgSetScore).level;
+      setMetrics({ ...metricsResult, level: derivedLevel });
       setVacancies(vacanciesResult.vacancies);
       setMatches(Object.fromEntries(matchesResult.matches.map((m) => [m.vacancy_id, m])));
       const firstError = profileResult.error || vacanciesResult.error || matchesResult.error;
@@ -284,7 +294,7 @@ const OpportunityHub = () => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [user.id, user.level]);
+  }, [user.id]);
 
   const handleRequestMatch = (vacancy, matchResult) => {
     setPendingVacancy(vacancy);

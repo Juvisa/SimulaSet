@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSeguimientosPendientes } from '../utils/followUps';
-import { getLevelInfo, getProgressToNext } from '../utils/levels';
+import { getLevelInfo, getProgressToNext, deriveLevelFromStats } from '../utils/levels';
 import { getSimulatorSessionCount } from '../utils/simulatorSessions';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
@@ -156,8 +156,13 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     .join('')
     .toUpperCase();
 
-  const levelInfo = getLevelInfo(user?.level || 1);
-  const progress = getProgressToNext({ level: user?.level || 1, sessions: sessionCount, avgScore: user?.set_score || 0 });
+  // user?.level nunca se actualiza en profiles (ver detalle en Dashboard.jsx) —
+  // se deriva de sessionCount + set_score real, igual que ahí, en vez de leer
+  // la columna congelada. El Sidebar es global (vive en TODAS las páginas), así
+  // que este mismo bug estaba visible en toda la app, no solo en Dashboard.
+  const derivedLevel = deriveLevelFromStats(sessionCount, user?.set_score || 0).level;
+  const levelInfo = getLevelInfo(derivedLevel);
+  const progress = getProgressToNext({ level: derivedLevel, sessions: sessionCount, avgScore: user?.set_score || 0 });
 
   return (
     <>
@@ -230,7 +235,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
               ) : (
                 <>
                   <p className="text-xs text-text-secondary truncate flex items-center gap-1">
-                    <GraduationCap size={11} /> Nivel {user?.level || 1} · {levelInfo.name}
+                    <GraduationCap size={11} /> Nivel {derivedLevel} · {levelInfo.name}
                   </p>
                   <div className="mt-1 h-1 rounded-full bg-bg-input overflow-hidden">
                     <div

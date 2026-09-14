@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProjectById } from '../utils/projects';
+import { getSimulatorSessionCount } from '../utils/simulatorSessions';
+import { deriveLevelFromStats } from '../utils/levels';
 import { callClaude } from '../utils/anthropic';
 import { buildFinalReportPrompt } from '../utils/prompts';
 import Layout from '../components/Layout';
@@ -22,12 +24,21 @@ const SimulationReport = () => {
   const [, setError] = useState('');
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [project, setProject] = useState(null);
+  const [sessionCount, setSessionCount] = useState(0);
 
   useEffect(() => {
     if (!session) { navigate('/dashboard'); return; }
     // eslint-disable-next-line react-hooks/immutability
     generateReport();
+    getSimulatorSessionCount(user.id).then(({ count }) => setSessionCount(count));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // user?.level nunca se actualiza en profiles (ver detalle en Dashboard.jsx) —
+  // se deriva de sessionCount real + set_score. Este último puede tardar un
+  // instante en refrescarse (Simulator.jsx lo dispara en paralelo al navegar
+  // aquí, sin bloquear), pero para cuando termina de generarse el reporte con
+  // IA ya casi siempre llegó — y si no, es solo un badge cosmético.
+  const derivedLevel = deriveLevelFromStats(sessionCount, user?.set_score || 0).level;
 
   const generateReport = async () => {
     setLoading(true);
@@ -234,7 +245,7 @@ const SimulationReport = () => {
 
         {/* Level badge */}
         <div className="text-center mb-8">
-          <LevelBadge level={user?.level || 1} size="lg" />
+          <LevelBadge level={derivedLevel} size="lg" />
         </div>
 
         {/* Briefing CTA — only when lead reached appointment state */}

@@ -9,7 +9,7 @@ import { getSimulatorSessions } from '../utils/simulatorSessions';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
 import ModeBadge from '../components/ModeBadge';
-import { getLevelInfo, getProgressToNext } from '../utils/levels';
+import { getLevelInfo, getProgressToNext, deriveLevelFromStats } from '../utils/levels';
 import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target, Trophy } from 'lucide-react';
 import { getSeguimientosPendientes } from '../utils/followUps';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
@@ -147,17 +147,20 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const levelInfo = getLevelInfo(user.level || 1);
-  // Antes: getProgressToNext(user), que leía user.totalSessions/totalScore —
-  // campos que nunca existieron en profiles (solo en el viejo shape de
-  // localStorage), así que esto daba siempre 0% sin importar cuánto practicara
-  // el alumno. Ahora se le pasan las métricas reales: conteo real de
-  // simulator_sessions (sessions.length) y el mismo user.set_score que ya se
-  // muestra en la tarjeta de al lado.
-  const progress = getProgressToNext({ level: user.level || 1, sessions: sessions.length, avgScore: user.set_score || 0 });
   const avgScore = sessions.length > 0
     ? Math.round(sessions.reduce((sum, s) => sum + (s.averageScore || 0), 0) / sessions.length)
     : 0;
+  // user.level NUNCA se actualiza en profiles (no hay trigger ni código que
+  // lo escriba — se confirmó auditando todo el repo) y user.set_score solo se
+  // refresca en memoria al hacer login o justo después de una simulación (ver
+  // refreshUser en AuthContext), no en cada visita al Dashboard. Se deriva el
+  // nivel real aquí mismo a partir de sessions.length (recién fetcheado) y
+  // avgScore (recién calculado arriba de los mismos sessions) — la misma
+  // fórmula que ya usa deriveLevelFromStats para mostrar el nivel de OTROS
+  // alumnos en el leaderboard, ahora también para el propio usuario.
+  const derivedLevel = deriveLevelFromStats(sessions.length, avgScore).level;
+  const levelInfo = getLevelInfo(derivedLevel);
+  const progress = getProgressToNext({ level: derivedLevel, sessions: sessions.length, avgScore });
 
   const leadsClosed = sessions.filter(s =>
     ['pidio_llamada', 'confirmado_con_entusiasmo', 'quiere_reagendar'].includes(s.finalState)
@@ -240,7 +243,7 @@ const Dashboard = () => {
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">SET Score</div>
-              <div className="font-mono mt-1.5 inline-block w-full truncate rounded-lg border border-accent-coral/30 bg-accent-coral/10 px-2.5 py-1 text-sm md:text-lg font-bold tabular-nums text-accent-coral">{user.set_score ?? '—'}</div>
+              <div className="font-mono mt-1.5 inline-block w-full truncate rounded-lg border border-accent-coral/30 bg-accent-coral/10 px-2.5 py-1 text-sm md:text-lg font-bold tabular-nums text-accent-coral">{avgScore}</div>
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Próximo nivel</div>
@@ -333,7 +336,7 @@ const Dashboard = () => {
             <div className="text-text-secondary text-xs mb-1">Bienvenido de vuelta</div>
             <div className="text-xl font-bold text-text-primary">{user.name} 👋</div>
           </div>
-          <LevelBadge level={user.level || 1} size="lg" />
+          <LevelBadge level={derivedLevel} size="lg" />
         </div>
 
         {/* Main CTA */}
@@ -354,7 +357,7 @@ const Dashboard = () => {
             <Zap size={16} /> Nuevo Lead
           </button>
         </div>
-        {user.level < 5 && (
+        {derivedLevel < 5 && (
           <div>
             <div className="flex justify-between text-xs text-text-secondary mb-1.5">
               <span>Progreso al siguiente nivel</span>
@@ -369,7 +372,7 @@ const Dashboard = () => {
             <div className="text-text-secondary text-xs mt-1.5">{progress.label}</div>
           </div>
         )}
-        {user.level === 5 && (
+        {derivedLevel === 5 && (
           <div className="text-center mt-2">
             <span className="text-accent-gold font-bold">🏆 Certificación S.E.T. Desbloqueada</span>
           </div>

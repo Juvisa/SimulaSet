@@ -125,6 +125,24 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // profiles.set_score se recalcula automáticamente en la base de datos (trigger
+  // simulator_sessions_recalculate_set_score) cada vez que se guarda una sesión
+  // del simulador — pero el objeto `user` en memoria solo se carga UNA VEZ, al
+  // iniciar sesión. Sin este refetch explícito, cualquier pantalla que lea
+  // user.set_score (Dashboard, Sidebar, Profile, SimulationReport) sigue
+  // mostrando el valor de cuando el alumno hizo login, sin importar cuántas
+  // simulaciones haga después — hasta el próximo refresh completo de la página
+  // (que si vuelve a montar AuthProvider y sí trae el valor fresco). Se llama
+  // explícitamente después de guardar una sesión de simulador para que el dato
+  // quede correcto sin depender de que el alumno recargue la página a mano.
+  const refreshUser = async () => {
+    if (!user?.id) return { error: 'No hay sesión activa.' };
+    const { profile, error } = await fetchUser(user.id);
+    if (error || !profile) return { error: error?.message || 'No se pudo actualizar el perfil.' };
+    setUser(profile);
+    return { user: profile };
+  };
+
   const updateUser = async ({ name }) => {
     if (!supabase) return { error: 'Supabase no está configurado.' };
     const { data, error } = await supabase.from('profiles')
@@ -191,7 +209,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updateAvatar, updatePassword, requestPasswordReset, completeOnboarding, loading, authError }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, updateAvatar, updatePassword, requestPasswordReset, completeOnboarding, refreshUser, loading, authError }}>
       {children}
     </AuthContext.Provider>
   );

@@ -198,7 +198,7 @@ const InlineCoachingCard = ({ coaching, mode }) => {
 };
 
 const Simulator = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { mode, config } = location.state || {};
@@ -350,7 +350,12 @@ const Simulator = () => {
     };
     // Persistencia en Supabase (fuente de verdad del SET Score para Opportunity Hub
     // y para el gate de SET Score de Misiones Diarias). No se espera esta llamada
-    // para no retrasar la navegación al reporte.
+    // para no retrasar la navegación al reporte. El insert dispara un trigger que
+    // recalcula profiles.set_score en la base de datos — pero el objeto `user` en
+    // memoria (AuthContext) no se entera solo, así que se refresca explícitamente
+    // encadenado al mismo guardado (sin bloquear tampoco), para que Dashboard,
+    // Sidebar y el resto ya vean el SET Score correcto sin necesitar un refresh
+    // completo de la página.
     saveSimulatorSession({
       userId: user.id,
       projectId: config.projectId,
@@ -358,7 +363,7 @@ const Simulator = () => {
       mode,
       scores,
       finalState: finalState || leadState,
-    });
+    }).then(() => refreshUser());
     navigate('/simulation-report', { state: { session } });
   };
 

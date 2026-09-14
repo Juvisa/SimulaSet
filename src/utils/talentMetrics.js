@@ -54,7 +54,10 @@ export const getAdminVisibleMetrics = async (userId) => {
   };
 };
 
-export const getUserTalentMetrics = async ({ userId, level }) => {
+// No calcula `level` — profiles.level nunca se actualiza (ver Dashboard.jsx),
+// así que el caller (OpportunityHub.jsx) lo deriva aparte a partir de sesiones
+// reales + avgSetScore, y lo agrega al objeto devuelto aquí.
+export const getUserTalentMetrics = async ({ userId }) => {
   const [{ setScore, error: scoreError }, { streak }, { count: victoryCount, error: victoryError }] = await Promise.all([
     getMySetScore(userId),
     getUserStreak(userId),
@@ -64,7 +67,6 @@ export const getUserTalentMetrics = async ({ userId, level }) => {
   return {
     avgSetScore: setScore,
     currentStreak: streak?.current_streak || 0,
-    level: level || 1,
     victoryCount,
     error: scoreError || victoryError,
   };

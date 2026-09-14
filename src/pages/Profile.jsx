@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
+import { deriveLevelFromStats } from '../utils/levels';
 import { getRealLeads } from '../utils/realLeads';
 import { uploadAvatarFile } from '../utils/avatar';
 import Layout from '../components/Layout';
@@ -41,8 +42,12 @@ const Profile = () => {
     ? Math.round(sessions.reduce((a, s) => a + (s.averageScore || 0), 0) / sessions.length)
     : 0;
 
-  const nivel = NIVEL_LABELS[user.level] || 'Setter Novato';
-  const stars = Math.min(user.level || 1, 5);
+  // user.level nunca se actualiza en profiles (ver detalle en Dashboard.jsx) —
+  // se deriva de sessions.length + avg reales, igual que ahí, en vez de leer
+  // la columna congelada.
+  const derivedLevel = deriveLevelFromStats(sessions.length, avg).level;
+  const nivel = NIVEL_LABELS[derivedLevel] || 'Setter Novato';
+  const stars = Math.min(derivedLevel, 5);
 
   const fechaRegistro = (() => {
     if (!user.created_at) return 'N/A';
