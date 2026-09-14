@@ -16,14 +16,17 @@ import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, F
 const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#DC2626' };
 
 // Chat turno a turno del prospecto: Haiku en vez de Sonnet (mismo modelo para
-// TODO se disparó a $11 USD/24h en Anthropic). 600 tokens en vez de los 1500
-// genéricos de callClaude — la respuesta trae respuesta_prospecto + 4 campos
-// de texto de coaching (ver prompts.js), así que 150-250 se quedaba corto y
-// corría el riesgo de truncar el JSON a mitad de sesión (rompería el chat en
-// vivo, algo peor que el ahorro). max_tokens es solo un techo de seguridad —
-// no se cobra por tokens no generados — así que 600 no cuesta más que lo que
-// el modelo realmente responde, solo evita una salida descontrolada.
-const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 600 };
+// TODO se disparó a $11 USD/24h en Anthropic). La respuesta trae
+// respuesta_prospecto + 4 campos de texto de coaching (ver prompts.js), así
+// que 150-250 se quedaba corto y corría el riesgo de truncar el JSON a mitad
+// de sesión. Se subió de 600 a 800 tras un caso real en producción donde
+// Haiku devolvió JSON malformado a mitad de un mensaje largo del setter
+// ("Expected ',' or '}' after property value") — max_tokens es solo un techo
+// de seguridad, no se cobra por tokens no generados, así que darle más
+// margen no cuesta más que lo que el modelo realmente responde. El
+// reintento automático de callClaude (ver utils/anthropic.js) es la defensa
+// real contra esto; el margen extra de tokens es una segunda capa.
+const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 800 };
 
 const buildSystemPrompt = (mode, project, prospectProfile) => {
   if (mode === 'outbound') return buildOutboundSystemPrompt(project, prospectProfile);

@@ -2,6 +2,19 @@ import { parseAndValidateSetEngineResponse, SET_ENGINE_ERROR_CODES, SetEngineErr
 
 const MAX_TOKENS = 1500;
 const SET_ENGINE_RETRY_INSTRUCTION = 'La respuesta anterior no cumplió el formato. Genera nuevamente la respuesta completa siguiendo exactamente el contrato JSON. Devuelve únicamente JSON puro, sin markdown ni texto adicional.';
+const JSON_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior no fue JSON válido (o quedó incompleta). Responde ÚNICAMENTE con el objeto JSON solicitado — nada de texto antes o después, nada de markdown.';
+
+// Devuelve el objeto ya parseado, o null si no hay nada parseable — nunca deja
+// que un SyntaxError de un JSON truncado escape sin pasar por el reintento.
+const tryExtractJson = (text) => {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+};
 const RETRYABLE_SET_ERRORS = new Set([
   SET_ENGINE_ERROR_CODES.FORMAT,
   SET_ENGINE_ERROR_CODES.CONTRACT,
@@ -82,14 +95,27 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens, mode, model })
 // explícitamente (ver Simulator.jsx) — es, por lejos, el mayor volumen de
 // llamadas de toda la app (una por cada mensaje del setter en cada sesión),
 // y no requiere el razonamiento profundo que sí necesita la evaluación final.
+// Un alumno tuvo "Error: Respuesta inválida de la IA" en pleno chat del
+// simulador tras migrar el turno a turno a Haiku — antes callClaude no tenía
+// NINGÚN reintento (a diferencia de callSetEngine, que sí lo tiene desde
+// siempre), así que un modelo más chico fallando UNA vez en seguir el
+// contrato JSON estricto (más probable en Haiku que en Sonnet, sobre todo con
+// el system prompt dual-rol del simulador: actuar de prospecto Y evaluar al
+// setter en la misma respuesta) tumbaba el turno entero sin darle una segunda
+// oportunidad al modelo. Mismo patrón de reintento que ya usa SET Engine.
 export const callClaude = async (systemPrompt, messages, options = {}) => {
   const { model = 'sonnet', maxTokens = MAX_TOKENS } = options;
   const text = await requestClaude({ systemPrompt, messages, maxTokens, model });
+  const parsed = tryExtractJson(text);
+  if (parsed) return parsed;
 
-  // Parse JSON from response
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Respuesta inválida de la IA');
-  return JSON.parse(jsonMatch[0]);
+  const retrySystemPrompt = systemPrompt !== undefined
+    ? `${systemPrompt}\n${JSON_RETRY_INSTRUCTION}`
+    : JSON_RETRY_INSTRUCTION;
+  const retryText = await requestClaude({ systemPrompt: retrySystemPrompt, messages, maxTokens, model });
+  const retryParsed = tryExtractJson(retryText);
+  if (!retryParsed) throw new Error('Respuesta inválida de la IA');
+  return retryParsed;
 };
 
 const runSetEngineAttempt = async (request, systemPrompt, messages, project) => {
