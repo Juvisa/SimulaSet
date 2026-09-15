@@ -115,7 +115,16 @@ const Analyzer = () => {
       }
 
       const prompt = buildAnalyzerPrompt(project, form.mode, conversationText);
-      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+      // maxTokens: 3000 en vez del default de 1500 — el contrato de este
+      // análisis es mucho más grande que el de otros usos de callClaude
+      // (arrays anidados de mensajes efectivos/con fricción, señales,
+      // aprendizajes...). Con una conversación larga, 1500 truncaba el JSON a
+      // mitad de camino ("Respuesta inválida de la IA") y como el reintento
+      // automático de callClaude usa el mismo maxTokens, se truncaba de nuevo
+      // en el mismo punto — el reintento no ayuda si la causa es falta de
+      // espacio, no falta de disciplina de formato. Mismo presupuesto que
+      // callSetEngine, que tiene una forma de respuesta similar.
+      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { maxTokens: 3000 });
 
       setResult(analysis);
       // Persistencia en Supabase — no se espera esta llamada para no retrasar
