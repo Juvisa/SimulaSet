@@ -30,7 +30,17 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'La integración de video no está configurada' });
   }
   if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) {
-    return res.status(403).json({ error: 'Origen no permitido' });
+    // Se incluye el origen recibido y la lista configurada en el mensaje de
+    // error — el admin no tiene forma de ver el valor exacto que llegó al
+    // servidor (headers no son inspeccionables desde el navegador aquí), así
+    // que sin esto cualquier mismatch (barra final, http vs https, dominio
+    // no agregado a MUX_ALLOWED_ORIGINS en Vercel) es indiagnosticable a
+    // ciegas. No es información sensible: es literalmente el propio origen
+    // desde el que el admin está haciendo la request.
+    console.error('[api/mux/create-upload] Origen rechazado:', { requestOrigin, allowedOrigins });
+    return res.status(403).json({
+      error: `Origen no permitido: "${requestOrigin}" no está en MUX_ALLOWED_ORIGINS (configurados: ${allowedOrigins.join(', ') || 'ninguno'})`,
+    });
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
