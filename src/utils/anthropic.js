@@ -170,15 +170,17 @@ RESPONDE EN JSON (sin markdown):
 `;
 
   // Generación de un perfil ficticio estructurado (6 campos cortos) — no
-  // requiere razonamiento profundo, así que también va en Haiku.
-  const text = await requestClaude({
-    messages: [{ role: 'user', content: prompt }],
-    maxTokens: 500,
-    model: 'haiku',
-  });
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Perfil inválido');
-  const profile = JSON.parse(jsonMatch[0]);
+  // requiere razonamiento profundo, así que también va en Haiku. Pasa por
+  // callClaude (no requestClaude directo) para heredar el reintento
+  // automático ante JSON inválido/truncado — antes duplicaba su propio
+  // match+parse sin ninguna protección, el mismo patrón fragile que causó
+  // "Respuesta inválida de la IA" en el chat del simulador.
+  let profile;
+  try {
+    profile = await callClaude(undefined, [{ role: 'user', content: prompt }], { maxTokens: 500, model: 'haiku' });
+  } catch {
+    throw new Error('Perfil inválido');
+  }
   return { ...profile, temperatura: config.temperatura, canal: config.canal, resistencia: config.resistencia };
 };
 
@@ -222,15 +224,16 @@ Objeciones comunes: ${project.commonObjections || 'no especificadas'}
 
 Genera el Microactivo de Reactivación y los 2 mensajes de entrega siguiendo exactamente tus reglas de oro y candados éticos.`;
 
-  const text = await requestClaude({
-    systemPrompt: VALUE_BUILDER_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: prompt }],
-    maxTokens: 1500,
-  });
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No pudimos generar el microactivo. Inténtalo de nuevo.');
-  const parsed = JSON.parse(jsonMatch[0]);
+  // maxTokens 2000 (no 1500): el microactivo por sí solo pide 300-450
+  // palabras (~450-650 tokens en español) + título + 2 variantes de mensaje —
+  // dejaba poco margen. Pasa por callClaude (no requestClaude directo) para
+  // heredar el reintento automático, igual que generateProspectProfile.
+  let parsed;
+  try {
+    parsed = await callClaude(VALUE_BUILDER_SYSTEM_PROMPT, [{ role: 'user', content: prompt }], { maxTokens: 2000 });
+  } catch {
+    throw new Error('No pudimos generar el microactivo. Inténtalo de nuevo.');
+  }
   if (!parsed?.microactivo || !Array.isArray(parsed?.mensajes) || parsed.mensajes.length < 2) {
     throw new Error('La respuesta no tuvo el formato esperado. Inténtalo de nuevo.');
   }

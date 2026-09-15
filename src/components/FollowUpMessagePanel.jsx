@@ -44,9 +44,13 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
         .join('\n');
 
       const prompt = buildFollowUpPrompt({ project, lead, followUp, ultimos3Mensajes: ultimos });
+      // maxTokens 2000: auditoría general tras el truncamiento visto en el
+      // Analizador — 3 opciones de mensaje (una con un objeto `recurso`
+      // anidado) se quedaban ajustadas contra el default de 1500.
       const res = await callClaude(
         'Eres un experto en follow-ups de appointment setting. Responde SOLO en JSON.',
-        [{ role: 'user', content: prompt }]
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 2000 }
       );
       setResult(res);
       // No se bloquea ni se falla la vista si esto no se guarda — el setter

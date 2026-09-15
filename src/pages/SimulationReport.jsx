@@ -55,9 +55,13 @@ const SimulationReport = () => {
         session.finalFomo,
         session.finalState
       );
+      // maxTokens 2000: el reporte lee la sesión completa (puede ser larga)
+      // y arma varios arrays (errores, logros, 3 aprendizajes) — auditoría
+      // general de márgenes tras el truncamiento visto en el Analizador.
       const result = await callClaude(
         'Eres un coach experto. Responde SOLO en JSON.',
-        [{ role: 'user', content: prompt }]
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 2000 }
       );
       setReport(result);
     } catch (err) {

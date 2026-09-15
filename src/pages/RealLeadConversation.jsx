@@ -520,7 +520,10 @@ const RealLeadConversation = () => {
     setPanelVisible(true);
     try {
       const prompt = buildBreakTheIcePrompt(project, lead);
-      const result = await callClaude('Eres un experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+      // maxTokens 2000: auditoría general tras el truncamiento visto en el
+      // Analizador — 3 opciones de apertura con varios campos de texto cada
+      // una se quedaban ajustadas contra el default de 1500.
+      const result = await callClaude('Eres un experto en appointment setting. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { maxTokens: 2000 });
       setCurrentSuggestions(result.aperturas);
       suggestionSentRef.current = false;
       persistLead({ metricas: { ...lead.metricas, apertura_generada: true } });
@@ -544,7 +547,7 @@ const RealLeadConversation = () => {
       .join('\n');
     try {
       const prompt = buildReactivacionRealPrompt(project, { ...lead, tiempo_sin_respuesta: ghostTime }, ultimos3);
-      const result = await callClaude('Eres experto en reactivación de leads. Responde SOLO en JSON.', [{ role: 'user', content: prompt }]);
+      const result = await callClaude('Eres experto en reactivación de leads. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { maxTokens: 2000 });
       setCurrentSuggestions(result.reactivaciones);
       suggestionSentRef.current = false;
     } catch (err) {

@@ -214,9 +214,14 @@ const BriefingModal = ({
     setError('');
     try {
       const prompt = buildBriefingPrompt({ project, lead, historial, modo, setterName, nivelFomo, etapaMaxima });
+      // maxTokens 2500: mismo riesgo que el Analizador — `historial` puede
+      // ser una conversación completa larga, y el briefing tiene que citarla
+      // y sintetizarla en varios campos anidados (lead, urgencia, hasta 3
+      // objeciones, recursos, nota estratégica). 1500 se quedaba ajustado.
       const result = await callClaude(
         'Eres un experto en ventas de alto ticket. Genera briefings de traspaso setter→closer. Responde SOLO en JSON.',
-        [{ role: 'user', content: prompt }]
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 2500 }
       );
       setBriefing(result.briefing);
     } catch (err) {
