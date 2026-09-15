@@ -37,6 +37,41 @@ export const getRewardRedemptions = async () => {
   }
 };
 
+// Sube (o reemplaza) el archivo maestro de una recompensa digital de la
+// Tienda XP en el bucket privado 'reward-files'. RLS solo permite este
+// insert/update a un admin (ver migración 202609150001) — el mismo File del
+// <input> se sube tal cual, sin reescribir ni regenerar contenido, tal como
+// exige el spec de la Tienda XP.
+export const uploadRewardFile = async (reward, file) => {
+  try {
+    const path = `${reward.id}/${reward.fileName}`;
+    const { error } = await supabase.storage
+      .from('reward-files')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    return { error: error?.message || '' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Error inesperado' };
+  }
+};
+
+// Para que AdminRewards muestre qué recompensas YA tienen su archivo subido
+// (y cuáles todavía faltan) — verifica, por cada recompensa, si su archivo
+// exacto existe dentro de su propia carpeta {reward.id}/ en el bucket.
+export const getUploadedRewardIds = async (rewards) => {
+  try {
+    const results = await Promise.all(
+      rewards.map(async (reward) => {
+        const { data } = await supabase.storage.from('reward-files').list(reward.id, { search: reward.fileName });
+        return (data || []).some((entry) => entry.name === reward.fileName) ? reward.id : null;
+      })
+    );
+    return { rewardIds: new Set(results.filter(Boolean)), error: '' };
+  } catch (error) {
+    return { rewardIds: new Set(), error: error instanceof Error ? error.message : 'Error inesperado' };
+  }
+};
+
 export const markRedemptionDelivered = async (redemptionId) => {
   try {
     const { data, error } = await supabase

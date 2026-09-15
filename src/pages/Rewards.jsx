@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Gift, Sparkles, Loader2, X, Check } from 'lucide-react';
+import { Gift, Sparkles, Loader2, X, Check, Download, Lock } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getUserStreak } from '../utils/xp';
-import { REWARDS, redeemReward } from '../utils/rewards';
+import { REWARDS, redeemReward, getMyRedeemedRewardIds, getRewardDownloadUrl } from '../utils/rewards';
 
 const ConfirmModal = ({ reward, redeeming, onConfirm, onCancel }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" onClick={onCancel}>
@@ -27,24 +27,49 @@ const ConfirmModal = ({ reward, redeeming, onConfirm, onCancel }) => (
   </div>
 );
 
-const RewardCard = ({ reward, availableXp, onRedeem }) => {
+// Los 3 estados que pide el spec de la Tienda XP: Disponible / XP
+// insuficientes / Desbloqueado. "Desbloqueado" no depende de nada local —
+// viene de si existe una fila propia en reward_redemptions (getMyRedeemedRewardIds),
+// así que sobrevive a un refresh o a volver a iniciar sesión sin más.
+const RewardCard = ({ reward, availableXp, unlocked, onRedeem, onDownload, downloading }) => {
   const canAfford = availableXp >= reward.cost;
   const missing = reward.cost - availableXp;
 
   return (
-    <article className="flex flex-col rounded-2xl border border-border-subtle bg-bg-card p-5">
-      <span className="inline-block w-fit rounded-full bg-accent-gold/10 px-3 py-1 text-xs font-black text-accent-gold">{reward.cost} XP</span>
-      <h3 className="mt-3 text-base font-bold text-text-primary">{reward.title}</h3>
+    <article className={`flex flex-col rounded-2xl border p-5 ${unlocked ? 'border-green-500/30 bg-green-500/5' : 'border-border-subtle bg-bg-card'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-block w-fit rounded-full bg-accent-gold/10 px-3 py-1 text-xs font-black text-accent-gold">{reward.cost} XP</span>
+        {unlocked && (
+          <span className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-green-400">
+            <Check size={12} /> Desbloqueado
+          </span>
+        )}
+      </div>
+      {reward.label && <span className="mt-2.5 text-[10px] font-black uppercase tracking-wider text-text-secondary">{reward.label}</span>}
+      <h3 className="mt-1 text-base font-bold text-text-primary">{reward.title}</h3>
       <p className="mt-1.5 flex-1 text-sm text-text-secondary">{reward.description}</p>
-      <button
-        onClick={() => canAfford && onRedeem(reward)}
-        disabled={!canAfford}
-        className={`mt-4 flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition-opacity ${
-          canAfford ? 'bg-accent-coral text-white hover:opacity-90' : 'cursor-not-allowed bg-bg-input text-text-secondary'
-        }`}
-      >
-        {canAfford ? 'Canjear recompensa' : `Te faltan ${missing} XP`}
-      </button>
+
+      {unlocked ? (
+        <button
+          onClick={() => onDownload(reward)}
+          disabled={downloading}
+          className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-green-500/15 px-4 py-3 text-sm font-black text-green-400 transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+          {downloading ? 'Preparando descarga...' : 'Descargar'}
+        </button>
+      ) : (
+        <button
+          onClick={() => canAfford && onRedeem(reward)}
+          disabled={!canAfford}
+          className={`mt-4 flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition-opacity ${
+            canAfford ? 'bg-accent-coral text-white hover:opacity-90' : 'cursor-not-allowed bg-bg-input text-text-secondary'
+          }`}
+        >
+          {!canAfford && <Lock size={14} />}
+          {canAfford ? 'Canjear recompensa' : `Te faltan ${missing} XP`}
+        </button>
+      )}
     </article>
   );
 };
@@ -52,18 +77,25 @@ const RewardCard = ({ reward, availableXp, onRedeem }) => {
 const Rewards = () => {
   const { user } = useAuth();
   const [streak, setStreak] = useState(null);
+  const [redeemedIds, setRedeemedIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [pendingReward, setPendingReward] = useState(null);
   const [redeeming, setRedeeming] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   useEffect(() => {
     let active = true;
-    getUserStreak(user.id).then(({ streak: loaded, error: loadError }) => {
+    Promise.all([
+      getUserStreak(user.id),
+      getMyRedeemedRewardIds(user.id),
+    ]).then(([streakResult, redeemedResult]) => {
       if (!active) return;
-      setStreak(loaded);
-      if (loadError) setError(`No pudimos cargar tu saldo de XP: ${loadError}`);
+      setStreak(streakResult.streak);
+      setRedeemedIds(redeemedResult.rewardIds);
+      const firstError = streakResult.error || redeemedResult.error;
+      if (firstError) setError(`No pudimos cargar tu tienda: ${firstError}`);
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -79,11 +111,21 @@ const Rewards = () => {
     setSuccessMsg('');
     const { streak: updated, error: redeemError } = await redeemReward({ reward: pendingReward });
     setRedeeming(false);
-    setPendingReward(null);
-    if (redeemError) { setError(redeemError); return; }
+    if (redeemError) { setError(redeemError); setPendingReward(null); return; }
     setStreak(updated);
-    setSuccessMsg(`¡Canjeado! "${pendingReward.title}" — nuestro equipo se pondrá en contacto para coordinar la entrega.`);
+    setRedeemedIds((prev) => new Set(prev).add(pendingReward.id));
+    setSuccessMsg(`¡Canjeado! "${pendingReward.title}" ya está disponible para descargar.`);
+    setPendingReward(null);
     setTimeout(() => setSuccessMsg(''), 6000);
+  };
+
+  const handleDownload = async (reward) => {
+    setDownloadingId(reward.id);
+    setError('');
+    const { url, error: downloadError } = await getRewardDownloadUrl(reward);
+    setDownloadingId(null);
+    if (downloadError || !url) { setError(downloadError || 'No pudimos generar el enlace de descarga.'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -119,7 +161,15 @@ const Rewards = () => {
         {!loading && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {REWARDS.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} availableXp={availableXp} onRedeem={setPendingReward} />
+              <RewardCard
+                key={reward.id}
+                reward={reward}
+                availableXp={availableXp}
+                unlocked={redeemedIds.has(reward.id)}
+                onRedeem={setPendingReward}
+                onDownload={handleDownload}
+                downloading={downloadingId === reward.id}
+              />
             ))}
           </div>
         )}

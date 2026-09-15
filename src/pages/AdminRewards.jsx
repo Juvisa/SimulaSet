@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Gift, Loader2, CheckCircle2, Clock } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Gift, Loader2, CheckCircle2, Clock, Upload, FileWarning } from 'lucide-react';
 import Layout from '../components/Layout';
-import { getRewardRedemptions, markRedemptionDelivered } from '../utils/adminRewards';
+import { getRewardRedemptions, markRedemptionDelivered, uploadRewardFile, getUploadedRewardIds } from '../utils/adminRewards';
+import { REWARDS } from '../utils/rewards';
 
 const FILTERS = [
   { key: 'pending', label: 'Pendientes' },
@@ -62,12 +63,64 @@ const RedemptionRow = ({ redemption, onMarkDelivered, marking }) => {
   );
 };
 
+// Sección aparte, aditiva, para que el admin suba (una sola vez) los 7
+// archivos maestros de la Tienda XP al bucket privado 'reward-files'. El
+// alumno nunca sube ni ve estos archivos directamente — solo obtiene una URL
+// firmada de corta duración cuando ya canjeó (ver getRewardDownloadUrl en
+// utils/rewards.js).
+const RewardFileRow = ({ reward, uploaded, onUpload, uploading }) => {
+  const inputRef = useRef(null);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3 last:border-b-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-text-primary truncate">{reward.title}</p>
+        <p className="text-text-secondary text-xs truncate">{reward.cost} XP · {reward.fileName}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        {uploaded ? (
+          <span className="flex items-center gap-1.5 text-xs font-medium text-green-400">
+            <CheckCircle2 size={13} /> Subido
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs font-medium text-accent-gold">
+            <FileWarning size={13} /> Falta subir
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) onUpload(reward, file);
+          }}
+        />
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-bold text-text-secondary hover:text-text-primary disabled:opacity-50"
+        >
+          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+          {uploaded ? 'Reemplazar' : 'Subir archivo'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const AdminRewards = () => {
   const [redemptions, setRedemptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('pending');
   const [markingId, setMarkingId] = useState(null);
+  const [uploadedIds, setUploadedIds] = useState(new Set());
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [fileError, setFileError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -80,6 +133,27 @@ const AdminRewards = () => {
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    getUploadedRewardIds(REWARDS).then(({ rewardIds, error: loadError }) => {
+      if (!active) return;
+      setUploadedIds(rewardIds);
+      if (loadError) setFileError(loadError);
+    }).finally(() => {
+      if (active) setLoadingFiles(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const handleUploadFile = async (reward, file) => {
+    setUploadingId(reward.id);
+    setFileError('');
+    const { error: uploadError } = await uploadRewardFile(reward, file);
+    setUploadingId(null);
+    if (uploadError) { setFileError(`${reward.title}: ${uploadError}`); return; }
+    setUploadedIds((prev) => new Set(prev).add(reward.id));
+  };
 
   const counts = useMemo(() => ({
     pending: redemptions.filter((r) => r.status === 'pending').length,
@@ -108,6 +182,31 @@ const AdminRewards = () => {
           <p className="text-text-secondary text-sm mt-0.5">
             Gestiona las solicitudes de canje de la Tienda de Recompensas
           </p>
+        </div>
+
+        <div className="bg-bg-card border border-border-subtle rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border-subtle">
+            <h2 className="text-sm font-bold text-text-primary">Archivos de la Tienda XP</h2>
+            <p className="text-text-secondary text-xs mt-0.5">Sube una vez el archivo de cada recompensa digital — se entrega automáticamente al alumno apenas canjea.</p>
+          </div>
+          {fileError && <div className="mx-4 mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs text-red-400">{fileError}</div>}
+          {loadingFiles ? (
+            <div className="flex items-center justify-center gap-2 p-6 text-sm text-text-secondary">
+              <Loader2 size={16} className="animate-spin" /> Cargando archivos...
+            </div>
+          ) : (
+            <div>
+              {REWARDS.map((reward) => (
+                <RewardFileRow
+                  key={reward.id}
+                  reward={reward}
+                  uploaded={uploadedIds.has(reward.id)}
+                  uploading={uploadingId === reward.id}
+                  onUpload={handleUploadFile}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1 bg-bg-input rounded-lg p-1 w-fit">
