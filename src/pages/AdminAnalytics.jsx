@@ -105,7 +105,9 @@ const SetterRow = ({ setter, rank, navigate }) => {
         </div>
       </td>
       <td className="px-4 py-3">
-        <LevelBadge level={setter.level || 1} size="sm" />
+        {/* setter.derivedLevel viene de calcularMetricasAdminReal() (analytics.js)
+            — setter.level (profiles.level) nunca se actualiza tras el registro. */}
+        <LevelBadge level={setter.derivedLevel || 1} size="sm" />
       </td>
       <td className="px-4 py-3 text-center">
         <span className="font-bold text-sm" style={{ color: scoreColor(promedio) }}>{promedio}/100</span>

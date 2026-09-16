@@ -9,6 +9,7 @@ import {
 import { getAnalyses } from '../utils/analyses';
 import Layout from '../components/Layout';
 import LevelBadge from '../components/LevelBadge';
+import { deriveLevelFromStats } from '../utils/levels';
 import ModeBadge from '../components/ModeBadge';
 import BriefingModal from '../components/BriefingModal';
 import { ChevronLeft, Send, Play, BarChart2, ChevronDown, ChevronUp, FileText, Calendar, Loader2 } from 'lucide-react';
@@ -114,6 +115,11 @@ const AdminSetterDetail = () => {
   const avgScore = sessions.length > 0
     ? Math.round(sessions.reduce((sum, s) => sum + (s.average_score || 0), 0) / sessions.length)
     : 0;
+  // setter.level (profiles.level) nunca se actualiza tras el registro — se
+  // deriva aquí con la misma fórmula que usan Dashboard/Profile/Sidebar del
+  // alumno y calcularMetricasAdminReal() para las otras 2 pantallas admin,
+  // para que las 3 muestren siempre el mismo nivel.
+  const derivedLevel = deriveLevelFromStats(sessions.length, setter.set_score || 0).level;
 
   return (
     <Layout>
@@ -130,7 +136,7 @@ const AdminSetterDetail = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-text-primary">{setter.name}</h1>
-                <LevelBadge level={setter.level || 1} size="sm" />
+                <LevelBadge level={derivedLevel} size="sm" />
               </div>
               <p className="text-text-secondary text-sm">{setter.email}</p>
             </div>

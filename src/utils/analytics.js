@@ -2,6 +2,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getRealLeads } from './realLeads';
+import { deriveLevelFromStats } from './levels';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,7 +267,12 @@ export async function calcularMetricasAdminReal() {
   const [{ data: profileRows, error: profilesError }, { data: sessionRows, error: sessionsError }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, name, email, level, active, created_at')
+      // set_score se agrega solo para poder derivar el nivel real aquí mismo
+      // (ver conMetricas más abajo) — profiles.level nunca se actualiza tras
+      // la creación de la cuenta, así que leerlo directo da nivel 1 para
+      // todos. `level` se mantiene en el select por compatibilidad de forma,
+      // pero ya no se usa para calcular la distribución por nivel.
+      .select('id, name, email, level, set_score, active, created_at')
       .eq('role', 'setter')
       .order('created_at', { ascending: true }),
     supabase
@@ -293,6 +299,13 @@ export async function calcularMetricasAdminReal() {
       ...setter,
       lastActivity: sesiones[0]?.createdAt || null,
       sesiones,
+      // Fuente única de verdad del nivel para las 3 pantallas admin
+      // (AdminDashboard, AdminAnalytics, AdminSetterDetail vía este mismo
+      // dato) — mismo cálculo que ya usan Dashboard/Profile/Sidebar del
+      // alumno (deriveLevelFromStats), en vez de leer profiles.level
+      // congelado. Calculado UNA sola vez aquí para que no haya dos fórmulas
+      // distintas en el admin vs. en el alumno.
+      derivedLevel: deriveLevelFromStats(sesiones.length, setter.set_score || 0).level,
       metricas: {
         simulador: calcularMetricasSimulador(sesiones),
         certificacion: evaluarCertificacionCohorte(sesiones),
@@ -311,7 +324,7 @@ export async function calcularMetricasAdminReal() {
 
   const NIVEL_MAP = { 1: 'Novato', 2: 'Aprendiz', 3: 'Practicante', 4: 'Pro', 5: 'Élite' };
   const distribucion = [1, 2, 3, 4, 5].reduce((acc, n) => {
-    acc[NIVEL_MAP[n]] = setters.filter(s => (s.level || 1) === n).length;
+    acc[NIVEL_MAP[n]] = conMetricas.filter(s => s.derivedLevel === n).length;
     return acc;
   }, {});
 
