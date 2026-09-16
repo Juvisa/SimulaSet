@@ -125,7 +125,7 @@ const CoachingContent = ({ coaching, probLabel, prob }) => {
           }`}>
             {coaching.etapa_set === 'S' ? 'S — Situación' :
              coaching.etapa_set === 'E' ? 'E — Emoción' :
-             coaching.etapa_set === 'T' ? 'T — Transacción' :
+             coaching.etapa_set === 'T' ? 'T — Transición' :
              'Fuera de etapa'}
           </span>
         </div>

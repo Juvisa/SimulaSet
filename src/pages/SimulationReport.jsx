@@ -171,7 +171,7 @@ const SimulationReport = () => {
             {[
               { key: 'S_dominada', label: 'S — Situación', color: '#2563EB' },
               { key: 'E_dominada', label: 'E — Emoción', color: '#C9920A' },
-              { key: 'T_dominada', label: 'T — Transacción', color: '#1D9E75' },
+              { key: 'T_dominada', label: 'T — Transición', color: '#1D9E75' },
             ].map(({ key, label, color }) => {
               const ok = report?.etapas_set?.[key];
               return (

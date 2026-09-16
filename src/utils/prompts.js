@@ -40,7 +40,7 @@ PERFIL DEL PROSPECTO EN ESTA SIMULACIÓN:
 MÉTODO S.E.T.:
 - S (Situación): Apertura genuina, rapport, entender el contexto actual
 - E (Emoción): Discovery profundo, activar el dolor, elevar la conciencia, hacer que el prospecto cree su propia urgencia
-- T (Transacción): Calificación BANT conversacional, transición a la cita sin presión
+- T (Transición): Calificación BANT conversacional, transición a la cita sin presión
 
 COMPORTAMIENTO COMO PROSPECTO OUTBOUND:
 - Empieza neutro o ligeramente desconfiado — no conoces bien al experto
@@ -209,7 +209,7 @@ RESPONDE EN ESTE JSON (JSON puro, sin markdown):
 
 export const buildAnalyzerPrompt = (project, mode, conversationText) => `
 Eres un experto analizador de conversaciones de ventas consultivas de alto ticket.
-Aplicas el Método S.E.T. (Situación, Emoción, Transacción) como marco de evaluación.
+Aplicas el Método S.E.T. (Situación, Emoción, Transición) como marco de evaluación.
 
 CONTEXTO DEL PROYECTO:
 - Experto: ${project.expertName}
