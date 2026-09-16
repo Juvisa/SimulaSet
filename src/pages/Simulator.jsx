@@ -221,6 +221,10 @@ const Simulator = () => {
   const [lastFomo, setLastFomo] = useState(0);
   const [sessionId] = useState(crypto.randomUUID());
   const [ended, setEnded] = useState(false);
+  // Datos del cierre ya detectado, en espera de navegar al reporte — separar
+  // esto de `ended` (que solo controla qué UI se muestra) permite mostrar el
+  // aviso de cierre YA, sin todavía desmontar el chat.
+  const [pendingClose, setPendingClose] = useState(null);
 
   useEffect(() => {
     if (!mode || !config) { navigate('/simulate'); return; }
@@ -266,6 +270,27 @@ const Simulator = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // El cierre real (navigate a /simulation-report, que desmonta este chat
+  // entero) se dispara desde acá, no desde dentro de sendMessage — separar
+  // "detectar el cierre" de "ejecutar el cierre" le da al chat un respiro
+  // real (2.2s) mostrando el aviso de "Simulación completada" ANTES de
+  // desmontar, en vez de encadenar setEnded(true) + navigate() casi en el
+  // mismo tick. Ese desmontaje inmediato, justo cuando React también estaba
+  // re-renderizando por el setEnded, era terreno fértil para el
+  // "NotFoundError: removeChild" si algo externo (ej. Google Translate)
+  // había tocado el DOM del chat un instante antes — ver también el fix de
+  // translate="no" en index.html, que ataca la causa raíz de esa mutación
+  // externa. El cleanup del timeout evita llamar a endSession si el usuario
+  // ya navegó fuera por su cuenta (botón "Terminar") antes de que corriera.
+  useEffect(() => {
+    if (!pendingClose) return undefined;
+    const timer = setTimeout(() => {
+      endSession(pendingClose.finalState, pendingClose.finalMessages);
+    }, 2200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingClose]);
 
   const buildAPIMessages = (currentMessages, newSetterMessage) => {
     const history = [];
@@ -319,10 +344,14 @@ const Simulator = () => {
       // justo sobre la zona donde el autoscroll acababa de traer la respuesta
       // del prospecto, obligando a elegir entre ver el coaching o el chat.
 
-      // Check if simulation ended naturally
+      // Check if simulation ended naturally — se muestra el aviso de cierre
+      // de inmediato (ver bloque "ended" más abajo); el efecto de arriba
+      // (pendingClose) se encarga de navegar al reporte con un pequeño
+      // margen después.
       const terminalStates = ['pidio_llamada', 'cerrado', 'confirmado_con_entusiasmo', 'quiere_reagendar', 'cancelo'];
       if (terminalStates.includes(response.estado_lead)) {
-        setTimeout(() => endSession(response.estado_lead, [...updatedMessages, prospectMsg]), 1500);
+        setEnded(true);
+        setPendingClose({ finalState: response.estado_lead, finalMessages: [...updatedMessages, prospectMsg] });
       }
     } catch (err) {
       setMessages(prev => [...prev, {
@@ -382,7 +411,7 @@ const Simulator = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-bg-primary">
+    <div key={sessionId} className="flex min-h-screen bg-bg-primary">
       {/* Chat area */}
       <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full">
         {/* Header */}
@@ -503,7 +532,10 @@ const Simulator = () => {
         )}
         {ended && (
           <div className="fixed bottom-0 left-0 right-0 md:relative bg-bg-card border-t border-border-subtle px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center" style={{ zIndex: 35 }}>
-            <p className="text-text-secondary text-sm">Simulación finalizada — redirigiendo al reporte...</p>
+            <p className="flex items-center justify-center gap-2 text-sm font-bold text-green-400">
+              <Check size={16} /> ¡Simulación completada con éxito!
+            </p>
+            <p className="mt-1 text-text-secondary text-xs">Preparando tu reporte de desempeño...</p>
           </div>
         )}
       </div>

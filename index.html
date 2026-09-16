@@ -1,9 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Evita que Chrome/Google Translate reescriba nodos del chat por fuera
+         de React — esa mutación externa del DOM es la causa típica de
+         "NotFoundError: Failed to execute 'removeChild' on 'Node'" cuando
+         React intenta reconciliar un nodo que la extensión ya movió/quitó. -->
+    <meta name="google" content="notranslate" />
     <title>SimulaSET — Practica sin miedo. Cierra con convicción.</title>
     <meta name="theme-color" content="#0F0F0F" />
     <meta name="description" content="Herramienta de entrenamiento para setters de ventas de alto ticket" />
