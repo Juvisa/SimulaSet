@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase';
 import { calcularMetricasAdminReal } from '../utils/analytics';
 import { MISSION_01 } from '../data/missions';
 import Layout from '../components/Layout';
-import LevelBadge from '../components/LevelBadge';
+import PracticeLevelBadge from '../components/PracticeLevelBadge';
+import { PRACTICE_LEVELS } from '../utils/practiceLevel';
 import ModeBadge from '../components/ModeBadge';
 import { Users, Play, BarChart2, TrendingUp, ChevronRight, Search, BookOpen, Sparkles, Trophy, Loader2 } from 'lucide-react';
 
@@ -67,10 +68,9 @@ const AdminDashboard = () => {
 
   const filteredSetters = ranking.filter(u => {
     const matchSearch = (u.name || '').toLowerCase().includes(search.toLowerCase()) || (u.email || '').toLowerCase().includes(search.toLowerCase());
-    // u.derivedLevel viene ya calculado desde calcularMetricasAdminReal()
-    // (analytics.js) — u.level (profiles.level) nunca se actualiza y siempre
-    // sería 1, dejando este filtro roto para niveles 2-5.
-    const matchLevel = !filterLevel || String(u.derivedLevel || 1) === filterLevel;
+    // u.practiceLevel viene de calcularMetricasAdminReal() (analytics.js),
+    // calculado con la fuente única practiceLevel.js.
+    const matchLevel = !filterLevel || u.practiceLevel?.id === filterLevel;
     return matchSearch && matchLevel;
   });
 
@@ -129,22 +129,23 @@ const AdminDashboard = () => {
       <div className="mb-4"><h2 className="font-black text-text-primary">Simulador · Actividad real</h2><p className="text-xs text-text-secondary mt-1">Sesiones reales de la plataforma (Supabase), no datos locales del navegador.</p></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatCard label="Setters" value={metricas?.total_setters || 0} icon={Users} color="#E0605E" />
-        <StatCard label="Sesiones hoy" value={todaySessions} icon={Play} color="#2563EB" />
-        <StatCard label="Total sesiones" value={metricas?.simulaciones_total || 0} icon={TrendingUp} color="#1D9E75" />
-        <StatCard label="Promedio global" value={`${metricas?.promedio_global || 0}/100`} icon={BarChart2} color="#C9920A" />
+        <StatCard label="Sesiones iniciadas hoy" value={todaySessions} icon={Play} color="#2563EB" />
+        <StatCard label="Total simulaciones" value={metricas?.simulaciones_total || 0} icon={TrendingUp} color="#1D9E75" />
+        <StatCard label="SET Score promedio (cohorte)" value={`${metricas?.set_score_promedio_cohorte || 0}/100`} icon={BarChart2} color="#C9920A" />
       </div>
 
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" /><input value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-bg-input border border-border-subtle rounded-xl pl-9 pr-4 py-2.5 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors" placeholder="Buscar setter..." /></div>
-        <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="bg-bg-input border border-border-subtle rounded-xl px-4 py-2.5 text-text-primary text-sm focus:border-accent-coral transition-colors"><option value="">Todos los niveles</option><option value="1">Novato</option><option value="2">Aprendiz</option><option value="3">Practicante</option><option value="4">Pro</option><option value="5">Élite</option></select>
+        <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="bg-bg-input border border-border-subtle rounded-xl px-4 py-2.5 text-text-primary text-sm focus:border-accent-coral transition-colors"><option value="">Todos los niveles de práctica</option>{PRACTICE_LEVELS.map(level => <option key={level.id} value={level.id}>{level.icon} {level.name}</option>)}</select>
       </div>
 
       {filteredSetters.length === 0 ? <div className="card-tactical rounded-2xl p-12 text-center"><div className="text-4xl mb-3">👤</div><div className="text-text-secondary">Sin setters registrados aún</div></div> : <div className="space-y-2">{filteredSetters.map(u => {
-        const porModo = u.metricas?.simulador?.por_modo || {};
-        const topMode = Object.entries(porModo).sort((a, b) => (b[1]?.sesiones || 0) - (a[1]?.sesiones || 0))[0]?.[0];
-        const promedio = u.metricas?.simulador?.promedio_total || 0;
-        const totalSesiones = u.metricas?.simulador?.sesiones_totales || 0;
-        return <button key={u.id} onClick={() => navigate(`/admin/setter/${u.id}`)} className="card-tactical w-full rounded-2xl p-4 flex items-center gap-4 hover:border-accent-coral/30 transition-all text-left"><div className="w-10 h-10 rounded-full bg-accent-coral/20 flex items-center justify-center text-accent-coral font-bold text-sm flex-shrink-0">{u.name?.[0]?.toUpperCase()}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><span className="font-semibold text-text-primary text-sm">{u.name}</span><LevelBadge level={u.derivedLevel || 1} size="sm" showName={false} /></div><div className="text-text-secondary text-xs">{u.email}</div></div><div className="hidden md:flex items-center gap-6 text-sm"><div className="text-center"><div className="font-bold text-text-primary">{totalSesiones}</div><div className="text-text-secondary text-xs">sesiones</div></div><div className="text-center"><div className="font-bold" style={{ color: promedio >= 80 ? '#1D9E75' : promedio >= 60 ? '#C9920A' : '#DC2626' }}>{promedio}/100</div><div className="text-text-secondary text-xs">promedio</div></div>{topMode && <div className="text-center"><ModeBadge mode={topMode} size="sm" /><div className="text-text-secondary text-xs mt-1">modo favorito</div></div>}<div className="text-center"><div className="text-text-secondary text-xs">{u.lastActivity ? new Date(u.lastActivity).toLocaleDateString('es') : 'Sin actividad'}</div><div className="text-text-secondary text-xs">última actividad</div></div></div><ChevronRight size={16} className="text-text-secondary flex-shrink-0" /></button>;
+        // "Modo favorito" = ACTIVIDAD: modo con más sesiones INICIADAS
+        // (incluye no puntuadas) — preferencia de uso, no desempeño.
+        const topMode = u.modoFavorito;
+        const setScore = Math.round(u.set_score || 0);
+        const validSimulations = u.validSimulations || 0;
+        return <button key={u.id} onClick={() => navigate(`/admin/setter/${u.id}`)} className="card-tactical w-full rounded-2xl p-4 flex items-center gap-4 hover:border-accent-coral/30 transition-all text-left"><div className="w-10 h-10 rounded-full bg-accent-coral/20 flex items-center justify-center text-accent-coral font-bold text-sm flex-shrink-0">{u.name?.[0]?.toUpperCase()}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><span className="font-semibold text-text-primary text-sm">{u.name}</span><PracticeLevelBadge validSimulations={validSimulations} size="sm" /></div><div className="text-text-secondary text-xs">{u.email}</div></div><div className="hidden md:flex items-center gap-6 text-sm"><div className="text-center"><div className="font-bold text-text-primary">{validSimulations}</div><div className="text-text-secondary text-xs">simulaciones</div></div><div className="text-center"><div className="font-bold" style={{ color: setScore >= 80 ? '#1D9E75' : setScore >= 60 ? '#C9920A' : '#DC2626' }}>{setScore}/100</div><div className="text-text-secondary text-xs">SET Score</div></div>{topMode && <div className="text-center"><ModeBadge mode={topMode} size="sm" /><div className="text-text-secondary text-xs mt-1">modo favorito</div></div>}<div className="text-center"><div className="text-text-secondary text-xs">{u.lastActivity ? new Date(u.lastActivity).toLocaleDateString('es') : 'Sin actividad'}</div><div className="text-text-secondary text-xs">última actividad</div></div></div><ChevronRight size={16} className="text-text-secondary flex-shrink-0" /></button>;
       })}</div>}
     </Layout>
   );

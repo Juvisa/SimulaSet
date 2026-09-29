@@ -8,8 +8,8 @@ import MatchCelebrationModal from '../components/MatchCelebrationModal';
 import { useAuth } from '../context/AuthContext';
 import { calculateMatchScore } from '../utils/matchingAlgorithm';
 import { getUserTalentMetrics } from '../utils/talentMetrics';
-import { getSimulatorSessionCount } from '../utils/simulatorSessions';
-import { deriveLevelFromStats } from '../utils/levels';
+import { getLegacyTotalSessionRowCount } from '../utils/simulatorSessions';
+import { getLegacyMatchingLevel } from '../utils/legacyMatchingLevel';
 import {
   getOpenVacancies, getMyCommercialProfile, upsertCommercialProfile,
   getMyMatches, requestMatch,
@@ -274,18 +274,17 @@ const OpportunityHub = () => {
       getUserTalentMetrics({ userId: user.id }),
       getOpenVacancies(),
       getMyMatches(user.id),
-      getSimulatorSessionCount(user.id),
+      getLegacyTotalSessionRowCount(user.id),
     ]).then(([profileResult, metricsResult, vacanciesResult, matchesResult, sessionCountResult]) => {
       if (!active) return;
       setProfile(profileResult.profile);
-      // user.level nunca se actualiza en profiles (ver detalle en
-      // Dashboard.jsx) — calculateMatchScore usa metrics.level para el bonus
-      // de nivel en el % de match (streakOrLevelBonus), así que sin esto un
-      // alumno con nivel real alto nunca recibía ese bonus. avgSetScore ya
-      // venía correcto (getUserTalentMetrics lo lee en vivo de profiles.set_score),
-      // solo level quedaba congelado.
-      const derivedLevel = deriveLevelFromStats(sessionCountResult.count, metricsResult.avgSetScore).level;
-      setMetrics({ ...metricsResult, level: derivedLevel });
+      // legacyMatchingLevel: señal de COMPATIBILIDAD TEMPORAL para el bonus
+      // de nivel de calculateMatchScore (escala histórica 1–5). NO es el nivel
+      // de práctica visible y no se muestra en la UI — conserva la fórmula e
+      // insumos de antes (todas las filas + set_score) para que el % de match
+      // no cambie. Ver legacyMatchingLevel.js.
+      const legacyMatchingLevel = getLegacyMatchingLevel(sessionCountResult.count, metricsResult.avgSetScore);
+      setMetrics({ ...metricsResult, legacyMatchingLevel });
       setVacancies(vacanciesResult.vacancies);
       setMatches(Object.fromEntries(matchesResult.matches.map((m) => [m.vacancy_id, m])));
       const firstError = profileResult.error || vacanciesResult.error || matchesResult.error;

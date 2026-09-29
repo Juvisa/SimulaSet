@@ -1,7 +1,9 @@
-import { getLevelInfo } from '../utils/levels';
+import { getPracticeLevel } from '../utils/practiceLevel';
 
-const LevelBadge = ({ level, size = 'md', showName = true }) => {
-  const info = getLevelInfo(level);
+// Insignia del NIVEL DE PRÁCTICA (volumen de entrenamiento). Recibe el número
+// de simulaciones válidas — nunca el SET Score, que se muestra aparte.
+const PracticeLevelBadge = ({ validSimulations, size = 'md', showName = true }) => {
+  const info = getPracticeLevel(validSimulations);
   const sizes = {
     sm: 'text-xs px-2 py-0.5',
     md: 'text-sm px-3 py-1',
@@ -10,6 +12,7 @@ const LevelBadge = ({ level, size = 'md', showName = true }) => {
 
   return (
     <span
+      title={`Nivel de práctica: ${info.name}`}
       className={`inline-flex items-center gap-1 rounded-full font-semibold ${sizes[size]}`}
       style={{ backgroundColor: info.color + '20', color: info.color, border: `1px solid ${info.color}40` }}
     >
@@ -19,4 +22,4 @@ const LevelBadge = ({ level, size = 'md', showName = true }) => {
   );
 };
 
-export default LevelBadge;
+export default PracticeLevelBadge;

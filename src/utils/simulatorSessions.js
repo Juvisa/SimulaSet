@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { countValidSimulations } from './practiceLevel';
 
 // project_name se guarda como snapshot congelado al momento de la sesión (no
 // hay foreign key de project_id hacia projects), así que sigue mostrándose
@@ -30,10 +31,25 @@ export const getSimulatorSessions = async (userId) => {
   };
 };
 
-// Conteo liviano (HEAD request, sin traer filas) para widgets que solo
-// necesitan el número total de sesiones — ej. la barra de progreso de nivel
-// en el Sidebar, visible en cada página.
-export const getSimulatorSessionCount = async (userId) => {
+// Número de simulaciones VÁLIDAS (ver isValidSimulation en practiceLevel.js)
+// — es el contador que alimenta el nivel de práctica en widgets que no
+// necesitan el historial completo (Sidebar, SimulationReport). Trae solo la
+// columna scores y filtra con el mismo predicado JS que el resto de la app,
+// para no mantener una segunda definición de "válida" en un filtro PostgREST.
+export const getValidSimulationCount = async (userId) => {
+  const { data, error } = await supabase
+    .from('simulator_sessions')
+    .select('scores')
+    .eq('user_id', userId);
+
+  return { count: countValidSimulations(data), error: error?.message };
+};
+
+// LEGACY: cuenta TODAS las filas (incluidas las que no tienen ningún score).
+// Solo existe para alimentar getLegacyMatchingLevel() en OpportunityHub con
+// exactamente el mismo insumo que antes, de modo que el match score no cambie.
+// NO usar para mostrar "simulaciones" ni para el nivel de práctica.
+export const getLegacyTotalSessionRowCount = async (userId) => {
   const { count, error } = await supabase
     .from('simulator_sessions')
     .select('id', { count: 'exact', head: true })

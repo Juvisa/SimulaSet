@@ -2,7 +2,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getRealLeads } from './realLeads';
-import { deriveLevelFromStats } from './levels';
+import { isValidSimulation, getPracticeLevel, getPracticeMinimumStatus, PRACTICE_LEVELS } from './practiceLevel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,9 @@ const sessionScore = (s) =>
     ? Math.round(s.averageScore)
     : s.scores?.length > 0 ? Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length * 10) : 0;
 
+// DEUDA FUNCIONAL: "Leads convertidos" del Dashboard usa otra definición de
+// éxito (3 estados en cualquier modo). Unificar posteriormente la definición
+// de resultado exitoso por modo (outbound, inbound, reactivación).
 const SUCCESS_STATES = {
   outbound:    ['pidio_llamada'],
   inbound:     ['confirmado_con_entusiasmo'],
@@ -39,6 +42,8 @@ const daysAgo = (dateStr) => (Date.now() - new Date(dateStr)) / 86400000;
 
 // ─── Setter analytics ─────────────────────────────────────────────────────────
 
+// DESEMPEÑO — recibe SOLO simulaciones válidas (validSessions): tasa de
+// éxito, promedios por modo, tendencia y conteos de "simulaciones".
 function calcularMetricasSimulador(sesiones) {
   if (!sesiones.length) return null;
 
@@ -86,8 +91,9 @@ function calcularMetricasSimulador(sesiones) {
     sesiones.filter(s => isoWeek(s.createdAt) === thisWeekKey).map(sessionScore)
   );
 
+  // Sin "promedio_total": el desempeño general es el SET Score oficial
+  // (profiles.set_score). No se mantiene un segundo algoritmo de promedio.
   return {
-    promedio_total: avg(scores),
     promedio_ultimas_7_dias: avg(last7),
     sesiones_totales: sesiones.length,
     sesiones_esta_semana: sesiones.filter(s => isoWeek(s.createdAt) === isoWeek(new Date().toISOString())).length,
@@ -101,6 +107,7 @@ function calcularMetricasSimulador(sesiones) {
   };
 }
 
+// DESEMPEÑO — recibe SOLO simulaciones válidas (validSessions).
 function calcularCurvaProgreso(sesiones) {
   if (sesiones.length < 3) return [];
   const porSemana = {};
@@ -171,19 +178,64 @@ function calcularMetricasLeads(leads) {
   };
 }
 
-function evaluarCertificacion(sesiones, leads) {
-  const scores = sesiones.map(sessionScore);
-  const promedioSim = avg(scores);
-  const modos = ['outbound', 'inbound', 'reactivacion'];
-  const modosCon5 = modos.filter(m => sesiones.filter(s => s.mode === m).length >= 5);
-  const listo = promedioSim >= 80 && leads.length >= 5 && modosCon5.length === 3;
+// Normaliza una fila de simulator_sessions al shape interno. Conserva `scores`
+// para que isValidSimulation() pueda separar ACTIVIDAD de PRÁCTICA después.
+const normalizarSesion = (row) => ({
+  mode: row.mode,
+  finalState: row.final_state,
+  createdAt: row.created_at,
+  scores: Array.isArray(row.scores) ? row.scores : [],
+  averageScore: row.average_score,
+});
 
+// Estado del simulador para Mi Performance — distingue "nunca abrió el
+// simulador" de "lo abrió pero no completó ninguna práctica puntuada", para no
+// decirle "no tienes simulaciones" a alguien que sí lo ha usado.
+export const getSimulatorActivityState = (startedSessionCount, validSimulationCount) => {
+  if (!startedSessionCount) return 'sin_sesiones';
+  if (!validSimulationCount) return 'sin_puntuadas';
+  return 'con_practica';
+};
+
+// Modo con más sesiones INICIADAS (ACTIVIDAD: preferencia de uso, no
+// desempeño ni volumen válido). Empate → el primero en el orden fijo de modos.
+const modoMasUsado = (allSessions) => {
+  let favorito = null;
+  let max = 0;
+  ['outbound', 'inbound', 'reactivacion'].forEach((mode) => {
+    const count = allSessions.filter(s => s.mode === mode).length;
+    if (count > max) { favorito = mode; max = count; }
+  });
+  return favorito;
+};
+
+// ─── Modelo semántico (Mi Performance y admin) ───────────────────────────────
+//   ACTIVIDAD  = todas las sesiones iniciadas (allSessions): "¿usa el simulador?"
+//   PRÁCTICA   = simulaciones válidas (validSessions, isValidSimulation — misma
+//                población que el SET Score): "¿cuánto entrenó?"
+//   DESEMPEÑO  = SET Score (profiles.set_score, NUNCA recalculado aquí) y
+//                métricas calculadas SOLO sobre validSessions (curva, tasa de
+//                éxito, promedios por modo, tendencia, alertas de rendimiento).
+// En métricas de entrenamiento la palabra "simulación" = práctica válida. El
+// uso bruto, si se muestra, se llama "sesiones iniciadas".
+
+// Función pura (sin I/O) — Mi Performance de un setter.
+export function construirMetricasSetter({ allSessions, leads = [], setScore }) {
+  const validSessions = allSessions.filter(isValidSimulation);
   return {
-    listo,
-    promedio_simulador: promedioSim,
-    leads_reales: leads.length,
-    modos_con_5_sesiones: modosCon5,
-    modos_faltantes: modos.filter(m => !modosCon5.includes(m)),
+    actividad: {
+      sesionesIniciadas: allSessions.length,
+      estado: getSimulatorActivityState(allSessions.length, validSessions.length),
+    },
+    // Indicador de VOLUMEN únicamente (≥ 20 simulaciones válidas). Reemplaza
+    // a la antigua "certificación" automática, eliminada a propósito: no hay
+    // certificación, elegibilidad SET Match ni Setter Verified automáticos.
+    practica: getPracticeMinimumStatus(validSessions.length),
+    // SET Score individual: se pasa tal cual desde profiles.set_score.
+    setScore,
+    simulador: calcularMetricasSimulador(validSessions),
+    curva: calcularCurvaProgreso(validSessions),
+    leadsReales: calcularMetricasLeads(leads),
   };
 }
 
@@ -196,29 +248,17 @@ function evaluarCertificacion(sesiones, leads) {
 // session.messages (etapa_set por mensaje de coaching) y session.finalFomo,
 // campos que utils/simulatorSessions.js nunca persiste en la tabla
 // simulator_sessions — no hay de dónde traerlos en el servidor hoy.
-export async function calcularMetricasSetterReal(userId) {
+export async function calcularMetricasSetterReal(userId, setScore) {
   const { data, error } = await supabase
     .from('simulator_sessions')
     .select('mode, final_state, scores, average_score, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
 
-  const sesiones = (error ? [] : data || []).map(row => ({
-    mode: row.mode,
-    finalState: row.final_state,
-    createdAt: row.created_at,
-    scores: Array.isArray(row.scores) ? row.scores : [],
-    averageScore: row.average_score,
-  }));
+  const allSessions = (error ? [] : data || []).map(normalizarSesion);
   const { leads } = await getRealLeads(userId);
 
-  return {
-    simulador: calcularMetricasSimulador(sesiones),
-    leadsReales: calcularMetricasLeads(leads),
-    curva: calcularCurvaProgreso(sesiones),
-    certificacion: evaluarCertificacion(sesiones, leads),
-    error: error?.message,
-  };
+  return { ...construirMetricasSetter({ allSessions, leads, setScore }), error: error?.message };
 }
 
 // ─── Admin analytics (Supabase) ────────────────────────────────────────────────
@@ -232,22 +272,8 @@ export async function calcularMetricasSetterReal(userId) {
 //
 // Importante: NO existe tabla de "leads reales" en Supabase — ese dato solo
 // vive en localStorage, por dispositivo, así que un admin nunca puede ver los
-// leads de OTRO setter sin importar cómo se implemente esto. Por eso ya no hay
-// KPI de "leads agendados" a nivel cohorte, y el criterio de certificación de
-// abajo (evaluarCertificacionCohorte) NO exige leads_reales >= 5 como sí lo
-// hace evaluarCertificacion() para el propio setter — solo evalúa lo que es
-// verificable desde el servidor (promedio >= 80 y 3 modos con 5+ sesiones).
-const evaluarCertificacionCohorte = (sesiones) => {
-  const promedioSim = avg(sesiones.map(sessionScore));
-  const modos = ['outbound', 'inbound', 'reactivacion'];
-  const modosCon5 = modos.filter(m => sesiones.filter(s => s.mode === m).length >= 5);
-  return {
-    listo: promedioSim >= 80 && modosCon5.length === 3,
-    promedio_simulador: promedioSim,
-    modos_con_5_sesiones: modosCon5,
-    modos_faltantes: modos.filter(m => !modosCon5.includes(m)),
-  };
-};
+// leads de OTRO setter sin importar cómo se implemente esto. Por eso no hay
+// KPI de "leads agendados" a nivel cohorte.
 
 const actividadBarrasReal = (sesiones) => {
   const dias = {};
@@ -263,92 +289,105 @@ const actividadBarrasReal = (sesiones) => {
   return Object.entries(dias).map(([fecha, count]) => ({ fecha: fecha.slice(5), sesiones: count }));
 };
 
+const tuvoActividadUltimos7Dias = (allSessions) => allSessions.some(x => daysAgo(x.createdAt) <= 7);
+
+// Función pura (sin I/O) — métricas de cohorte para el admin. Cada métrica
+// declara qué población usa (ver el modelo semántico arriba).
+export function construirMetricasAdmin({ setters, sessionRows }) {
+  const allRows = (sessionRows || []).map(row => ({ userId: row.user_id, ...normalizarSesion(row) }));
+  const validRows = allRows.filter(isValidSimulation);
+
+  const allByUser = new Map();
+  allRows.forEach((row) => {
+    const list = allByUser.get(row.userId) || [];
+    list.push(row);
+    allByUser.set(row.userId, list);
+  });
+
+  const conMetricas = (setters || []).map((setter) => {
+    const allSessions = (allByUser.get(setter.id) || [])
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const validSessions = allSessions.filter(isValidSimulation);
+    return {
+      ...setter,
+      // ACTIVIDAD (todas las sesiones iniciadas)
+      allSessions,
+      startedSessionCount: allSessions.length,
+      lastActivity: allSessions[0]?.createdAt || null,
+      modoFavorito: modoMasUsado(allSessions),
+      // PRÁCTICA (solo simulaciones válidas) — el SET Score no participa.
+      validSessions,
+      validSimulations: validSessions.length,
+      practiceLevel: getPracticeLevel(validSessions.length),
+      practiceMinimum: getPracticeMinimumStatus(validSessions.length),
+      // DESEMPEÑO: SET Score individual = setter.set_score (profiles); el
+      // resto se calcula solo sobre simulaciones válidas.
+      metricas: {
+        simulador: calcularMetricasSimulador(validSessions),
+      },
+    };
+  });
+
+  const ranking = [...conMetricas].sort((a, b) => (b.set_score || 0) - (a.set_score || 0));
+  const semanaActual = isoWeek(new Date().toISOString());
+
+  const distribucion = PRACTICE_LEVELS.reduce((acc, level) => {
+    acc[level.name] = conMetricas.filter(s => s.practiceLevel.id === level.id).length;
+    return acc;
+  }, {});
+
+  // ACTIVIDAD: distribución de uso por modo sobre todas las sesiones iniciadas.
+  const porModoGlobal = ['outbound', 'inbound', 'reactivacion'].map((mode) => {
+    const count = allRows.filter(s => s.mode === mode).length;
+    return { mode, sesiones: count, pct: pct(count, allRows.length) };
+  });
+
+  // SET Score promedio de COHORTE: media de los profiles.set_score de los
+  // setters con al menos una simulación válida (sin ninguna, su set_score es
+  // el default 0 y no representa desempeño). NO se recalcula desde
+  // simulator_sessions. Es distinto del SET Score individual de cada setter.
+  const conPractica = conMetricas.filter(s => s.validSimulations > 0);
+  const setScorePromedioCohorte = avg(conPractica.map(s => Math.round(s.set_score || 0)));
+
+  return {
+    total_setters: conMetricas.length,
+    // ACTIVIDAD
+    setters_activos: conMetricas.filter(s => tuvoActividadUltimos7Dias(s.allSessions)).length,
+    sin_actividad_7_dias: conMetricas.filter(s => !tuvoActividadUltimos7Dias(s.allSessions)),
+    actividad_barras: actividadBarrasReal(allRows),
+    por_modo_global: porModoGlobal,
+    // PRÁCTICA
+    simulaciones_total: validRows.length,
+    simulaciones_esta_semana: validRows.filter(s => isoWeek(s.createdAt) === semanaActual).length,
+    minimo_practica_cumplido: conMetricas.filter(s => s.practiceMinimum.met),
+    distribucion_niveles: distribucion,
+    // DESEMPEÑO
+    set_score_promedio_cohorte: setScorePromedioCohorte,
+    ranking,
+    bajo_rendimiento: conMetricas.filter(s => {
+      const ultimas5 = s.validSessions.slice(0, 5);
+      return ultimas5.length >= 3 && avg(ultimas5.map(sessionScore)) < 50;
+    }),
+  };
+}
+
 export async function calcularMetricasAdminReal() {
   const [{ data: profileRows, error: profilesError }, { data: sessionRows, error: sessionsError }] = await Promise.all([
     supabase
       .from('profiles')
-      // set_score se agrega solo para poder derivar el nivel real aquí mismo
-      // (ver conMetricas más abajo) — profiles.level nunca se actualiza tras
-      // la creación de la cuenta, así que leerlo directo da nivel 1 para
-      // todos. `level` se mantiene en el select por compatibilidad de forma,
-      // pero ya no se usa para calcular la distribución por nivel.
+      // set_score = SET Score individual oficial. `level` (profiles.level) se
+      // mantiene en el select por compatibilidad de forma, pero no se usa.
       .select('id, name, email, level, set_score, active, created_at')
       .eq('role', 'setter')
       .order('created_at', { ascending: true }),
     supabase
       .from('simulator_sessions')
-      .select('user_id, mode, final_state, average_score, created_at'),
+      .select('user_id, mode, final_state, scores, average_score, created_at'),
   ]);
 
-  const error = profilesError?.message || sessionsError?.message;
-  const setters = profileRows || [];
-
-  const sessionsByUser = new Map();
-  (sessionRows || []).forEach((row) => {
-    const normalized = { mode: row.mode, finalState: row.final_state, createdAt: row.created_at, averageScore: row.average_score };
-    const list = sessionsByUser.get(row.user_id) || [];
-    list.push(normalized);
-    sessionsByUser.set(row.user_id, list);
-  });
-
-  const conMetricas = setters.map((setter) => {
-    const sesiones = (sessionsByUser.get(setter.id) || [])
-      .slice()
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return {
-      ...setter,
-      lastActivity: sesiones[0]?.createdAt || null,
-      sesiones,
-      // Fuente única de verdad del nivel para las 3 pantallas admin
-      // (AdminDashboard, AdminAnalytics, AdminSetterDetail vía este mismo
-      // dato) — mismo cálculo que ya usan Dashboard/Profile/Sidebar del
-      // alumno (deriveLevelFromStats), en vez de leer profiles.level
-      // congelado. Calculado UNA sola vez aquí para que no haya dos fórmulas
-      // distintas en el admin vs. en el alumno.
-      derivedLevel: deriveLevelFromStats(sesiones.length, setter.set_score || 0).level,
-      metricas: {
-        simulador: calcularMetricasSimulador(sesiones),
-        certificacion: evaluarCertificacionCohorte(sesiones),
-      },
-    };
-  });
-
-  const ranking = [...conMetricas].sort((a, b) =>
-    (b.metricas.simulador?.promedio_total || 0) - (a.metricas.simulador?.promedio_total || 0)
-  );
-
-  const todasSesiones = (sessionRows || []).map(row => ({
-    mode: row.mode, finalState: row.final_state, createdAt: row.created_at, averageScore: row.average_score,
-  }));
-  const semanaActual = isoWeek(new Date().toISOString());
-
-  const NIVEL_MAP = { 1: 'Novato', 2: 'Aprendiz', 3: 'Practicante', 4: 'Pro', 5: 'Élite' };
-  const distribucion = [1, 2, 3, 4, 5].reduce((acc, n) => {
-    acc[NIVEL_MAP[n]] = conMetricas.filter(s => s.derivedLevel === n).length;
-    return acc;
-  }, {});
-
-  const porModoGlobal = ['outbound', 'inbound', 'reactivacion'].map((mode) => {
-    const count = todasSesiones.filter(s => s.mode === mode).length;
-    return { mode, sesiones: count, pct: pct(count, todasSesiones.length) };
-  });
-
   return {
-    error,
-    total_setters: setters.length,
-    setters_activos: conMetricas.filter(s => s.sesiones.some(x => daysAgo(x.createdAt) <= 7)).length,
-    simulaciones_total: todasSesiones.length,
-    simulaciones_esta_semana: todasSesiones.filter(s => isoWeek(s.createdAt) === semanaActual).length,
-    promedio_global: avg(conMetricas.map(s => s.metricas.simulador?.promedio_total || 0).filter(v => v > 0)),
-    por_modo_global: porModoGlobal,
-    ranking,
-    listos_para_proyecto: conMetricas.filter(s => s.metricas.certificacion?.listo),
-    sin_actividad_7_dias: conMetricas.filter(s => !s.sesiones.some(x => daysAgo(x.createdAt) <= 7)),
-    bajo_rendimiento: conMetricas.filter(s => {
-      const ultimas5 = s.sesiones.slice(0, 5);
-      return ultimas5.length >= 3 && avg(ultimas5.map(sessionScore)) < 50;
-    }),
-    distribucion_niveles: distribucion,
-    actividad_barras: actividadBarrasReal(todasSesiones),
+    error: profilesError?.message || sessionsError?.message,
+    ...construirMetricasAdmin({ setters: profileRows || [], sessionRows: sessionRows || [] }),
   };
 }

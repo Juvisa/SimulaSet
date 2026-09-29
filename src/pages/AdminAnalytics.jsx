@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { calcularMetricasAdminReal } from '../utils/analytics';
 import Layout from '../components/Layout';
-import LevelBadge from '../components/LevelBadge';
+import PracticeLevelBadge from '../components/PracticeLevelBadge';
+import { PRACTICE_LEVELS } from '../utils/practiceLevel';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -29,13 +30,9 @@ const formatRelativeDate = (isoString) => {
 
 const scoreColor = (v) => v >= 80 ? '#1D9E75' : v >= 60 ? '#C9920A' : '#DC2626';
 
-const NIVEL_COLORS = {
-  'Novato':      '#DC2626',
-  'Aprendiz':    '#D97706',
-  'Practicante': '#C9920A',
-  'Pro':         '#2563EB',
-  'Élite':       '#1D9E75',
-};
+// Colores de la distribución por nivel de práctica: se leen de la fuente única
+// (practiceLevel.js), sin mapa de niveles propio en esta pantalla.
+const PRACTICE_LEVEL_COLORS = Object.fromEntries(PRACTICE_LEVELS.map(level => [level.name, level.color]));
 
 const BarTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -58,11 +55,6 @@ const PieTooltip = ({ active, payload }) => {
 
 // ─── Ranking table ────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG = {
-  listo:   { label: 'Listo para proyecto', color: '#1D9E75', icon: CheckCircle },
-  atencion:{ label: 'Necesita ayuda',       color: '#DC2626', icon: AlertTriangle },
-  normal:  { label: 'En progreso',          color: '#9A9A9A', icon: null },
-};
 
 const SortBtn = ({ col, label, sortBy, sortDir, onSort }) => {
   const active = sortBy === col;
@@ -81,14 +73,12 @@ const SortBtn = ({ col, label, sortBy, sortDir, onSort }) => {
 };
 
 const SetterRow = ({ setter, rank, navigate }) => {
-  const m = setter.metricas;
-  const promedio = m.simulador?.promedio_total || 0;
-  const sesiones = m.simulador?.sesiones_totales || 0;
-
-  const status = m.certificacion?.listo ? 'listo'
-    : promedio < 50 && sesiones >= 3 ? 'atencion'
-    : 'normal';
-  const { label: statusLabel, color: statusColor, icon: StatusIcon } = STATUS_CONFIG[status];
+  // SET Score oficial (profiles.set_score) y simulaciones válidas: métricas
+  // independientes. El "Estado" es SOLO el mínimo de práctica (volumen);
+  // "Necesita ayuda" es una alerta de desempeño aparte, no un estado de nivel.
+  const setScore = Math.round(setter.set_score || 0);
+  const validSimulations = setter.validSimulations || 0;
+  const needsHelp = setScore < 50 && validSimulations >= 3;
 
   return (
     <tr
@@ -105,20 +95,22 @@ const SetterRow = ({ setter, rank, navigate }) => {
         </div>
       </td>
       <td className="px-4 py-3">
-        {/* setter.derivedLevel viene de calcularMetricasAdminReal() (analytics.js)
-            — setter.level (profiles.level) nunca se actualiza tras el registro. */}
-        <LevelBadge level={setter.derivedLevel || 1} size="sm" />
+        <PracticeLevelBadge validSimulations={validSimulations} size="sm" />
       </td>
       <td className="px-4 py-3 text-center">
-        <span className="font-bold text-sm" style={{ color: scoreColor(promedio) }}>{promedio}/100</span>
+        <span className="font-bold text-sm" style={{ color: scoreColor(setScore) }}>{setScore}/100</span>
       </td>
-      <td className="px-4 py-3 text-center text-text-secondary text-sm">{sesiones}</td>
+      <td className="px-4 py-3 text-center text-text-secondary text-sm">{validSimulations}</td>
       <td className="px-4 py-3 text-center text-text-secondary text-xs">{formatRelativeDate(setter.lastActivity)}</td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 text-xs font-medium" style={{ color: statusColor }}>
-          {StatusIcon && <StatusIcon size={12} />}
-          {statusLabel}
+        <div className="text-xs font-medium" style={{ color: setter.practiceMinimum?.met ? '#1D9E75' : '#9A9A9A' }}>
+          {setter.practiceMinimum?.label || 'En entrenamiento'}
         </div>
+        {needsHelp && (
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-red-400">
+            <AlertTriangle size={11} /> Necesita ayuda
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -128,7 +120,7 @@ const SetterRow = ({ setter, rank, navigate }) => {
 
 const EMPTY_METRICAS = {
   total_setters: 0, setters_activos: 0, simulaciones_total: 0, simulaciones_esta_semana: 0,
-  promedio_global: 0, por_modo_global: [], ranking: [], listos_para_proyecto: [],
+  set_score_promedio_cohorte: 0, por_modo_global: [], ranking: [], minimo_practica_cumplido: [],
   sin_actividad_7_dias: [], bajo_rendimiento: [], distribucion_niveles: {}, actividad_barras: [],
 };
 
@@ -137,7 +129,7 @@ const AdminAnalytics = () => {
   const [metricas, setMetricas] = useState(EMPTY_METRICAS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sortBy, setSortBy] = useState('promedio');
+  const [sortBy, setSortBy] = useState('set_score');
   const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => {
@@ -160,8 +152,8 @@ const AdminAnalytics = () => {
   const sortedRanking = useMemo(() => {
     return [...(metricas.ranking || [])].sort((a, b) => {
       const getVal = (s) => {
-        if (sortBy === 'promedio')  return s.metricas.simulador?.promedio_total || 0;
-        if (sortBy === 'sesiones')  return s.metricas.simulador?.sesiones_totales || 0;
+        if (sortBy === 'set_score')     return s.set_score || 0;
+        if (sortBy === 'simulaciones')  return s.validSimulations || 0;
         if (sortBy === 'actividad') return s.lastActivity ? new Date(s.lastActivity).getTime() : 0;
         return 0;
       };
@@ -210,16 +202,19 @@ const AdminAnalytics = () => {
             color="#E0605E"
           />
           <KPICard
-            label="Sesiones totales"
+            label="Simulaciones totales"
             value={metricas.simulaciones_total}
             sub="histórico de la cohorte"
             color="#C9920A"
           />
+          {/* SET Score promedio de COHORTE: media de profiles.set_score de los
+              setters con práctica — no es el SET Score de ningún setter ni se
+              recalcula desde simulator_sessions (ver analytics.js). */}
           <KPICard
-            label="Promedio global"
-            value={`${metricas.promedio_global}/100`}
-            sub="plataforma"
-            color={scoreColor(metricas.promedio_global)}
+            label="SET Score promedio"
+            value={`${metricas.set_score_promedio_cohorte}/100`}
+            sub="cohorte · setters con práctica"
+            color={scoreColor(metricas.set_score_promedio_cohorte)}
           />
         </div>
 
@@ -242,9 +237,9 @@ const AdminAnalytics = () => {
                   <tr>
                     <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-secondary">#</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Setter</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Nivel</th>
-                    <SortBtn col="promedio" label="Promedio" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                    <SortBtn col="sesiones" label="Sesiones" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Nivel de práctica</th>
+                    <SortBtn col="set_score" label="SET Score" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <SortBtn col="simulaciones" label="Simulaciones" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortBtn col="actividad" label="Última act." sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">Estado</th>
                   </tr>
@@ -294,21 +289,24 @@ const AdminAnalytics = () => {
             )}
           </div>
 
-          {/* Listos para proyecto */}
+          {/* Mínimo de práctica cumplido — SOLO volumen (≥ 20 simulaciones
+              válidas). NO implica elegibilidad SET Match, Setter Verified ni
+              certificación: esas decisiones son administrativas. */}
           <div className="card-tactical rounded-2xl p-5">
-            <h3 className="font-bold text-green-400 mb-3 flex items-center gap-2">
-              <CheckCircle size={16} /> Listos para Proyecto ({metricas.listos_para_proyecto?.length || 0})
+            <h3 className="font-bold text-green-400 mb-1 flex items-center gap-2">
+              <CheckCircle size={16} /> Mínimo de práctica cumplido ({metricas.minimo_practica_cumplido?.length || 0})
             </h3>
-            {metricas.listos_para_proyecto?.length === 0 ? (
-              <p className="text-text-secondary text-sm italic">Aún nadie ha completado los criterios</p>
+            <p className="text-text-secondary text-xs mb-3">Solo indica volumen de entrenamiento. No es elegibilidad ni certificación.</p>
+            {metricas.minimo_practica_cumplido?.length === 0 ? (
+              <p className="text-text-secondary text-sm italic">Aún nadie llega al mínimo de práctica</p>
             ) : (
               <div className="space-y-2">
-                {metricas.listos_para_proyecto?.map(s => (
+                {metricas.minimo_practica_cumplido?.map(s => (
                   <div key={s.id} className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
                     <div>
                       <span className="text-text-primary text-sm font-medium">{s.name}</span>
                       <span className="text-green-400 text-xs ml-2">
-                        {s.metricas.simulador?.promedio_total}/100 · {s.metricas.simulador?.sesiones_totales || 0} sesiones
+                        {s.validSimulations} simulaciones · SET Score {Math.round(s.set_score || 0)}
                       </span>
                     </div>
                     <button onClick={() => navigate(`/admin/setter/${s.id}`)}
@@ -325,6 +323,7 @@ const AdminAnalytics = () => {
           <h3 className="font-bold text-text-primary mb-4 flex items-center gap-2">
             <Zap size={16} className="text-accent-coral" /> Distribución de Actividad por Modo
           </h3>
+          <p className="text-text-secondary text-xs -mt-2 mb-3">Sesiones iniciadas (incluye las no puntuadas).</p>
           {!metricas.por_modo_global?.some(m => m.sesiones > 0) ? (
             <p className="text-text-secondary text-sm italic text-center py-4">Sin sesiones registradas aún</p>
           ) : (
@@ -346,7 +345,7 @@ const AdminAnalytics = () => {
         <div className="grid md:grid-cols-2 gap-4">
           {/* Distribución por nivel (pie) */}
           <div className="card-tactical rounded-2xl p-5">
-            <h3 className="font-bold text-text-primary mb-4">Distribución por Nivel</h3>
+            <h3 className="font-bold text-text-primary mb-4">Distribución por Nivel de Práctica</h3>
             {pieData.length === 0 ? (
               <p className="text-text-secondary text-sm italic text-center py-8">Sin datos</p>
             ) : (
@@ -355,7 +354,7 @@ const AdminAnalytics = () => {
                   <PieChart>
                     <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
                       {pieData.map(({ name }) => (
-                        <Cell key={name} fill={NIVEL_COLORS[name] || '#9A9A9A'} />
+                        <Cell key={name} fill={PRACTICE_LEVEL_COLORS[name] || '#9A9A9A'} />
                       ))}
                     </Pie>
                     <Tooltip content={<PieTooltip />} />
@@ -364,7 +363,7 @@ const AdminAnalytics = () => {
                 <div className="space-y-1.5 flex-1">
                   {pieData.map(({ name, value }) => (
                     <div key={name} className="flex items-center gap-2 text-sm">
-                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: NIVEL_COLORS[name] }} />
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PRACTICE_LEVEL_COLORS[name] }} />
                       <span className="text-text-secondary flex-1">{name}</span>
                       <span className="font-bold text-text-primary">{value}</span>
                     </div>
@@ -376,7 +375,8 @@ const AdminAnalytics = () => {
 
           {/* Actividad 14 días (barras) */}
           <div className="card-tactical rounded-2xl p-5">
-            <h3 className="font-bold text-text-primary mb-4">Actividad — últimos 14 días</h3>
+            <h3 className="font-bold text-text-primary mb-1">Actividad — últimos 14 días</h3>
+            <p className="text-text-secondary text-xs mb-3">Sesiones iniciadas por día (incluye las no puntuadas).</p>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={metricas.actividad_barras || []} barSize={10}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff14" />

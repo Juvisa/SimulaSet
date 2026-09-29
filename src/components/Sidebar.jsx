@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSeguimientosPendientes } from '../utils/followUps';
-import { getLevelInfo, getProgressToNext, deriveLevelFromStats } from '../utils/levels';
-import { getSimulatorSessionCount } from '../utils/simulatorSessions';
+import { getPracticeLevel, getPracticeProgress } from '../utils/practiceLevel';
+import { getValidSimulationCount } from '../utils/simulatorSessions';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
   BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles,
@@ -68,7 +68,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [pendingFollowUpCount, setPendingFollowUpCount] = useState(0);
-  const [sessionCount, setSessionCount] = useState(0);
+  const [validSimulations, setValidSimulations] = useState(0);
 
   useEffect(() => {
     if (!user?.id || isAdmin) return undefined;
@@ -84,7 +84,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   useEffect(() => {
     if (!user?.id || isAdmin) return undefined;
     let active = true;
-    getSimulatorSessionCount(user.id).then(({ count }) => { if (active) setSessionCount(count); });
+    getValidSimulationCount(user.id).then(({ count }) => { if (active) setValidSimulations(count); });
     return () => { active = false; };
   }, [user?.id, isAdmin]);
 
@@ -156,13 +156,10 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     .join('')
     .toUpperCase();
 
-  // user?.level nunca se actualiza en profiles (ver detalle en Dashboard.jsx) —
-  // se deriva de sessionCount + set_score real, igual que ahí, en vez de leer
-  // la columna congelada. El Sidebar es global (vive en TODAS las páginas), así
-  // que este mismo bug estaba visible en toda la app, no solo en Dashboard.
-  const derivedLevel = deriveLevelFromStats(sessionCount, user?.set_score || 0).level;
-  const levelInfo = getLevelInfo(derivedLevel);
-  const progress = getProgressToNext({ level: derivedLevel, sessions: sessionCount, avgScore: user?.set_score || 0 });
+  // Nivel de práctica: depende SOLO de simulaciones válidas (practiceLevel.js).
+  // El SET Score no participa. profiles.level ya no se usa.
+  const levelInfo = getPracticeLevel(validSimulations);
+  const progress = getPracticeProgress(validSimulations);
 
   return (
     <>
@@ -235,7 +232,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
               ) : (
                 <>
                   <p className="text-xs text-text-secondary truncate flex items-center gap-1">
-                    <GraduationCap size={11} /> Nivel {derivedLevel} · {levelInfo.name}
+                    <GraduationCap size={11} /> {levelInfo.icon} {levelInfo.name} · {validSimulations} sim.
                   </p>
                   <div className="mt-1 h-1 rounded-full bg-bg-input overflow-hidden">
                     <div

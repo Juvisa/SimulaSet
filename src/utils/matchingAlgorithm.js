@@ -25,9 +25,12 @@ const roleAndExperienceAffinity = (talentProfile, vacancy) => {
 };
 
 // Bonus por racha activa o nivel alto: se toma el mayor de los dos, no se suman.
+// El "nivel" aquí es legacyMatchingLevel (escala histórica 1–5, ver
+// legacyMatchingLevel.js), NO el nivel de práctica visible — pendiente de
+// revisión cuando se rediseñe formalmente el matching.
 const streakOrLevelBonus = (userMetrics) => {
   const streakBonus = Math.min(15, Math.round((Math.min(userMetrics?.currentStreak || 0, 5) / 5) * 15));
-  const levelBonus = Math.min(15, Math.round(((userMetrics?.level || 1) / 5) * 15));
+  const levelBonus = Math.min(15, Math.round(((userMetrics?.legacyMatchingLevel || 1) / 5) * 15));
   return Math.max(streakBonus, levelBonus);
 };
 

@@ -7,9 +7,9 @@ import { getAnalyses } from '../utils/analyses';
 import { getProjects } from '../utils/projects';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
 import Layout from '../components/Layout';
-import LevelBadge from '../components/LevelBadge';
+import PracticeLevelBadge from '../components/PracticeLevelBadge';
 import ModeBadge from '../components/ModeBadge';
-import { getLevelInfo, getProgressToNext, deriveLevelFromStats } from '../utils/levels';
+import { isValidSimulation, getPracticeLevel, getPracticeProgress, getPracticeMinimumStatus } from '../utils/practiceLevel';
 import { Play, BarChart2, Plus, MessageSquare, TrendingUp, Award, X, Users, AlertTriangle, Zap, Bell, Clock, BookOpen, Bot, Target, Trophy } from 'lucide-react';
 import { getSeguimientosPendientes } from '../utils/followUps';
 import FollowUpMessagePanel from '../components/FollowUpMessagePanel';
@@ -147,22 +147,28 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const avgScore = sessions.length > 0
-    ? Math.round(sessions.reduce((sum, s) => sum + (s.averageScore || 0), 0) / sessions.length)
-    : 0;
-  // user.level NUNCA se actualiza en profiles (no hay trigger ni código que
-  // lo escriba — se confirmó auditando todo el repo) y user.set_score solo se
-  // refresca en memoria al hacer login o justo después de una simulación (ver
-  // refreshUser en AuthContext), no en cada visita al Dashboard. Se deriva el
-  // nivel real aquí mismo a partir de sessions.length (recién fetcheado) y
-  // avgScore (recién calculado arriba de los mismos sessions) — la misma
-  // fórmula que ya usa deriveLevelFromStats para mostrar el nivel de OTROS
-  // alumnos en el leaderboard, ahora también para el propio usuario.
-  const derivedLevel = deriveLevelFromStats(sessions.length, avgScore).level;
-  const levelInfo = getLevelInfo(derivedLevel);
-  const progress = getProgressToNext({ level: derivedLevel, sessions: sessions.length, avgScore });
+  // SET Score oficial: profiles.set_score (trigger recalculate_set_score, solo
+  // sesiones puntuadas). Antes se recalculaba aquí un promedio propio que
+  // incluía como 0 las sesiones sin scores, y podía no coincidir con el SET
+  // Score del resto de la plataforma.
+  const setScore = Math.round(user.set_score || 0);
+  // Nivel de práctica: SOLO simulaciones válidas (practiceLevel.js). El SET
+  // Score no participa. profiles.level ya no se usa.
+  // PRÁCTICA: solo simulaciones válidas. `sessions` (todas las iniciadas) se
+  // sigue usando para el historial visible y el estado vacío.
+  const validSessions = sessions.filter(isValidSimulation);
+  const validSimulations = validSessions.length;
+  const levelInfo = getPracticeLevel(validSimulations);
+  const progress = getPracticeProgress(validSimulations);
+  const practiceMinimum = getPracticeMinimumStatus(validSimulations);
 
-  const leadsClosed = sessions.filter(s =>
+  // DESEMPEÑO: numerador y denominador (validSimulations) sobre prácticas
+  // válidas, igual que la tasa de éxito de Mi Performance.
+  // DEUDA FUNCIONAL: aquí cuenta como éxito cualquiera de estos 3 estados en
+  // cualquier modo, mientras que la tasa de éxito (SUCCESS_STATES en
+  // analytics.js) usa un estado por modo. Unificar posteriormente la
+  // definición de resultado exitoso por modo (outbound, inbound, reactivación).
+  const leadsClosed = validSessions.filter(s =>
     ['pidio_llamada', 'confirmado_con_entusiasmo', 'quiere_reagendar'].includes(s.finalState)
   ).length;
 
@@ -238,25 +244,24 @@ const Dashboard = () => {
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-7 mb-4">
             <div className="min-w-0">
-              <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Nivel actual</div>
+              <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Nivel de práctica</div>
               <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-color-success/30 bg-color-success/10 px-2.5 py-1 text-sm md:text-lg font-bold text-color-success">{levelInfo.name} {levelInfo.icon}</div>
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">SET Score</div>
-              <div className="font-mono mt-1.5 inline-block w-full truncate rounded-lg border border-accent-coral/30 bg-accent-coral/10 px-2.5 py-1 text-sm md:text-lg font-bold tabular-nums text-accent-coral">{avgScore}</div>
+              <div className="font-mono mt-1.5 inline-block w-full truncate rounded-lg border border-accent-coral/30 bg-accent-coral/10 px-2.5 py-1 text-sm md:text-lg font-bold tabular-nums text-accent-coral">{setScore}</div>
             </div>
             <div className="min-w-0">
               <div className="font-mono text-[10px] md:text-xs text-text-secondary uppercase tracking-wider truncate">Próximo nivel</div>
-              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-accent-gold/30 bg-accent-gold/10 px-2.5 py-1 text-sm md:text-lg font-bold text-accent-gold">{progress.next ? `${progress.next.name} ${progress.next.icon}` : 'Nivel máximo'}</div>
+              <div className="font-display mt-1.5 inline-block w-full truncate rounded-lg border border-accent-gold/30 bg-accent-gold/10 px-2.5 py-1 text-sm md:text-lg font-bold text-accent-gold">{progress.next ? `${progress.next.name} ${progress.next.icon}` : 'Máximo'}</div>
             </div>
           </div>
           <div className="h-2 bg-bg-input rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-accent-coral to-accent-gold rounded-full transition-all duration-500" style={{ width: `${progress.percent}%` }} /></div>
           <p className="text-text-secondary text-xs mt-2">
             {!progress.next
-              ? '¡Alcanzaste el nivel máximo! 👑'
-              : progress.sessionsToGo > 0
-                ? `Estás a ${progress.sessionsToGo} entrenamiento${progress.sessionsToGo === 1 ? '' : 's'} de subir a ${progress.next.name}.`
-                : `Sube tu promedio a ${progress.next.minAvg}+ para subir a ${progress.next.name}.`}
+              ? 'Llegaste al nivel de práctica más alto. 🏆'
+              : `Estás a ${progress.simulationsToGo} simulación${progress.simulationsToGo === 1 ? '' : 'es'} válida${progress.simulationsToGo === 1 ? '' : 's'} de ${progress.next.name}.`}
+            {' '}El nivel mide volumen de práctica; tu desempeño lo mide el SET Score.
           </p>
         </div>
       </section>
@@ -336,7 +341,7 @@ const Dashboard = () => {
             <div className="text-text-secondary text-xs mb-1">Bienvenido de vuelta</div>
             <div className="text-xl font-bold text-text-primary">{user.name} 👋</div>
           </div>
-          <LevelBadge level={derivedLevel} size="lg" />
+          <PracticeLevelBadge validSimulations={validSimulations} size="lg" />
         </div>
 
         {/* Main CTA */}
@@ -357,10 +362,14 @@ const Dashboard = () => {
             <Zap size={16} /> Nuevo Lead
           </button>
         </div>
-        {derivedLevel < 5 && (
-          <div>
+        <div className="mt-4 text-xs font-semibold" style={{ color: practiceMinimum.met ? '#1D9E75' : '#9A9A9A' }}>
+          {practiceMinimum.label}
+          {!practiceMinimum.met && ` · ${practiceMinimum.validSimulations}/${practiceMinimum.required} simulaciones válidas`}
+        </div>
+        {progress.next && (
+          <div className="mt-3">
             <div className="flex justify-between text-xs text-text-secondary mb-1.5">
-              <span>Progreso al siguiente nivel</span>
+              <span>Progreso al siguiente nivel de práctica</span>
               <span>{progress.percent}%</span>
             </div>
             <div className="h-2 bg-bg-input rounded-full overflow-hidden">
@@ -370,11 +379,6 @@ const Dashboard = () => {
               />
             </div>
             <div className="text-text-secondary text-xs mt-1.5">{progress.label}</div>
-          </div>
-        )}
-        {derivedLevel === 5 && (
-          <div className="text-center mt-2">
-            <span className="text-accent-gold font-bold">🏆 Certificación S.E.T. Desbloqueada</span>
           </div>
         )}
       </div>
@@ -417,9 +421,9 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Simulaciones" value={sessions.length} icon={Play} color="#E0605E" />
-        <StatCard label="Promedio" value={`${avgScore}/100`} icon={TrendingUp} color="#C9920A" />
-        <StatCard label="Leads convertidos" value={`${leadsClosed}/${sessions.length || 0}`} icon={Award} color="#1D9E75" />
+        <StatCard label="Simulaciones" value={validSimulations} icon={Play} color="#E0605E" />
+        <StatCard label="SET Score" value={`${setScore}/100`} icon={TrendingUp} color="#C9920A" />
+        <StatCard label="Leads convertidos" value={`${leadsClosed}/${validSimulations}`} icon={Award} color="#1D9E75" />
         <StatCard label="Análisis" value={analyses.length} icon={BarChart2} color="#2563EB" />
       </div>
 

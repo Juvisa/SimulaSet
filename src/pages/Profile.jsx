@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getSimulatorSessions } from '../utils/simulatorSessions';
-import { deriveLevelFromStats } from '../utils/levels';
+import { countValidSimulations, getPracticeLevel, getPracticeMinimumStatus } from '../utils/practiceLevel';
 import { getRealLeads } from '../utils/realLeads';
 import { uploadAvatarFile } from '../utils/avatar';
 import Layout from '../components/Layout';
@@ -9,14 +9,6 @@ import { Lock, LogOut, Check, AlertTriangle, Camera, Loader2 } from 'lucide-reac
 
 const INPUT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder-text-secondary text-sm focus:border-accent-coral transition-colors outline-none";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
-
-const NIVEL_LABELS = {
-  1: 'Setter Novato',
-  2: 'Setter Activo',
-  3: 'Setter Intermedio',
-  4: 'Setter Pro',
-  5: 'Setter Élite',
-};
 
 const Profile = () => {
   const { user, logout, updatePassword, updateAvatar } = useAuth();
@@ -38,16 +30,13 @@ const Profile = () => {
     return () => { active = false; };
   }, [user.id]);
 
-  const avg = sessions.length > 0
-    ? Math.round(sessions.reduce((a, s) => a + (s.averageScore || 0), 0) / sessions.length)
-    : 0;
-
-  // user.level nunca se actualiza en profiles (ver detalle en Dashboard.jsx) —
-  // se deriva de sessions.length + avg reales, igual que ahí, en vez de leer
-  // la columna congelada.
-  const derivedLevel = deriveLevelFromStats(sessions.length, avg).level;
-  const nivel = NIVEL_LABELS[derivedLevel] || 'Setter Novato';
-  const stars = Math.min(derivedLevel, 5);
+  // SET Score oficial (profiles.set_score, solo sesiones puntuadas) — ya no
+  // se recalcula aquí un promedio propio que contaba como 0 las sesiones sin
+  // scores. Nivel de práctica: solo simulaciones válidas (practiceLevel.js).
+  const setScore = Math.round(user.set_score || 0);
+  const validSimulations = countValidSimulations(sessions);
+  const practiceLevel = getPracticeLevel(validSimulations);
+  const practiceMinimum = getPracticeMinimumStatus(validSimulations);
 
   const fechaRegistro = (() => {
     if (!user.created_at) return 'N/A';
@@ -117,8 +106,8 @@ const Profile = () => {
               <div className="font-bold text-text-primary text-lg">{user.name}</div>
               <div className="text-text-secondary text-sm">{user.email}</div>
               <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-sm font-medium text-accent-gold">{nivel}</span>
-                <span className="text-accent-gold text-xs">{'⭐'.repeat(stars)}</span>
+                <span className="text-sm font-medium" style={{ color: practiceLevel.color }}>{practiceLevel.icon} {practiceLevel.name}</span>
+                <span className="text-xs" style={{ color: practiceMinimum.met ? '#1D9E75' : '#9A9A9A' }}>· {practiceMinimum.label}</span>
               </div>
             </div>
           </div>
@@ -135,12 +124,12 @@ const Profile = () => {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-bg-card border border-border-subtle rounded-xl p-3 text-center">
-            <div className="text-xl font-black text-accent-coral">{sessions.length}</div>
+            <div className="text-xl font-black text-accent-coral">{validSimulations}</div>
             <div className="text-text-secondary text-xs">Simulaciones</div>
           </div>
           <div className="bg-bg-card border border-border-subtle rounded-xl p-3 text-center">
-            <div className="text-xl font-black text-color-success">{avg}</div>
-            <div className="text-text-secondary text-xs">Promedio</div>
+            <div className="text-xl font-black text-color-success">{setScore}</div>
+            <div className="text-text-secondary text-xs">SET Score</div>
           </div>
           <div className="bg-bg-card border border-border-subtle rounded-xl p-3 text-center">
             <div className="text-xl font-black text-accent-gold">{leads.filter(l => l.estado === 'activo' || l.estado === 'agendado').length}</div>

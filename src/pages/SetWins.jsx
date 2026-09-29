@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { deriveLevelFromStats } from '../utils/levels';
+import { getPracticeLevel } from '../utils/practiceLevel';
 import {
   POST_TYPES, formatRelativeTime, getFeed, getMyReactions, createPost,
   uploadPostEvidenceFile, toggleFireReaction, getComments, addComment, getWeeklyVictoryLeaderboard,
@@ -256,8 +256,10 @@ const CommentsSection = ({ postId, userId, authorName, isAdmin }) => {
   );
 };
 
-const AuthorLevelBadge = ({ sessions, setScore }) => {
-  const level = deriveLevelFromStats(sessions, setScore);
+// Nivel de práctica del autor: SOLO simulaciones válidas (leaderboard_stats.
+// simulaciones_realizadas). El SET Score no participa.
+const AuthorLevelBadge = ({ validSimulations }) => {
+  const level = getPracticeLevel(validSimulations);
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-bg-input px-2 py-0.5 text-[10px] font-bold" style={{ color: level.color }}>
       {level.icon} {level.name}
@@ -306,7 +308,7 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-bold text-text-primary">{post.author_name}</span>
-              {post.authorSessions != null && <AuthorLevelBadge sessions={post.authorSessions} setScore={post.authorSetScore} />}
+              {post.authorSessions != null && <AuthorLevelBadge validSimulations={post.authorSessions} />}
             </div>
             <div className="text-xs text-text-secondary">{formatRelativeTime(post.created_at)}</div>
           </div>

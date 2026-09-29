@@ -8,8 +8,8 @@ import {
 } from '../utils/adminFeedback';
 import { getAnalyses } from '../utils/analyses';
 import Layout from '../components/Layout';
-import LevelBadge from '../components/LevelBadge';
-import { deriveLevelFromStats } from '../utils/levels';
+import PracticeLevelBadge from '../components/PracticeLevelBadge';
+import { countValidSimulations, isValidSimulation, getPracticeMinimumStatus } from '../utils/practiceLevel';
 import ModeBadge from '../components/ModeBadge';
 import BriefingModal from '../components/BriefingModal';
 import { ChevronLeft, Send, Play, BarChart2, ChevronDown, ChevronUp, FileText, Calendar, Loader2 } from 'lucide-react';
@@ -39,7 +39,7 @@ const AdminSetterDetail = () => {
       const [{ data: profile }, { data: sessionRows, error: sessionsError }] = await Promise.all([
         supabase.from('profiles').select('id, name, email, level, set_score, active').eq('id', setterId).maybeSingle(),
         supabase.from('simulator_sessions')
-          .select('id, project_name, mode, average_score, final_state, created_at')
+          .select('id, project_name, mode, average_score, final_state, scores, created_at')
           .eq('user_id', setterId)
           .order('created_at', { ascending: false }),
       ]);
@@ -112,14 +112,15 @@ const AdminSetterDetail = () => {
     );
   }
 
-  const avgScore = sessions.length > 0
-    ? Math.round(sessions.reduce((sum, s) => sum + (s.average_score || 0), 0) / sessions.length)
-    : 0;
-  // setter.level (profiles.level) nunca se actualiza tras el registro — se
-  // deriva aquí con la misma fórmula que usan Dashboard/Profile/Sidebar del
-  // alumno y calcularMetricasAdminReal() para las otras 2 pantallas admin,
-  // para que las 3 muestren siempre el mismo nivel.
-  const derivedLevel = deriveLevelFromStats(sessions.length, setter.set_score || 0).level;
+  // SET Score oficial (profiles.set_score) y nivel de práctica por
+  // simulaciones válidas (practiceLevel.js) — mismas fuentes que el resto de
+  // pantallas. El historial de abajo sigue mostrando TODAS las filas para
+  // auditoría; las que no tienen scores se marcan como "Sin puntuar" y no
+  // cuentan como simulación válida.
+  const setScore = Math.round(setter.set_score || 0);
+  const validSimulations = countValidSimulations(sessions);
+  const practiceMinimum = getPracticeMinimumStatus(validSimulations);
+  const unscoredCount = sessions.length - validSimulations;
 
   return (
     <Layout>
@@ -136,9 +137,10 @@ const AdminSetterDetail = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-text-primary">{setter.name}</h1>
-                <LevelBadge level={derivedLevel} size="sm" />
+                <PracticeLevelBadge validSimulations={validSimulations} size="sm" />
               </div>
               <p className="text-text-secondary text-sm">{setter.email}</p>
+              <p className="text-xs mt-0.5" style={{ color: practiceMinimum.met ? '#1D9E75' : '#9A9A9A' }}>{practiceMinimum.label}</p>
             </div>
           </div>
         </div>
@@ -146,14 +148,14 @@ const AdminSetterDetail = () => {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 mb-6">
           <div className="card-tactical rounded-2xl p-4 text-center">
-            <div className="text-2xl font-black text-text-primary">{sessions.length}</div>
+            <div className="text-2xl font-black text-text-primary">{validSimulations}</div>
             <div className="text-text-secondary text-xs mt-1">Simulaciones</div>
           </div>
           <div className="card-tactical rounded-2xl p-4 text-center">
-            <div className="text-2xl font-black" style={{ color: avgScore >= 80 ? '#1D9E75' : avgScore >= 60 ? '#C9920A' : '#DC2626' }}>
-              {avgScore}/100
+            <div className="text-2xl font-black" style={{ color: setScore >= 80 ? '#1D9E75' : setScore >= 60 ? '#C9920A' : '#DC2626' }}>
+              {setScore}/100
             </div>
-            <div className="text-text-secondary text-xs mt-1">Promedio</div>
+            <div className="text-text-secondary text-xs mt-1">SET Score</div>
           </div>
           <div className="card-tactical rounded-2xl p-4 text-center">
             <div className="text-2xl font-black text-text-primary">{analyses.length}</div>
@@ -168,8 +170,13 @@ const AdminSetterDetail = () => {
         {/* Sessions */}
         <div className="mb-6">
           <h2 className="font-bold text-text-primary mb-3 flex items-center gap-2">
-            <Play size={16} className="text-accent-coral" /> Simulaciones ({sessions.length})
+            <Play size={16} className="text-accent-coral" /> Historial de sesiones ({sessions.length})
           </h2>
+          {unscoredCount > 0 && (
+            <p className="text-text-secondary text-xs -mt-2 mb-3">
+              {unscoredCount} sesión{unscoredCount === 1 ? '' : 'es'} sin puntuar (sin ningún score de coaching): no cuentan como simulación válida ni para el SET Score.
+            </p>
+          )}
           {sessions.length === 0 ? (
             <div className="card-tactical rounded-2xl p-8 text-center text-text-secondary text-sm">
               Sin simulaciones aún
@@ -195,9 +202,13 @@ const AdminSetterDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="text-sm font-bold" style={{ color: sessionScore >= 80 ? '#1D9E75' : sessionScore >= 60 ? '#C9920A' : '#DC2626' }}>
-                          {sessionScore}/100
-                        </div>
+                        {isValidSimulation(s) ? (
+                          <div className="text-sm font-bold" style={{ color: sessionScore >= 80 ? '#1D9E75' : sessionScore >= 60 ? '#C9920A' : '#DC2626' }}>
+                            {sessionScore}/100
+                          </div>
+                        ) : (
+                          <div className="text-xs font-medium text-text-secondary">Sin puntuar</div>
+                        )}
                         {isExpanded ? <ChevronUp size={16} className="text-text-secondary" /> : <ChevronDown size={16} className="text-text-secondary" />}
                       </div>
                     </button>
