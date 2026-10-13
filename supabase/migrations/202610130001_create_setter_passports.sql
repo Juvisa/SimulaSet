@@ -144,7 +144,10 @@ with check (
 -- Sin policy ni grant de DELETE: el registro se elimina solo en cascada con
 -- el perfil. Grants por columna: el cliente no puede escribir created_at ni
 -- updated_at (los gestionan el default y el trigger).
-revoke all on table public.setter_passports from anon, authenticated;
+-- Se revoca también a PUBLIC: anon y authenticated heredan de PUBLIC, así que
+-- cualquier privilegio a nivel de tabla concedido a PUBLIC (por default
+-- privileges o manualmente) anularía los grants por columna de abajo.
+revoke all on table public.setter_passports from public, anon, authenticated;
 grant select on table public.setter_passports to authenticated;
 grant insert (
   user_id, headline, summary, country, city, timezone, availability,
@@ -165,3 +168,9 @@ revoke execute on function public.passport_text_array_ok(text[], integer, intege
 revoke execute on function public.passport_languages_ok(jsonb) from public, anon;
 grant execute on function public.passport_text_array_ok(text[], integer, integer) to authenticated, service_role;
 grant execute on function public.passport_languages_ok(jsonb) to authenticated, service_role;
+
+-- Función del trigger: Postgres solo comprueba EXECUTE al crear el trigger,
+-- no cada vez que se dispara, así que quitar el EXECUTE por defecto no afecta
+-- a los UPDATE de authenticated. Se revoca a PUBLIC y anon para que no quede
+-- invocable de forma directa por roles sin sesión.
+revoke execute on function public.set_setter_passports_updated_at() from public, anon;
