@@ -6,7 +6,7 @@ import { getPracticeLevel, getPracticeProgress } from '../utils/practiceLevel';
 import { getValidSimulationCount } from '../utils/simulatorSessions';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
-  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles,
+  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles, IdCard,
 } from 'lucide-react';
 
 const isPathActive = (pathname, to) => pathname === to || pathname.startsWith(to + '/');
@@ -108,6 +108,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
     { to: '/missions', icon: ListChecks, label: 'Misiones & Tareas' },
     { to: '/analytics', icon: TrendingUp, label: 'Analítica' },
     { to: '/oportunidades', icon: BriefcaseBusiness, label: 'Bolsa de Empleo' },
+    { to: '/passport', icon: IdCard, label: 'SET Passport' },
   ];
 
   const communityItems = [
