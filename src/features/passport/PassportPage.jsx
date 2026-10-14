@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, Check, AlertTriangle, RefreshCw, Lock, MapPin, Clock, Briefcase } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Save, Check, AlertTriangle, RefreshCw, Lock, MapPin, Clock, Briefcase, FileText, Download } from 'lucide-react';
 import Layout from '../../components/Layout';
 import { useAuth } from '../../context/AuthContext';
-import { getMyCommercialProfile } from '../../utils/opportunityMarketplace';
-import { getMyPassport, saveMyPassport, getMyOnboardingForPassport, getMyTrainingSessions } from './passportApi';
+import { saveMyPassport } from './passportApi';
+import { loadPassportSources } from './passportData';
 import {
   AVAILABILITY_OPTIONS,
   PASSPORT_LIMITS,
@@ -21,6 +22,7 @@ const availabilityLabel = (value) => AVAILABILITY_OPTIONS.find(o => o.value === 
 
 const PassportPage = () => {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState(null);
   const [form, setForm] = useState(emptyPassport());
@@ -37,21 +39,17 @@ const PassportPage = () => {
   // SET Score recién leído de profiles. Así una nueva simulación válida se
   // refleja al volver a entrar o al pulsar "Actualizar", sin sincronización.
   const fetchPassportData = async () => {
-    const [passportResult, commercialResult, onboardingResult, sessionsResult, freshUser] = await Promise.all([
-      getMyPassport(user.id),
-      getMyCommercialProfile(user.id),
-      getMyOnboardingForPassport(user.id),
-      getMyTrainingSessions(user.id),
-      refreshUser(),
-    ]);
-    const next = buildPassportState({
-      passportRow: passportResult.passport,
-      commercialProfile: commercialResult.profile,
-      onboarding: onboardingResult.onboarding,
-      sessions: sessionsResult.sessions,
-      setScore: freshUser?.user?.set_score ?? user.set_score,
+    const sources = await loadPassportSources({
+      userId: user.id, refreshUser, fallbackSetScore: user.set_score, withSuggestions: true,
     });
-    return { next, unavailable: passportResult.unavailable, error: passportResult.error || sessionsResult.error };
+    const next = buildPassportState({
+      passportRow: sources.passportRow,
+      commercialProfile: sources.commercialProfile,
+      onboarding: sources.onboarding,
+      sessions: sources.sessions,
+      setScore: sources.setScore,
+    });
+    return { next, unavailable: sources.unavailable, error: sources.error };
   };
 
   // keepForm: al actualizar con cambios sin guardar, se refrescan evidencia y
@@ -74,6 +72,14 @@ const PassportPage = () => {
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirty = Boolean(state) && JSON.stringify(form) !== JSON.stringify(state.form);
+  // La vista profesional y el PDF muestran SOLO lo guardado: avisar si hay
+  // cambios o sugerencias precargadas que todavía no se guardaron.
+  const hasUnsaved = Boolean(state) && (isDirty || (!state.exists && state.prefillSources.length > 0));
+
+  const goToProfessionalView = (print) => {
+    if (hasUnsaved && !window.confirm('Tienes cambios sin guardar. La vista profesional y el PDF solo incluyen lo que ya guardaste. ¿Continuar sin guardar?')) return;
+    navigate(print ? '/passport/vista?imprimir=1' : '/passport/vista');
+  };
 
   const reload = () => {
     const keepForm = isDirty;
@@ -158,6 +164,19 @@ const PassportPage = () => {
               <button type="button" onClick={reload} disabled={refreshing} className="mt-2 md:ml-2 inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
                 <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Actualizando…' : 'Actualizar datos'}
               </button>
+              <div className="mt-3 flex flex-wrap gap-2 md:justify-end">
+                <button type="button" onClick={() => goToProfessionalView(false)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border-subtle bg-bg-input px-3 py-2 text-xs font-bold text-text-primary hover:border-accent-coral/50">
+                  <FileText size={14} /> Vista profesional
+                </button>
+                <button type="button" onClick={() => goToProfessionalView(true)}
+                  title="Abre el diálogo de impresión del navegador: elige «Guardar como PDF»."
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white hover:opacity-90"
+                  style={{ backgroundColor: '#A61E2D' }}>
+                  <Download size={14} /> Descargar mi SET Passport
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-text-secondary">PDF: se abre el diálogo de impresión; elige «Guardar como PDF».</p>
             </div>
           </div>
 

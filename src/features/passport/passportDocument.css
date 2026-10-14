@@ -1,0 +1,229 @@
+/* SET Passport — documento profesional (vista y PDF).
+   Estilos propios con prefijo .spp- (independientes de Tailwind) para que la
+   impresión use medidas físicas (mm/pt) y no dependa del tema oscuro de la app.
+   Identidad Digital SET: beige #F4E8DD y vino #A61E2D. */
+
+.spp-doc {
+  --spp-beige: #F4E8DD;
+  --spp-beige-deep: #E8D3C1;
+  --spp-wine: #A61E2D;
+  --spp-wine-dark: #7E1622;
+  --spp-ink: #2A1E1B;
+  --spp-muted: #6E5D56;
+  --spp-line: #DCC7B5;
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 16mm 15mm;
+  background: #FFFDFB;
+  color: var(--spp-ink);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.spp-doc *, .spp-doc *::before, .spp-doc *::after { box-sizing: border-box; }
+.spp-doc :where(h1, h2, h3, p, ul) { margin: 0; } /* :where → especificidad 0: no pisa los márgenes de cada clase */
+.spp-serif { font-family: Georgia, 'Times New Roman', 'Noto Serif', serif; }
+
+/* ── Encabezado ── */
+.spp-header {
+  display: flex;
+  align-items: center;
+  gap: 7mm;
+  padding: 7mm;
+  border-top: 1.2mm solid var(--spp-wine);
+  border-radius: 3mm;
+  background: var(--spp-beige);
+  break-inside: avoid;
+}
+.spp-avatar {
+  flex: none;
+  width: 26mm;
+  height: 26mm;
+  border-radius: 50%;
+  border: 0.7mm solid #fff;
+  object-fit: cover;
+}
+.spp-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--spp-wine);
+  color: #fff;
+  font-size: 20pt;
+  font-weight: 700;
+}
+.spp-header-text { min-width: 0; flex: 1; }
+.spp-kicker {
+  color: var(--spp-wine);
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.spp-name {
+  margin-top: 1mm;
+  color: var(--spp-wine-dark);
+  font-size: 24pt;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.spp-headline { margin-top: 1.5mm; font-size: 12pt; }
+.spp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 5mm;
+  margin-top: 2.5mm;
+  padding: 0;
+  list-style: none;
+  color: var(--spp-muted);
+  font-size: 9pt;
+}
+.spp-open { color: var(--spp-wine); font-weight: 600; }
+.spp-generated { margin-top: 2.5mm; color: var(--spp-muted); font-size: 8pt; }
+
+/* ── Secciones ── */
+.spp-section { margin-top: 8mm; }
+.spp-section-head {
+  display: flex;
+  flex-wrap: wrap; /* si no cabe, la etiqueta de capa baja a la línea siguiente */
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4mm;
+  margin-bottom: 4mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.3mm solid var(--spp-line);
+  break-after: avoid;
+  break-inside: avoid;
+}
+.spp-section-title { color: var(--spp-wine-dark); font-size: 14pt; font-weight: 700; }
+/* Títulos y nombre: solo se parte una palabra si de verdad no cabe en la línea
+   (overflow-wrap: anywhere del documento los dejaría encogerse a mitad de palabra). */
+.spp-section-title, .spp-name { overflow-wrap: break-word; }
+.spp-layer {
+  flex: none;
+  padding: 0.8mm 2.6mm;
+  border-radius: 10mm;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.spp-layer--declared { border: 0.3mm solid var(--spp-wine); color: var(--spp-wine); }
+.spp-layer--registered { background: var(--spp-beige-deep); color: var(--spp-ink); }
+.spp-layer--verified { background: var(--spp-wine); color: #fff; }
+
+.spp-summary { margin-bottom: 5mm; white-space: pre-line; orphans: 3; widows: 3; }
+.spp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 8mm; }
+/* Un bloque largo puede continuar en la página siguiente (evita medias páginas
+   vacías), pero nunca se parte una etiqueta, un idioma ni se separa el título
+   de su primer contenido. */
+.spp-block { min-width: 0; }
+.spp-block-title {
+  margin-bottom: 1.8mm;
+  break-after: avoid;
+  color: var(--spp-muted);
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.spp-chips { display: flex; flex-wrap: wrap; gap: 1.5mm; padding: 0; list-style: none; }
+.spp-chip { padding: 0.9mm 3mm; border-radius: 10mm; background: var(--spp-beige); font-size: 9pt; break-inside: avoid; }
+.spp-langs { padding: 0; list-style: none; }
+.spp-langs li {
+  display: flex;
+  justify-content: space-between;
+  gap: 3mm;
+  padding: 1mm 0;
+  border-bottom: 0.2mm dotted var(--spp-line);
+  font-size: 9.5pt;
+  break-inside: avoid;
+}
+.spp-langs span:last-child { color: var(--spp-muted); white-space: nowrap; }
+.spp-empty { color: var(--spp-muted); font-size: 9.5pt; font-style: italic; }
+
+/* ── Entrenamiento registrado ── */
+.spp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; break-inside: avoid; }
+.spp-stat { padding: 4mm; border-radius: 3mm; background: var(--spp-beige); break-inside: avoid; }
+.spp-stat-label {
+  color: var(--spp-muted);
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.spp-stat-value { margin-top: 1mm; color: var(--spp-wine-dark); font-size: 19pt; font-weight: 700; line-height: 1.15; }
+.spp-stat-value small { color: var(--spp-muted); font-size: 10pt; font-weight: 400; }
+.spp-stat-sub { margin-top: 1mm; color: var(--spp-muted); font-size: 8.5pt; }
+.spp-note { margin-top: 3mm; color: var(--spp-muted); font-size: 8.5pt; break-inside: avoid; }
+
+/* ── Credenciales verificadas (solo con registros oficiales) ── */
+.spp-credentials { padding: 0; list-style: none; }
+.spp-credentials li { padding: 2mm 0; border-bottom: 0.2mm solid var(--spp-line); break-inside: avoid; }
+
+/* ── Pie ── */
+.spp-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+  margin-top: 9mm;
+  padding-top: 3mm;
+  border-top: 0.3mm solid var(--spp-line);
+  color: var(--spp-muted);
+  font-size: 8pt;
+  break-inside: avoid;
+}
+.spp-brand { color: var(--spp-wine); font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+
+/* ── Pantalla pequeña (solo pantalla; la impresión siempre usa A4) ── */
+@media screen and (max-width: 640px) {
+  .spp-doc { padding: 6mm 5mm; font-size: 10pt; }
+  .spp-header { flex-direction: column; align-items: flex-start; padding: 5mm; }
+  .spp-name { font-size: 20pt; }
+  .spp-grid, .spp-stats { grid-template-columns: 1fr; }
+  .spp-footer { flex-direction: column; }
+}
+
+/* ── Impresión / PDF ── */
+/* @page no se puede limitar a una pantalla de forma compatible entre
+   navegadores: solo actúa al imprimir y hoy ninguna otra pantalla imprime. El
+   resto de reglas de impresión dependen de body.spp-print-host, que solo
+   existe mientras la vista profesional está montada. */
+@page { size: A4; margin: 14mm 14mm 16mm; }
+
+@media print {
+  body.spp-print-host {
+    background: #fff !important;
+    background-image: none !important;
+  }
+  body.spp-print-host #root { min-height: 0 !important; }
+  .spp-screen-only { display: none !important; }
+  .spp-print-stage {
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: none !important;
+  }
+  /* Un ancestro con overflow:hidden puede recortar la impresión a una página. */
+  .spp-doc-frame {
+    max-width: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .spp-doc {
+    max-width: none;
+    padding: 0;
+    border-radius: 0 !important;
+    background: #fff;
+    box-shadow: none !important;
+  }
+}

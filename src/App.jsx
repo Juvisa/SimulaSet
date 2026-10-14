@@ -36,6 +36,7 @@ import OpportunityHub from './pages/OpportunityHub';
 import TalentVault from './pages/TalentVault';
 import ValueBuilder from './pages/ValueBuilder';
 import PassportPage from './features/passport/PassportPage';
+import PassportProfessionalView from './features/passport/PassportProfessionalView';
 
 // La cuenta admin es exclusivamente administrativa — al entrar a "/" o a
 // cualquier ruta no reconocida, se la manda a su panel en vez de al
@@ -89,6 +90,7 @@ function App() {
           <Route path="/recompensas" element={<ProtectedRoute studentOnly><Rewards /></ProtectedRoute>} />
           <Route path="/oportunidades" element={<ProtectedRoute studentOnly><OpportunityHub /></ProtectedRoute>} />
           <Route path="/passport" element={<ProtectedRoute studentOnly><PassportPage /></ProtectedRoute>} />
+          <Route path="/passport/vista" element={<ProtectedRoute studentOnly><PassportProfessionalView /></ProtectedRoute>} />
           <Route path="/empresa" element={<ProtectedRoute adminOnly><TalentVault /></ProtectedRoute>} />
           <Route path="/value-builder" element={<ProtectedRoute studentOnly><ValueBuilder /></ProtectedRoute>} />
 
