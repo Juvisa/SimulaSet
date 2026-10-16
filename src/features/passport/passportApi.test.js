@@ -41,6 +41,24 @@ describe('getMyPassport', () => {
     responses = [{ data: null, error: { code: '42501', message: 'permission denied' } }];
     expect((await getMyPassport('u1')).error).toBe('permission denied');
   });
+
+  it('lee las columnas del bloque 3 (experiencia y preferencias), solo de su propia fila', async () => {
+    responses = [{ data: null, error: null }];
+    await getMyPassport('u1');
+    const [, select] = calls[0].ops.find(op => op[0] === 'select');
+    for (const col of ['experience_track', 'experiences', 'preferred_roles', 'work_modes', 'opportunity_notes']) {
+      expect(select).toContain(col);
+    }
+    expect(select).not.toMatch(/summary_ai|output_sha256/);
+    expect(calls[0].ops).toContainEqual(['eq', 'user_id', 'u1']);
+  });
+
+  it('base sin la migración del bloque 3 (columna inexistente) → no editable, con mensaje claro', async () => {
+    responses = [{ data: null, error: { code: '42703', message: 'column setter_passports.experiences does not exist' } }];
+    const result = await getMyPassport('u1');
+    expect(result.unavailable).toBe(true);
+    expect(result.error).toMatch(/actualizando/);
+  });
 });
 
 describe('getMyTrainingSessions — historial completo paginado', () => {
@@ -161,6 +179,12 @@ describe('describeSaveError', () => {
     [{ code: 'XX000', message: 'algo raro' }, /algo raro/],
   ])('%o', (error, expected) => {
     expect(describeSaveError(error)).toMatch(expected);
+  });
+
+  it('columna desconocida al leer (42703) o al escribir (PGRST204) no se confunde con "tabla inexistente"', () => {
+    expect(describeSaveError({ code: '42703', message: 'column setter_passports.experiences does not exist' })).toMatch(/actualizando/);
+    expect(describeSaveError({ code: 'PGRST204', message: "Could not find the 'experiences' column of 'setter_passports' in the schema cache" })).toMatch(/actualizando/);
+    expect(describeSaveError({ code: 'PGRST205', message: "Could not find the table 'public.setter_passports' in the schema cache" })).toMatch(/no está habilitado/);
   });
 
   it('sin error → undefined', () => {

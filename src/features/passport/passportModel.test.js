@@ -4,7 +4,10 @@ import {
   buildPassportEvidence,
   buildPassportPrefill,
   getPassportCompleteness,
+  getPassportWarnings,
+  emptyExperience,
   emptyPassport,
+  suggestExperienceTrack,
   normalizeTags,
   parseTagInput,
   passportFromRow,
@@ -137,10 +140,21 @@ describe('completitud — solo datos declarados', () => {
     headline: 'Setter', summary: 'Resumen', country: 'Colombia', city: 'Medellín', timezone: 'GMT-5',
     availability: 'part_time', hoursPerWeek: '20', languages: [{ language: 'Español', level: 'nativo' }],
     skills: ['Calificación'], tools: ['Kommo'], niches: ['Infoproductos'],
+    experienceTrack: 'en_formacion', preferredRoles: ['setter'],
   };
 
   it('100% con todos los campos declarados', () => {
-    expect(getPassportCompleteness(full)).toMatchObject({ percent: 100, completed: 9, total: 9, missing: [] });
+    expect(getPassportCompleteness(full)).toMatchObject({ percent: 100, completed: 11, total: 11, missing: [] });
+  });
+
+  it('trayectoria con experiencia declarada exige al menos una experiencia; "en formación" no', () => {
+    expect(getPassportCompleteness({ ...full, experienceTrack: 'setter_closer' }).missing).toEqual(['Trayectoria y experiencia']);
+    expect(getPassportCompleteness({ ...full, experienceTrack: 'setter_closer', experiences: [{ ...emptyExperience() }] }).missing)
+      .toEqual(['Trayectoria y experiencia']);
+    expect(getPassportCompleteness({ ...full, experienceTrack: 'setter_closer', experiences: [{ ...emptyExperience(), kind: 'setter', role: 'Setter' }] }).percent)
+      .toBe(100);
+    expect(getPassportCompleteness({ ...full, experienceTrack: '' }).missing).toEqual(['Trayectoria y experiencia']);
+    expect(getPassportCompleteness({ ...full, preferredRoles: ['ceo'] }).missing).toEqual(['Qué oportunidad buscas']);
   });
 
   it('país sin ciudad o disponibilidad sin horas no cuentan como completos', () => {
@@ -177,6 +191,7 @@ describe('validación y payload', () => {
       headline: null, summary: null, country: null, city: null, timezone: null,
       availability: null, hours_per_week: null, open_to_opportunities: false,
       languages: [], skills: [], tools: [], niches: [],
+      experience_track: null, experiences: [], preferred_roles: [], work_modes: [], opportunity_notes: null,
     });
   });
 
@@ -205,8 +220,85 @@ describe('validación y payload', () => {
       headline: 'Setter', summary: 'Texto', country: 'México', city: 'CDMX', timezone: 'GMT-6',
       availability: 'freelance', hours_per_week: 30, open_to_opportunities: true,
       languages: [{ language: 'Español', level: 'nativo' }], skills: ['A'], tools: ['B'], niches: ['C'],
+      experience_track: 'comercial_transferible',
+      experiences: [
+        { kind: 'ventas', role: 'Asesora comercial', context: 'Tienda de ropa', period: '2023', functions: ['Seguimiento de leads'] },
+        { kind: 'atencion_cliente', role: 'Agente de soporte' },
+      ],
+      preferred_roles: ['setter', 'closer'], work_modes: ['remoto'], opportunity_notes: 'Prefiero lanzamientos.',
     };
     expect(toPassportPayload(passportFromRow(row))).toEqual(row);
+  });
+
+  it('una fila de antes del bloque 3 (sin columnas nuevas) carga con valores vacíos', () => {
+    const form = passportFromRow({ headline: 'Setter', languages: [], skills: [], tools: [], niches: [] });
+    expect(form).toMatchObject({ experienceTrack: '', experiences: [], preferredRoles: [], workModes: [], opportunityNotes: '' });
+    expect(validatePassport(form)).toEqual({});
+  });
+});
+
+describe('experiencia y preferencias (bloque 3.2)', () => {
+  const exp = (patch) => ({ ...emptyExperience(), kind: 'setter', role: 'Setter', ...patch });
+
+  it('experiencias en blanco se ignoran: ni error ni payload', () => {
+    const form = { ...emptyPassport(), experiences: [emptyExperience(), exp(), { ...emptyExperience(), role: '   ' }] };
+    expect(validatePassport(form)).toEqual({});
+    expect(toPassportPayload(form).experiences).toEqual([{ kind: 'setter', role: 'Setter' }]);
+  });
+
+  it('cada experiencia con datos necesita tipo y rol; el error va asociado a su índice', () => {
+    const errors = validatePassport({ ...emptyPassport(), experiences: [exp(), exp({ kind: '' }), exp({ role: '' }), exp({ kind: 'ceo' })] });
+    expect(errors.experience_0).toBeUndefined();
+    expect(errors.experience_1).toMatch(/tipo de rol/);
+    expect(errors.experience_2).toMatch(/rol o cargo/);
+    expect(errors.experience_3).toMatch(/tipo de rol/);
+  });
+
+  it('respeta los límites de la base (rol, contexto, periodo, funciones, cantidad, notas)', () => {
+    const L = PASSPORT_LIMITS;
+    expect(validatePassport({ ...emptyPassport(), experiences: [exp({ role: 'r'.repeat(L.experienceRole + 1) })] }).experience_0).toMatch(/Rol/);
+    expect(validatePassport({ ...emptyPassport(), experiences: [exp({ context: 'c'.repeat(L.experienceContext + 1) })] }).experience_0).toMatch(/Contexto/);
+    expect(validatePassport({ ...emptyPassport(), experiences: [exp({ period: 'p'.repeat(L.experiencePeriod + 1) })] }).experience_0).toMatch(/Periodo/);
+    expect(validatePassport({ ...emptyPassport(), experiences: [exp({ functions: Array.from({ length: 9 }, (_, i) => `f${i}`) })] }).experience_0).toMatch(/Funciones/);
+    expect(validatePassport({ ...emptyPassport(), experiences: [exp({ functions: ['f'.repeat(L.experienceFunction + 1)] })] }).experience_0).toMatch(/función/);
+    expect(validatePassport({ ...emptyPassport(), experiences: Array.from({ length: 9 }, () => exp()) }).experiences).toMatch(/Máximo 8/);
+    expect(validatePassport({ ...emptyPassport(), opportunityNotes: 'n'.repeat(L.opportunityNotes + 1) }).opportunityNotes).toBeDefined();
+    expect(validatePassport({ ...emptyPassport(), experienceTrack: 'senior' }).experienceTrack).toBeDefined();
+  });
+
+  it('el payload de experiencias solo lleva claves permitidas y omite textos vacíos (la base los rechaza)', () => {
+    const payload = toPassportPayload({
+      ...emptyPassport(),
+      experiences: [{ kind: 'ventas', role: '  Asesora   comercial ', context: '  ', period: '', functions: ['Seguimiento', ' seguimiento ', ''], sales: 1000 }],
+    });
+    expect(payload.experiences).toEqual([{ kind: 'ventas', role: 'Asesora comercial', functions: ['Seguimiento'] }]);
+  });
+
+  it('roles y modalidad: solo valores permitidos, sin duplicados y en orden estable', () => {
+    const payload = toPassportPayload({ ...emptyPassport(), preferredRoles: ['closer', 'ceo', 'setter', 'closer'], workModes: ['presencial', 'remoto', 'x'] });
+    expect(payload.preferred_roles).toEqual(['setter', 'closer']);
+    expect(payload.work_modes).toEqual(['remoto', 'presencial']);
+  });
+
+  it('avisos de coherencia no bloquean el guardado', () => {
+    const enFormacionConExp = { ...emptyPassport(), experienceTrack: 'en_formacion', experiences: [exp({ kind: 'ventas', role: 'Vendedor' })] };
+    expect(getPassportWarnings(enFormacionConExp)).toHaveLength(1);
+    expect(validatePassport(enFormacionConExp)).toEqual({});
+    expect(getPassportWarnings({ ...emptyPassport(), experienceTrack: 'setter_closer' })).toHaveLength(1);
+    expect(getPassportWarnings({ ...emptyPassport(), experienceTrack: 'setter_closer', experiences: [exp()] })).toEqual([]);
+    expect(getPassportWarnings({ ...emptyPassport(), experienceTrack: 'en_formacion' })).toEqual([]);
+    expect(getPassportWarnings(emptyPassport())).toEqual([]);
+  });
+
+  it('la trayectoria sugerida sale del diagnóstico inicial y nunca se aplica sola', () => {
+    expect(suggestExperienceTrack(null)).toBe('');
+    expect(suggestExperienceTrack({ worked_setter: true })).toBe('setter_closer');
+    expect(suggestExperienceTrack({ worked_closer: true, sold_by_chat: true })).toBe('setter_closer');
+    expect(suggestExperienceTrack({ sold_by_chat: true })).toBe('comercial_transferible');
+    expect(suggestExperienceTrack({ worked_setter: false, worked_closer: false, sold_by_chat: false })).toBe('en_formacion');
+    const state = buildPassportState({ passportRow: null, onboarding: { worked_setter: true }, sessions: [], setScore: 0 });
+    expect(state.suggestedTrack).toBe('setter_closer');
+    expect(state.form.experienceTrack).toBe('');
   });
 });
 

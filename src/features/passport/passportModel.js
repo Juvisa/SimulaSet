@@ -17,8 +17,9 @@ import {
   getPracticeProgress,
 } from '../../utils/practiceLevel';
 
-// Límites — reflejan exactamente las restricciones CHECK de la migración
-// 202610130001_create_setter_passports.sql.
+// Límites — reflejan exactamente las restricciones CHECK de las migraciones
+// 202610130001_create_setter_passports.sql y
+// 202610160001_passport_professional_profile.sql.
 export const PASSPORT_LIMITS = {
   headline: 120,
   summary: 1200,
@@ -33,7 +34,55 @@ export const PASSPORT_LIMITS = {
   tools: 20,
   niches: 10,
   tag: 60,
+  experiences: 8,
+  experienceRole: 80,
+  experienceContext: 120,
+  experiencePeriod: 40,
+  experienceFunctions: 8,
+  experienceFunction: 80,
+  opportunityNotes: 300,
 };
+
+// Trayectoria declarada. Solo describe el punto de partida del alumno; no es
+// una evaluación ni se deduce de su práctica en SimulaSET.
+export const EXPERIENCE_TRACKS = [
+  { value: 'setter_closer', label: 'Tengo experiencia como setter o closer' },
+  { value: 'comercial_transferible', label: 'Tengo experiencia comercial o de atención, pero no como setter' },
+  { value: 'en_formacion', label: 'Me estoy formando y aún no tengo experiencia laboral comercial' },
+];
+
+export const EXPERIENCE_KINDS = [
+  { value: 'setter', label: 'Setter' },
+  { value: 'closer', label: 'Closer' },
+  { value: 'ventas', label: 'Ventas' },
+  { value: 'atencion_cliente', label: 'Atención al cliente' },
+  { value: 'otro_comercial', label: 'Otro rol comercial' },
+];
+
+// Sugerencias de funciones (el alumno también puede escribir las suyas).
+export const FUNCTION_SUGGESTIONS = [
+  'Calificar leads',
+  'Agendar llamadas',
+  'Seguimiento de leads',
+  'Reactivación de contactos',
+  'Manejo de objeciones',
+  'Cierre de ventas',
+  'Atención por chat o WhatsApp',
+  'Registro en CRM',
+];
+
+export const PREFERRED_ROLE_OPTIONS = [
+  { value: 'setter', label: 'Setter' },
+  { value: 'closer', label: 'Closer' },
+  { value: 'soporte_comercial', label: 'Soporte comercial' },
+  { value: 'atencion_cliente', label: 'Atención al cliente' },
+];
+
+export const WORK_MODE_OPTIONS = [
+  { value: 'remoto', label: 'Remoto' },
+  { value: 'hibrido', label: 'Híbrido' },
+  { value: 'presencial', label: 'Presencial' },
+];
 
 export const AVAILABILITY_OPTIONS = [
   { value: 'full_time', label: 'Tiempo completo' },
@@ -51,6 +100,10 @@ export const LANGUAGE_LEVELS = [
 
 const AVAILABILITY_VALUES = new Set(AVAILABILITY_OPTIONS.map(o => o.value));
 const LANGUAGE_LEVEL_VALUES = new Set(LANGUAGE_LEVELS.map(o => o.value));
+const TRACK_VALUES = new Set(EXPERIENCE_TRACKS.map(o => o.value));
+const KIND_VALUES = new Set(EXPERIENCE_KINDS.map(o => o.value));
+
+export const emptyExperience = () => ({ kind: '', role: '', context: '', period: '', functions: [] });
 
 export const emptyPassport = () => ({
   headline: '',
@@ -65,9 +118,16 @@ export const emptyPassport = () => ({
   skills: [],
   tools: [],
   niches: [],
+  experienceTrack: '',
+  experiences: [],
+  preferredRoles: [],
+  workModes: [],
+  opportunityNotes: '',
 });
 
 // ─── Conversión fila ⇄ formulario ────────────────────────────────────────────
+
+const stringOr = (value) => (typeof value === 'string' ? value : '');
 
 export const passportFromRow = (row) => {
   if (!row) return emptyPassport();
@@ -84,11 +144,36 @@ export const passportFromRow = (row) => {
     skills: Array.isArray(row.skills) ? row.skills : [],
     tools: Array.isArray(row.tools) ? row.tools : [],
     niches: Array.isArray(row.niches) ? row.niches : [],
+    experienceTrack: stringOr(row.experience_track),
+    experiences: Array.isArray(row.experiences)
+      ? row.experiences.filter(e => e && typeof e === 'object').map(e => ({
+        kind: stringOr(e.kind),
+        role: stringOr(e.role),
+        context: stringOr(e.context),
+        period: stringOr(e.period),
+        functions: Array.isArray(e.functions) ? e.functions.filter(f => typeof f === 'string') : [],
+      }))
+      : [],
+    preferredRoles: Array.isArray(row.preferred_roles) ? row.preferred_roles : [],
+    workModes: Array.isArray(row.work_modes) ? row.work_modes : [],
+    opportunityNotes: stringOr(row.opportunity_notes),
   };
 };
 
 const cleanText = (value) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '');
 const cleanMultiline = (value) => (typeof value === 'string' ? value.trim() : '');
+
+// Una experiencia añadida pero dejada en blanco no es un error: se descarta.
+export const isBlankExperience = (exp) =>
+  !exp || (!exp.kind && !cleanText(exp.role) && !cleanText(exp.context) && !cleanText(exp.period)
+    && !(Array.isArray(exp.functions) && exp.functions.some(f => cleanText(f))));
+
+// Valores de una lista cerrada: solo los permitidos, sin duplicados y en el
+// orden de las opciones (así el mismo conjunto no aparece como "cambio").
+const pickOptions = (values, options) => {
+  const chosen = new Set(Array.isArray(values) ? values : []);
+  return options.map(o => o.value).filter(v => chosen.has(v));
+};
 
 // Normaliza etiquetas: recorta, quita vacías y duplicadas (sin distinguir
 // mayúsculas) y respeta el máximo de elementos.
@@ -149,7 +234,46 @@ export const validatePassport = (form) => {
     if (tags.some(tag => cleanText(tag).length > L.tag)) errors[field] = `${label}: cada elemento admite máximo ${L.tag} caracteres.`;
   });
 
+  if (form.experienceTrack && !TRACK_VALUES.has(form.experienceTrack)) {
+    errors.experienceTrack = 'Selecciona una trayectoria válida.';
+  }
+
+  // Un error por experiencia (clave experience_<índice>) para mostrarlo junto a su tarjeta.
+  const experiences = Array.isArray(form.experiences) ? form.experiences : [];
+  const filled = experiences.filter(e => !isBlankExperience(e));
+  if (filled.length > L.experiences) errors.experiences = `Máximo ${L.experiences} experiencias.`;
+  experiences.forEach((exp, index) => {
+    if (isBlankExperience(exp)) return;
+    const key = `experience_${index}`;
+    const functions = (Array.isArray(exp.functions) ? exp.functions : []).map(cleanText).filter(Boolean);
+    if (!KIND_VALUES.has(exp.kind)) errors[key] = 'Elige el tipo de rol.';
+    else if (!cleanText(exp.role)) errors[key] = 'Escribe el nombre del rol o cargo.';
+    else if (cleanText(exp.role).length > L.experienceRole) errors[key] = `Rol: máximo ${L.experienceRole} caracteres.`;
+    else if (cleanText(exp.context).length > L.experienceContext) errors[key] = `Contexto: máximo ${L.experienceContext} caracteres.`;
+    else if (cleanText(exp.period).length > L.experiencePeriod) errors[key] = `Periodo: máximo ${L.experiencePeriod} caracteres.`;
+    else if (functions.length > L.experienceFunctions) errors[key] = `Funciones: máximo ${L.experienceFunctions}.`;
+    else if (functions.some(f => f.length > L.experienceFunction)) errors[key] = `Cada función admite máximo ${L.experienceFunction} caracteres.`;
+  });
+
+  if (cleanMultiline(form.opportunityNotes).length > L.opportunityNotes) {
+    errors.opportunityNotes = `Notas: máximo ${L.opportunityNotes} caracteres.`;
+  }
+
   return errors;
+};
+
+// Avisos NO bloqueantes de coherencia entre trayectoria y experiencias. El
+// alumno decide; nunca se corrige nada automáticamente.
+export const getPassportWarnings = (form) => {
+  const warnings = [];
+  const filled = (Array.isArray(form?.experiences) ? form.experiences : []).filter(e => !isBlankExperience(e));
+  if (form?.experienceTrack === 'en_formacion' && filled.length > 0) {
+    warnings.push('Indicaste que aún no tienes experiencia laboral comercial, pero agregaste experiencias. Revisa qué opción describe mejor tu situación.');
+  }
+  if (form?.experienceTrack === 'setter_closer' && !filled.some(e => e.kind === 'setter' || e.kind === 'closer')) {
+    warnings.push('Indicaste experiencia como setter o closer: agrégala abajo para que se vea en tu perfil.');
+  }
+  return warnings;
 };
 
 // Formulario válido → payload para setter_passports (snake_case, vacíos = null).
@@ -181,8 +305,30 @@ export const toPassportPayload = (form) => {
     skills: normalizeTags(form.skills, PASSPORT_LIMITS.skills),
     tools: normalizeTags(form.tools, PASSPORT_LIMITS.tools),
     niches: normalizeTags(form.niches, PASSPORT_LIMITS.niches),
+    experience_track: TRACK_VALUES.has(form.experienceTrack) ? form.experienceTrack : null,
+    experiences: toExperiencesPayload(form.experiences),
+    preferred_roles: pickOptions(form.preferredRoles, PREFERRED_ROLE_OPTIONS),
+    work_modes: pickOptions(form.workModes, WORK_MODE_OPTIONS),
+    opportunity_notes: cleanMultiline(form.opportunityNotes) || null,
   };
 };
+
+// Experiencias → JSON que acepta passport_experiences_ok: solo las claves
+// permitidas, sin textos vacíos (la base los rechaza) y sin entradas en blanco.
+const toExperiencesPayload = (experiences) =>
+  (Array.isArray(experiences) ? experiences : [])
+    .filter(exp => !isBlankExperience(exp))
+    .slice(0, PASSPORT_LIMITS.experiences)
+    .map((exp) => {
+      const item = { kind: exp.kind, role: cleanText(exp.role) };
+      const context = cleanText(exp.context);
+      const period = cleanText(exp.period);
+      const functions = normalizeTags(exp.functions, PASSPORT_LIMITS.experienceFunctions);
+      if (context) item.context = context;
+      if (period) item.period = period;
+      if (functions.length) item.functions = functions;
+      return item;
+    });
 
 // ─── Completitud (SOLO datos declarados) ─────────────────────────────────────
 
@@ -196,6 +342,15 @@ const COMPLETENESS_FIELDS = [
   { key: 'skills', label: 'Habilidades', filled: f => normalizeTags(f.skills, PASSPORT_LIMITS.skills).length > 0 },
   { key: 'tools', label: 'Herramientas comerciales', filled: f => normalizeTags(f.tools, PASSPORT_LIMITS.tools).length > 0 },
   { key: 'niches', label: 'Nichos de interés', filled: f => normalizeTags(f.niches, PASSPORT_LIMITS.niches).length > 0 },
+  // Quien está en formación completa este punto solo con declararlo; quien
+  // declara experiencia necesita describir al menos una.
+  {
+    key: 'experience',
+    label: 'Trayectoria y experiencia',
+    filled: f => TRACK_VALUES.has(f.experienceTrack)
+      && (f.experienceTrack === 'en_formacion' || (Array.isArray(f.experiences) && f.experiences.some(e => !isBlankExperience(e)))),
+  },
+  { key: 'preferredRoles', label: 'Qué oportunidad buscas', filled: f => pickOptions(f.preferredRoles, PREFERRED_ROLE_OPTIONS).length > 0 },
 ];
 
 export const getPassportCompleteness = (form) => {
@@ -246,6 +401,15 @@ export const buildPassportPrefill = ({ commercialProfile, onboarding } = {}) => 
   return { prefill, sources };
 };
 
+// Trayectoria SUGERIDA a partir del diagnóstico inicial. Solo se ofrece como
+// botón; nunca se aplica sola, y el alumno puede cambiarla cuando quiera.
+export const suggestExperienceTrack = (onboarding) => {
+  if (!onboarding) return '';
+  if (onboarding.worked_setter || onboarding.worked_closer) return 'setter_closer';
+  if (onboarding.sold_by_chat || onboarding.worked_digital_business || onboarding.participated_launch) return 'comercial_transferible';
+  return 'en_formacion';
+};
+
 // Experiencia previa declarada en el diagnóstico inicial — se muestra como
 // contexto DECLARADO, nunca como experiencia laboral verificada.
 export const describeOnboardingExperience = (onboarding) => {
@@ -278,6 +442,7 @@ export const buildPassportState = ({ passportRow, commercialProfile, onboarding,
     form: { ...passportFromRow(passportRow), ...prefill },
     prefillSources: sources,
     onboardingExperience: describeOnboardingExperience(onboarding),
+    suggestedTrack: suggestExperienceTrack(onboarding),
     evidence: buildPassportEvidence({ sessions, setScore }),
   };
 };

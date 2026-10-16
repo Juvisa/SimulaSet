@@ -11,14 +11,20 @@ import {
   buildPassportState,
   emptyPassport,
   getPassportCompleteness,
+  getPassportWarnings,
   passportFromRow,
   toPassportPayload,
   validatePassport,
 } from './passportModel';
-import { LayerTag, TagInput, LanguagesEditor, EvidencePanel, VerifiedPanel } from './PassportSections';
+import {
+  LayerTag, TagInput, LanguagesEditor, EvidencePanel, VerifiedPanel,
+  ExperienceEditor, OpportunityPreferences, TimezoneField,
+} from './PassportSections';
 import { INPUT, LABEL } from './passportStyles';
 
 const availabilityLabel = (value) => AVAILABILITY_OPTIONS.find(o => o.value === value)?.label;
+const SECTION = 'space-y-4 border-t border-border-subtle pt-5';
+const SUBTITLE = 'font-display text-base font-bold text-text-primary';
 
 const PassportPage = () => {
   const { user, refreshUser } = useAuth();
@@ -76,6 +82,14 @@ const PassportPage = () => {
   // cambios o sugerencias precargadas que todavía no se guardaron.
   const hasUnsaved = Boolean(state) && (isDirty || (!state.exists && state.prefillSources.length > 0));
 
+  // Cerrar o recargar la pestaña con cambios sin guardar pide confirmación.
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
   const goToProfessionalView = (print) => {
     if (hasUnsaved && !window.confirm('Tienes cambios sin guardar. La vista profesional y el PDF solo incluyen lo que ya guardaste. ¿Continuar sin guardar?')) return;
     navigate(print ? '/passport/vista?imprimir=1' : '/passport/vista');
@@ -92,6 +106,7 @@ const PassportPage = () => {
   };
 
   const completeness = useMemo(() => getPassportCompleteness(form), [form]);
+  const warnings = useMemo(() => getPassportWarnings(form), [form]);
   const setField = (field, value) => {
     setForm(current => ({ ...current, [field]: value }));
     setSaveMessage('');
@@ -104,7 +119,7 @@ const PassportPage = () => {
     setSaveError('');
     setSaveMessage('');
     if (Object.keys(nextErrors).length) {
-      setSaveError('Revisa los campos marcados.');
+      setSaveError(`Revisa los campos marcados: ${Object.values(nextErrors).join(' ')}`);
       return;
     }
     setSaving(true);
@@ -218,18 +233,9 @@ const PassportPage = () => {
               Precargamos algunos campos con lo que ya nos contaste en {state.prefillSources.join(' y ')}. Revísalos: no se guarda nada hasta que pulses “Guardar”.
             </div>
           )}
-          {state.onboardingExperience.length > 0 && (
-            <div>
-              <span className={LABEL}>Experiencia previa que declaraste en tu diagnóstico inicial</span>
-              <div className="flex flex-wrap gap-1.5">
-                {state.onboardingExperience.map(item => (
-                  <span key={item} className="rounded-full border border-border-subtle bg-bg-input px-2.5 py-1 text-xs text-text-secondary">{item}</span>
-                ))}
-              </div>
-            </div>
-          )}
 
           <fieldset disabled={unavailable || saving} className="space-y-5 disabled:opacity-60">
+            <h3 className={SUBTITLE}>Presentación</h3>
             <div>
               <label htmlFor="pp-headline" className={LABEL}>Titular profesional</label>
               <input id="pp-headline" className={INPUT} value={form.headline} maxLength={PASSPORT_LIMITS.headline}
@@ -244,53 +250,72 @@ const PassportPage = () => {
               {errors.summary && <p className="text-xs text-red-400 mt-1">{errors.summary}</p>}
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label htmlFor="pp-country" className={LABEL}>País</label>
-                <input id="pp-country" className={INPUT} value={form.country} maxLength={PASSPORT_LIMITS.country} onChange={(e) => setField('country', e.target.value)} />
-              </div>
-              <div>
-                <label htmlFor="pp-city" className={LABEL}>Ciudad</label>
-                <input id="pp-city" className={INPUT} value={form.city} maxLength={PASSPORT_LIMITS.city} onChange={(e) => setField('city', e.target.value)} />
-              </div>
-              <div>
-                <label htmlFor="pp-timezone" className={LABEL}>Zona horaria</label>
-                <input id="pp-timezone" className={INPUT} value={form.timezone} maxLength={PASSPORT_LIMITS.timezone}
-                  placeholder="Ej. GMT-5 (Bogotá)" onChange={(e) => setField('timezone', e.target.value)} />
+            <div className={SECTION}>
+              <ExperienceEditor
+                track={form.experienceTrack}
+                experiences={form.experiences}
+                onTrackChange={(v) => setField('experienceTrack', v)}
+                onExperiencesChange={(v) => setField('experiences', v)}
+                errors={errors}
+                warnings={warnings}
+                suggestedTrack={state.suggestedTrack}
+                onboardingExperience={state.onboardingExperience}
+              />
+            </div>
+
+            <div className={SECTION}>
+              <h3 className={SUBTITLE}>Qué oportunidad buscas</h3>
+              <OpportunityPreferences preferredRoles={form.preferredRoles} workModes={form.workModes} notes={form.opportunityNotes}
+                onChange={setField} error={errors.opportunityNotes} />
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="pp-availability" className={LABEL}>Disponibilidad</label>
+                  <select id="pp-availability" className={INPUT} value={form.availability} onChange={(e) => setField('availability', e.target.value)}>
+                    <option value="">Selecciona…</option>
+                    {AVAILABILITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {errors.availability && <p className="text-xs text-red-400 mt-1">{errors.availability}</p>}
+                </div>
+                <div>
+                  <label htmlFor="pp-hours" className={LABEL}>Horas por semana</label>
+                  <input id="pp-hours" type="number" inputMode="numeric" min={PASSPORT_LIMITS.hoursMin} max={PASSPORT_LIMITS.hoursMax}
+                    className={INPUT} value={form.hoursPerWeek} onChange={(e) => setField('hoursPerWeek', e.target.value)} />
+                  {errors.hoursPerWeek && <p className="text-xs text-red-400 mt-1">{errors.hoursPerWeek}</p>}
+                </div>
+                <label className="flex items-center gap-3 rounded-xl border border-border-subtle bg-bg-input/60 px-4 py-3 md:mt-7 cursor-pointer">
+                  <input type="checkbox" checked={form.openToOpportunities} onChange={(e) => setField('openToOpportunities', e.target.checked)} className="accent-[#E0605E]" />
+                  <span className="text-sm text-text-primary">Me interesan oportunidades comerciales</span>
+                </label>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label htmlFor="pp-availability" className={LABEL}>Disponibilidad</label>
-                <select id="pp-availability" className={INPUT} value={form.availability} onChange={(e) => setField('availability', e.target.value)}>
-                  <option value="">Selecciona…</option>
-                  {AVAILABILITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                {errors.availability && <p className="text-xs text-red-400 mt-1">{errors.availability}</p>}
+            <div className={SECTION}>
+              <h3 className={SUBTITLE}>Ubicación e idiomas</h3>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="pp-country" className={LABEL}>País</label>
+                  <input id="pp-country" className={INPUT} value={form.country} maxLength={PASSPORT_LIMITS.country} onChange={(e) => setField('country', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="pp-city" className={LABEL}>Ciudad</label>
+                  <input id="pp-city" className={INPUT} value={form.city} maxLength={PASSPORT_LIMITS.city} onChange={(e) => setField('city', e.target.value)} />
+                </div>
+                <TimezoneField value={form.timezone} onChange={(v) => setField('timezone', v)} error={errors.timezone} />
               </div>
-              <div>
-                <label htmlFor="pp-hours" className={LABEL}>Horas por semana</label>
-                <input id="pp-hours" type="number" inputMode="numeric" min={PASSPORT_LIMITS.hoursMin} max={PASSPORT_LIMITS.hoursMax}
-                  className={INPUT} value={form.hoursPerWeek} onChange={(e) => setField('hoursPerWeek', e.target.value)} />
-                {errors.hoursPerWeek && <p className="text-xs text-red-400 mt-1">{errors.hoursPerWeek}</p>}
-              </div>
-              <label className="flex items-center gap-3 rounded-xl border border-border-subtle bg-bg-input/60 px-4 py-3 md:mt-7 cursor-pointer">
-                <input type="checkbox" checked={form.openToOpportunities} onChange={(e) => setField('openToOpportunities', e.target.checked)} className="accent-[#E0605E]" />
-                <span className="text-sm text-text-primary">Me interesan oportunidades comerciales</span>
-              </label>
+              <LanguagesEditor values={form.languages} onChange={(v) => setField('languages', v)} error={errors.languages} />
             </div>
 
-            <LanguagesEditor values={form.languages} onChange={(v) => setField('languages', v)} error={errors.languages} />
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <TagInput id="pp-skills" label="Habilidades" values={form.skills} max={PASSPORT_LIMITS.skills}
-                placeholder="Ej. Calificación de leads (Enter para añadir)" onChange={(v) => setField('skills', v)} error={errors.skills} />
-              <TagInput id="pp-tools" label="Herramientas comerciales" values={form.tools} max={PASSPORT_LIMITS.tools}
-                placeholder="Ej. Kommo, WhatsApp Business" onChange={(v) => setField('tools', v)} error={errors.tools} />
+            <div className={SECTION}>
+              <h3 className={SUBTITLE}>Habilidades, herramientas y nichos</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <TagInput id="pp-skills" label="Habilidades" values={form.skills} max={PASSPORT_LIMITS.skills}
+                  placeholder="Ej. Calificación de leads (Enter para añadir)" onChange={(v) => setField('skills', v)} error={errors.skills} />
+                <TagInput id="pp-tools" label="Herramientas comerciales" values={form.tools} max={PASSPORT_LIMITS.tools}
+                  placeholder="Ej. Kommo, WhatsApp Business" onChange={(v) => setField('tools', v)} error={errors.tools} />
+              </div>
+              <TagInput id="pp-niches" label="Nichos de interés o experiencia" values={form.niches} max={PASSPORT_LIMITS.niches}
+                placeholder="Ej. Infoproductos high ticket" onChange={(v) => setField('niches', v)} error={errors.niches} />
             </div>
-            <TagInput id="pp-niches" label="Nichos de interés" values={form.niches} max={PASSPORT_LIMITS.niches}
-              placeholder="Ej. Infoproductos high ticket" onChange={(v) => setField('niches', v)} error={errors.niches} />
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">

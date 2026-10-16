@@ -1,7 +1,13 @@
 import { supabase } from '../../lib/supabase';
 
-// Columnas declaradas de setter_passports (ver 202610130001_create_setter_passports.sql).
-const PASSPORT_SELECT = 'user_id, headline, summary, country, city, timezone, availability, hours_per_week, open_to_opportunities, languages, skills, tools, niches, created_at, updated_at';
+// Columnas declaradas de setter_passports (ver 202610130001_create_setter_passports.sql
+// y 202610160001_passport_professional_profile.sql).
+export const PASSPORT_SELECT = 'user_id, headline, summary, country, city, timezone, availability, hours_per_week, open_to_opportunities, languages, skills, tools, niches, experience_track, experiences, preferred_roles, work_modes, opportunity_notes, created_at, updated_at';
+
+// Columna desconocida (base sin la migración del bloque 3): Postgres 42703 al
+// leer, PostgREST PGRST204 al escribir. No es lo mismo que "tabla inexistente".
+const isMissingColumn = (error) =>
+  Boolean(error) && (error.code === '42703' || error.code === 'PGRST204' || /column .* does not exist/i.test(error.message || ''));
 
 // Si la migración aún no se aplicó en la base, PostgREST responde que la
 // tabla no existe. La UI lo muestra como "no disponible" en vez de romperse.
@@ -9,7 +15,7 @@ const isMissingTable = (error) =>
   Boolean(error) && (
     error.code === 'PGRST205'
     || error.code === '42P01'
-    || (/setter_passports/.test(error.message || '') && /does not exist|schema cache/i.test(error.message || ''))
+    || (!isMissingColumn(error) && /setter_passports/.test(error.message || '') && /does not exist|schema cache/i.test(error.message || ''))
   );
 
 export const getMyPassport = async (userId) => {
@@ -20,6 +26,7 @@ export const getMyPassport = async (userId) => {
     .maybeSingle();
 
   if (isMissingTable(error)) return { passport: null, unavailable: true, error: undefined };
+  if (isMissingColumn(error)) return { passport: null, unavailable: true, error: describeSaveError(error) };
   return { passport: data || null, unavailable: false, error: error?.message };
 };
 
@@ -33,7 +40,8 @@ export const describeSaveError = (error) => {
     return 'Tu cuenta no tiene permiso para editar este perfil. Si tu acceso está inactivo, contacta al equipo de Digital SET.';
   }
   if (error.code === 'PGRST116') return 'No encontramos tu SET Passport para actualizarlo. Recarga la página e inténtalo de nuevo.';
-  if (error.code === '23514') return 'Algún dato supera los límites permitidos. Revisa el formulario.';
+  if (error.code === '23514') return 'Algún dato no cumple el formato o supera los límites permitidos. Revisa el formulario.';
+  if (isMissingColumn(error)) return 'SET Passport se está actualizando. Recarga la página en unos minutos.';
   return message || 'Error desconocido.';
 };
 
