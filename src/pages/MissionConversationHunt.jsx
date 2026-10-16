@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { MISSION_01, MISSION_FIELDS, isMissionCaseComplete, isMissionComplete } from '../data/missions';
 import { getMissionProgress, saveMissionProgress, startMissionProgress } from '../utils/missionProgress';
 import { extractJsonSlice, parseJsonLoose, stripMarkdownFence } from '../utils/jsonRepair';
+import { getAiAuthHeaders } from '../utils/aiAuth';
 
 const EMPTY_RESPONSE = Object.fromEntries(MISSION_FIELDS.map(field => [field.key, '']));
 const buildEvaluatorPayload = responses => MISSION_01.cases.map(missionCase => ({ id: missionCase.id, industry: missionCase.industry, context: missionCase.context, leadMessage: missionCase.leadMessage, student: responses[missionCase.id], reference: missionCase.reference }));
@@ -123,10 +124,11 @@ const MissionConversationHunt = () => {
       setEvaluating(true);
       try {
         const systemPrompt = `Eres el evaluador pedagógico oficial del Método S.E.T. de DIGITAL SET. Evalúas razonamiento comercial, no coincidencia literal con una referencia.\n\nS = Situación: distinguir hechos de interpretaciones, usar contexto del funnel y momento de conversación.\nE = Emoción: formular hipótesis razonables a partir de señales, sin leer la mente ni afirmar certezas no sustentadas.\nT = Transición: elegir el próximo microcompromiso lógico según el nivel real de avance del lead.\nMovimiento = ejecutar esa transición con un mensaje claro, natural, relevante y sin presión innecesaria.\n\nEvalúa el desempeño global del alumno a través de los 3 casos. Sé exigente pero pedagógico. Reconoce aciertos concretos y señala omisiones concretas. No penalices diferencias de estilo si el razonamiento es correcto. No inventes contexto.\n\nDevuelve SOLO JSON válido, sin markdown, exactamente con esta forma:\n{"setScore":0,"level":"EN DESARROLLO","mainOpportunity":"...","dimensions":{"situacion":{"score":0,"feedback":"..."},"emocion":{"score":0,"feedback":"..."},"transicion":{"score":0,"feedback":"..."},"movimiento":{"score":0,"feedback":"..."}}}\n\nTodos los scores deben ser enteros de 0 a 100. El feedback de cada dimensión debe ser breve, específico y en español, máximo 2 frases. level debe ser uno de: INICIAL, EN DESARROLLO, BIEN ENCAMINADO, SÓLIDO.`;
+        const authHeaders = await getAiAuthHeaders();
         const timeoutId = setTimeout(() => controller.abort(), 45000);
         let response;
         try {
-          response = await fetch('/api/anthropic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ systemPrompt, maxTokens: 1500, messages: [{ role: 'user', content: `Evalúa estas respuestas del alumno. La referencia es pedagógica y no debe tratarse como única respuesta correcta.\n\n${JSON.stringify(buildEvaluatorPayload(responses), null, 2)}` }] }) });
+          response = await fetch('/api/anthropic', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders }, signal: controller.signal, body: JSON.stringify({ systemPrompt, maxTokens: 1500, messages: [{ role: 'user', content: `Evalúa estas respuestas del alumno. La referencia es pedagógica y no debe tratarse como única respuesta correcta.\n\n${JSON.stringify(buildEvaluatorPayload(responses), null, 2)}` }] }) });
         } finally { clearTimeout(timeoutId); }
         const data = await response.json();
         if (!response.ok || !data?.text) throw new Error(data?.error || 'No se pudo evaluar la misión');
