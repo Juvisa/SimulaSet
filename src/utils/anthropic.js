@@ -1,4 +1,5 @@
 import { parseAndValidateSetEngineResponse, SET_ENGINE_ERROR_CODES, SetEngineError } from './setEngine.js';
+import { getAiAuthHeaders } from './aiAuth.js';
 
 const MAX_TOKENS = 1500;
 const SET_ENGINE_RETRY_INSTRUCTION = 'La respuesta anterior no cumplió el formato. Genera nuevamente la respuesta completa siguiendo exactamente el contrato JSON. Devuelve únicamente JSON puro, sin markdown ni texto adicional.';
@@ -73,6 +74,7 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens, mode, model })
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(await getAiAuthHeaders()),
     },
     body: JSON.stringify(payload),
   });
