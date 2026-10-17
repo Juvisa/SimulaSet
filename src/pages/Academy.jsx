@@ -8,6 +8,8 @@ import { getPublishedAcademyLessons } from '../utils/academyLessons';
 import { getLessonProgressForCourse, setLessonProgress } from '../utils/lessonProgress';
 import { addXp } from '../utils/xp';
 import LessonInteractionPanel from '../components/LessonInteractionPanel';
+import LessonWatchProgress from '../components/LessonWatchProgress';
+import { useLessonWatch } from '../hooks/useLessonWatch';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
@@ -117,22 +119,39 @@ const toEmbedUrl = (rawUrl) => {
 // incompleto en algún estado transitorio del fetch.
 const isLessonAvailable = (lesson) => lesson?.video_status === 'ready' || Boolean(lesson?.video_url);
 
+// Video de Mux con seguimiento de visualización (segmentos únicos vistos,
+// reanudación desde la última posición y barra de progreso). Si la clase no
+// es medible o el seguimiento falla, el reproductor funciona igual que antes.
+const MuxLessonVideo = ({ lesson }) => {
+  const { trackable, progress, startTime, handlers } = useLessonWatch(lesson);
+  return (
+    <div className="mt-4">
+      <div className="overflow-hidden rounded-xl bg-black">
+        {startTime === null ? (
+          <div className="aspect-video w-full" style={{ aspectRatio: '16 / 9', width: '100%' }} />
+        ) : (
+          <MuxPlayer
+            playbackId={lesson.mux_playback_id}
+            metadataVideoTitle={lesson.title}
+            streamType="on-demand"
+            autoPlay={false}
+            playsInline
+            startTime={startTime > 0 ? startTime : undefined}
+            className="aspect-video w-full"
+            style={{ aspectRatio: '16 / 9', width: '100%' }}
+            {...handlers}
+          />
+        )}
+      </div>
+      {trackable && <LessonWatchProgress progress={progress} />}
+    </div>
+  );
+};
+
 const LessonVideo = ({ lesson }) => {
   if (!lesson) return null;
   if (lesson.video_status === 'ready' && lesson.mux_playback_id) {
-    return (
-      <div className="mt-4 overflow-hidden rounded-xl bg-black">
-        <MuxPlayer
-          playbackId={lesson.mux_playback_id}
-          metadataVideoTitle={lesson.title}
-          streamType="on-demand"
-          autoPlay={false}
-          playsInline
-          className="aspect-video w-full"
-          style={{ aspectRatio: '16 / 9', width: '100%' }}
-        />
-      </div>
-    );
+    return <MuxLessonVideo lesson={lesson} />;
   }
   if (lesson.video_url) {
     return (
@@ -184,12 +203,12 @@ const Academy = () => {
       if (!active || error || publishedLessons.length === 0) return;
       const digitalStartLessons = publishedLessons
         .filter(lesson => lesson.module_id === START_MODULE_ID)
-        .map(lesson => ({ ...lesson, id: lesson.lesson_id }));
+        .map(lesson => ({ ...lesson, id: lesson.lesson_id, lesson_uuid: lesson.id }));
       if (digitalStartLessons.length > 0) setLessons(digitalStartLessons);
 
       const lessonsByModule = publishedLessons.reduce((groups, lesson) => {
         if (!groups[lesson.module_id]) groups[lesson.module_id] = [];
-        groups[lesson.module_id].push({ ...lesson, id: lesson.lesson_id, scheduled_at: lesson.scheduled_at });
+        groups[lesson.module_id].push({ ...lesson, id: lesson.lesson_id, lesson_uuid: lesson.id, scheduled_at: lesson.scheduled_at });
         return groups;
       }, {});
 
