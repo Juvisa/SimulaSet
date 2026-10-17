@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import MuxPlayer from '@mux/mux-player-react';
 import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2, Rocket, Sparkles } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -8,8 +7,7 @@ import { getPublishedAcademyLessons } from '../utils/academyLessons';
 import { getLessonProgressForCourse, setLessonProgress } from '../utils/lessonProgress';
 import { addXp } from '../utils/xp';
 import LessonInteractionPanel from '../components/LessonInteractionPanel';
-import LessonWatchProgress from '../components/LessonWatchProgress';
-import { useLessonWatch } from '../hooks/useLessonWatch';
+import MuxLessonVideo from '../components/MuxLessonVideo';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
@@ -118,35 +116,6 @@ const toEmbedUrl = (rawUrl) => {
 // un link externo funcionando. Optional chaining por si `lesson` llega
 // incompleto en algún estado transitorio del fetch.
 const isLessonAvailable = (lesson) => lesson?.video_status === 'ready' || Boolean(lesson?.video_url);
-
-// Video de Mux con seguimiento de visualización (segmentos únicos vistos,
-// reanudación desde la última posición y barra de progreso). Si la clase no
-// es medible o el seguimiento falla, el reproductor funciona igual que antes.
-const MuxLessonVideo = ({ lesson }) => {
-  const { trackable, progress, startTime, handlers } = useLessonWatch(lesson);
-  return (
-    <div className="mt-4">
-      <div className="overflow-hidden rounded-xl bg-black">
-        {startTime === null ? (
-          <div className="aspect-video w-full" style={{ aspectRatio: '16 / 9', width: '100%' }} />
-        ) : (
-          <MuxPlayer
-            playbackId={lesson.mux_playback_id}
-            metadataVideoTitle={lesson.title}
-            streamType="on-demand"
-            autoPlay={false}
-            playsInline
-            startTime={startTime > 0 ? startTime : undefined}
-            className="aspect-video w-full"
-            style={{ aspectRatio: '16 / 9', width: '100%' }}
-            {...handlers}
-          />
-        )}
-      </div>
-      {trackable && <LessonWatchProgress progress={progress} />}
-    </div>
-  );
-};
 
 const LessonVideo = ({ lesson }) => {
   if (!lesson) return null;

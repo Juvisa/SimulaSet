@@ -69,6 +69,29 @@ describe('createSegmentTracker', () => {
     expect(tr.snapshot()).toEqual([[0, 120]]);
   });
 
+  it.each([1, 1.25, 1.5, 1.75, 2])('velocidad %sx: cuenta exactamente el contenido reproducido', (rate) => {
+    const tr = createSegmentTracker({ duration: 600 });
+    play(tr, { from: 0, to: 90, rate });
+    expect(tr.snapshot()).toEqual([[0, 90]]);
+  });
+
+  it('cambiar de velocidad a mitad de reproducción no corta ni duplica el tramo', () => {
+    const tr = createSegmentTracker({ duration: 600 });
+    let w = play(tr, { from: 0, to: 30, rate: 1 });
+    w = play(tr, { from: 30, to: 60, rate: 1.5, wall: w });
+    w = play(tr, { from: 60, to: 100, rate: 2, wall: w });
+    play(tr, { from: 100, to: 120, rate: 1.25, wall: w });
+    expect(tr.snapshot()).toEqual([[0, 120]]);
+  });
+
+  it('repetir a otra velocidad un tramo ya visto no suma dos veces', () => {
+    const tr = createSegmentTracker({ duration: 600 });
+    const w = play(tr, { from: 0, to: 60, rate: 1 });
+    tr.seeking();
+    play(tr, { from: 10, to: 50, rate: 2, wall: w + 250 });
+    expect(totalSeconds(tr.snapshot())).toBe(60);
+  });
+
   it('avance incoherente con la velocidad informada (p. ej. manipulado) no se acepta como continuo', () => {
     const tr = createSegmentTracker({ duration: 600 });
     play(tr, { from: 0, to: 120, rate: 16, reportedRate: 1 });
