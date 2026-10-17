@@ -13,10 +13,42 @@ Estos scripts **no** los ejecuta la CLI de Supabase (solo lee
 | `03_post.sql` | Solo lectura | Justo después de `02_apply.sql` |
 | `04_rollback.sql` | Escritura (una transacción) | Solo si hay que revertir |
 
+**Cada archivo es UNA sola sentencia.** El SQL Editor de Supabase ejecuta
+cada sentencia en su propia transacción e ignora un `begin … commit` escrito
+en el script. Por eso `02_apply.sql` y `04_rollback.sql` son un único bloque
+`do $$ … $$`, que Postgres aplica entero o nada.
+
 `02_apply.sql` contiene las mismas sentencias que la migración, rodeadas de
-controles: bloquea un instante las escrituras sobre `lesson_progress`, toma
-una foto de `lesson_progress` y de la suma de XP, aplica y comprueba. Si algo
-no cuadra, lanza `ABORTADO: …` y la transacción se revierte entera.
+controles: bloquea un instante las escrituras sobre `lesson_progress` y
+`user_streaks`, toma una foto de `lesson_progress` y de la suma de XP, aplica
+y comprueba. Si algo no cuadra, lanza `ABORTADO: …` y no queda nada aplicado.
+
+> Incidente del 2026-10-17: una versión anterior de `02_apply.sql` usaba
+> `begin … commit` con una tabla temporal. En el SQL Editor, el `revoke` se
+> confirmó por separado y la comprobación final falló (`relation "_antes"
+> does not exist`), con el frontend anterior todavía en producción. Los
+> alumnos no podían marcar clases hasta que se ejecutó el rollback. No hubo
+> cambios de XP ni de progreso. Los scripts actuales se ensayan también
+> emulando el SQL Editor.
+
+## Ensayo (sin tocar Supabase)
+
+`tests/rehearsal.mjs` ejecuta todo el procedimiento en PGlite (Postgres en
+memoria), en modo script completo y en modo SQL Editor (sentencia por
+sentencia), con y sin los permisos por defecto de Supabase. Comprueba:
+
+- que `02_apply.sql` y `04_rollback.sql` son una sola sentencia cada uno;
+- que la migración y `02_apply.sql` dejan exactamente el mismo estado;
+- que XP y clases no cambian, que no hay doble XP y la limitación conocida;
+- que el rollback restaura permisos y políticas idénticos y es idempotente;
+- que un fallo en la autoverificación no deja nada aplicado;
+- el incidente del 2026-10-17 con el script anterior
+  (`tests/fixtures/02_apply_6815c7e_incidente.sql`).
+
+```bash
+npm i --no-save @electric-sql/pglite   # no modifica package.json
+node supabase/ops/202610170003_lock_lesson_progress_writes/tests/rehearsal.mjs
+```
 
 ## Orden
 
