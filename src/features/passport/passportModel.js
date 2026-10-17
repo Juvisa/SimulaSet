@@ -15,7 +15,7 @@ import {
   getPracticeLevel,
   getPracticeMinimumStatus,
   getPracticeProgress,
-} from '../../utils/practiceLevel';
+} from '../../utils/practiceLevel.js';
 
 // Límites — reflejan exactamente las restricciones CHECK de las migraciones
 // 202610130001_create_setter_passports.sql y

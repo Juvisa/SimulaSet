@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/passport-assistant.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",

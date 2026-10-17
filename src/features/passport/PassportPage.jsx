@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Save, Check, AlertTriangle, RefreshCw, Lock, MapPin, Clock, Briefcase, FileText, Download } from 'lucide-react';
+import { Loader2, Save, Check, AlertTriangle, RefreshCw, Lock, MapPin, Clock, Briefcase, FileText, Download, Sparkles } from 'lucide-react';
+import AssistantPanel from './AssistantPanel';
 import Layout from '../../components/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { saveMyPassport } from './passportApi';
@@ -39,6 +40,7 @@ const PassportPage = () => {
   const [saveMessage, setSaveMessage] = useState('');
   const [saveError, setSaveError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Cada visita vuelve a leer TODO de sus fuentes oficiales: el historial
   // completo de simulaciones (incluidas las anteriores a SET Passport) y el
@@ -55,7 +57,8 @@ const PassportPage = () => {
       sessions: sources.sessions,
       setScore: sources.setScore,
     });
-    return { next, unavailable: sources.unavailable, error: sources.error };
+    // El asistente usa el perfil comercial solo para precargar sus preguntas.
+    return { next: { ...next, commercialProfile: sources.commercialProfile || null }, unavailable: sources.unavailable, error: sources.error };
   };
 
   // keepForm: al actualizar con cambios sin guardar, se refrescan evidencia y
@@ -112,27 +115,48 @@ const PassportPage = () => {
     setSaveMessage('');
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+  // Valida y guarda el formulario. Devuelve true si quedó guardado.
+  const persistForm = async () => {
     const nextErrors = validatePassport(form);
     setErrors(nextErrors);
     setSaveError('');
     setSaveMessage('');
     if (Object.keys(nextErrors).length) {
       setSaveError(`Revisa los campos marcados: ${Object.values(nextErrors).join(' ')}`);
-      return;
+      return false;
     }
     setSaving(true);
     const { passport, error } = await saveMyPassport({ userId: user.id, payload: toPassportPayload(form), exists: state.exists });
     setSaving(false);
     if (error) {
       setSaveError(`No pudimos guardar tu SET Passport: ${error}`);
-      return;
+      return false;
     }
     const saved = passportFromRow(passport);
     setForm(saved);
     setState(current => ({ ...current, exists: true, form: saved, prefillSources: [] }));
     setSaveMessage('SET Passport guardado.');
+    return true;
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    await persistForm();
+  };
+
+  // El asistente trabaja con lo GUARDADO (el servidor lo lee con RLS). Si hay
+  // cambios o sugerencias sin guardar, primero se validan y se guardan.
+  const openAssistant = async () => {
+    if (hasUnsaved && !(await persistForm())) return;
+    setAssistantOpen(true);
+  };
+
+  // "Usar en mi perfil": copia al formulario; persistir sigue siendo Guardar.
+  const applyDraft = (changes) => {
+    setForm(current => ({ ...current, ...changes }));
+    setAssistantOpen(false);
+    setSaveError('');
+    setSaveMessage('Propuesta aplicada al formulario. Revísala y pulsa Guardar para conservarla.');
   };
 
   if (loading || !state) {
@@ -235,7 +259,26 @@ const PassportPage = () => {
           )}
 
           <fieldset disabled={unavailable || saving} className="space-y-5 disabled:opacity-60">
-            <h3 className={SUBTITLE}>Presentación</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className={SUBTITLE}>Presentación</h3>
+              {!assistantOpen && (
+                <button type="button" onClick={openAssistant} disabled={unavailable || saving || refreshing}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-accent-coral/50 bg-accent-coral/10 px-3 py-2 text-xs font-bold text-text-primary hover:bg-accent-coral/20 disabled:opacity-50">
+                  <Sparkles size={14} className="text-accent-coral" />
+                  {hasUnsaved ? 'Guardar y crear mi perfil con IA' : 'Crear mi perfil con IA'}
+                </button>
+              )}
+            </div>
+            {assistantOpen && (
+              <AssistantPanel
+                savedForm={state.form}
+                currentForm={form}
+                suggestedTrack={state.suggestedTrack}
+                commercialProfile={state.commercialProfile}
+                onApply={applyDraft}
+                onClose={() => setAssistantOpen(false)}
+              />
+            )}
             <div>
               <label htmlFor="pp-headline" className={LABEL}>Titular profesional</label>
               <input id="pp-headline" className={INPUT} value={form.headline} maxLength={PASSPORT_LIMITS.headline}
