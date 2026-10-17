@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+// Exportadas para llamadas fetch con keepalive al cerrar la pestaña (la clave
+// anon es pública por diseño; los permisos los aplica RLS con el token).
+export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
   ?.trim()
   .replace(/\/(?:rest|auth)\/v1\/?$/, '');
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
