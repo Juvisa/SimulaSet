@@ -1,17 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createWatchSession } from '../utils/lessonWatch/watchSession';
 import { getLessonWatchProgress, lessonWatchTransport, refreshCachedToken } from '../utils/lessonWatch/lessonWatchApi';
+import { isTrackableLesson } from '../utils/lessonWatch/lessonCompletion';
 
-// Solo clases con video de Mux listo y duración conocida (la duración la
-// guarda el webhook de Mux). Los enlaces externos y las clases sin video no
-// se miden.
-export const isTrackableLesson = (lesson) => Boolean(
-  lesson?.lesson_uuid
-  && lesson.video_status === 'ready'
-  && lesson.video_provider === 'mux'
-  && lesson.mux_playback_id
-  && Number(lesson.duration_seconds) > 0,
-);
+export { isTrackableLesson };
 
 // No se reanuda en los últimos segundos (mejor empezar de nuevo que caer al final).
 const RESUME_TAIL_SECONDS = 10;

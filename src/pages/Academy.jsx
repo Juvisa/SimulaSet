@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2, Rocket, Sparkles } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clock3, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getPublishedAcademyLessons } from '../utils/academyLessons';
-import { getLessonProgressForCourse, setLessonProgress } from '../utils/lessonProgress';
-import { addXp } from '../utils/xp';
+import { completeLesson, getLessonProgressForCourse } from '../utils/lessonProgress';
 import LessonInteractionPanel from '../components/LessonInteractionPanel';
 import MuxLessonVideo from '../components/MuxLessonVideo';
+import PracticeCta from '../components/PracticeCta';
+import { describeCompletionResult, getCompletionState, isTrackableLesson } from '../utils/lessonWatch/lessonCompletion';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
 const START_COURSE_ID = 'set-academy';
@@ -55,34 +56,6 @@ const formatScheduledAt = (scheduledAt) => {
   }).format(new Date(scheduledAt)).replace(' a las ', ', ');
 };
 
-const PracticeCta = ({ available = true, completed, marking, onGoSimulate, onMarkComplete }) => (
-  <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-accent-coral/25 bg-accent-coral/5 p-4 lg:flex-row lg:items-center lg:justify-between">
-    <div>
-      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-accent-coral"><Sparkles size={13} /> Aplica lo aprendido</div>
-      <p className="mt-1 text-xs text-text-secondary">
-        {available ? 'Lleva esta técnica al simulador y consolida tu progreso.' : 'Se desbloquea al finalizar la sesión en vivo.'}
-      </p>
-    </div>
-    <div className="flex flex-col gap-2 lg:flex-row">
-      <button
-        onClick={onGoSimulate}
-        disabled={!available}
-        className={`flex items-center justify-center gap-2 rounded-xl border border-accent-coral/40 px-4 py-3 text-xs font-bold text-accent-coral transition-colors ${available ? 'hover:bg-accent-coral/10' : 'cursor-not-allowed opacity-50'}`}
-      >
-        <Rocket size={14} /> Abrir en el Simulador IA
-      </button>
-      <button
-        onClick={onMarkComplete}
-        disabled={!available || marking}
-        className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${completed ? 'bg-bg-input text-text-primary' : 'bg-accent-coral text-white'}`}
-      >
-        {marking ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-        {completed ? 'Completada' : 'Marcar como completada (+25 XP)'}
-      </button>
-    </div>
-  </div>
-);
-
 // Convierte un link "para compartir" de Loom/YouTube/Vimeo a su URL de embed
 // — pegar el link normal (youtu.be/..., vimeo.com/123, loom.com/share/...)
 // no sirve directo en un <iframe>, cada plataforma exige su propia ruta
@@ -117,10 +90,10 @@ const toEmbedUrl = (rawUrl) => {
 // incompleto en algún estado transitorio del fetch.
 const isLessonAvailable = (lesson) => lesson?.video_status === 'ready' || Boolean(lesson?.video_url);
 
-const LessonVideo = ({ lesson }) => {
+const LessonVideo = ({ lesson, onWatchProgress }) => {
   if (!lesson) return null;
   if (lesson.video_status === 'ready' && lesson.mux_playback_id) {
-    return <MuxLessonVideo lesson={lesson} />;
+    return <MuxLessonVideo lesson={lesson} onProgressChange={onWatchProgress} />;
   }
   if (lesson.video_url) {
     return (
@@ -150,6 +123,10 @@ const Academy = () => {
   const [labLessons, setLabLessons] = useState([]);
   const [additionalModuleGroups, setAdditionalModuleGroups] = useState([]);
   const [progress, setProgress] = useState({});
+  // Origen de cada finalización (verified_watch | self_reported | legacy_self_reported).
+  const [completionSources, setCompletionSources] = useState({});
+  // Porcentaje visto según el servidor (record_lesson_watch), por clase.
+  const [watchPercent, setWatchPercent] = useState({});
   const [expandedLesson, setExpandedLesson] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
   const [updatingLesson, setUpdatingLesson] = useState('');
@@ -213,6 +190,7 @@ const Academy = () => {
         if (!active) return;
         if (error) setProgressError(`No pudimos cargar tu progreso: ${error}`);
         setProgress(Object.fromEntries(rows.map(row => [progressKey(row.module_id, row.lesson_id), row.status])));
+        setCompletionSources(Object.fromEntries(rows.map(row => [progressKey(row.module_id, row.lesson_id), row.completion_source])));
       })
       .catch((error) => {
         if (active) setProgressError(`No pudimos cargar tu progreso: ${error instanceof Error ? error.message : 'Error inesperado'}`);
@@ -240,32 +218,49 @@ const Academy = () => {
   const totalCompletedCount = allLessonKeys.filter(key => progress[key] === 'completed').length;
   const overallProgressPercent = allLessonKeys.length > 0 ? Math.round((totalCompletedCount / allLessonKeys.length) * 100) : 0;
 
+  const trackWatch = (moduleId, lessonId) => (view) => {
+    if (!view) return;
+    const key = progressKey(moduleId, lessonId);
+    setWatchPercent(current => (current[key] === view.percent ? current : { ...current, [key]: view.percent }));
+  };
+
+  // Estado del botón de una clase (el servidor vuelve a validar al completar).
+  const completionFor = (moduleId, lesson, available = true) => {
+    const key = progressKey(moduleId, lesson.id);
+    return getCompletionState({
+      available,
+      trackable: isTrackableLesson(lesson),
+      watchPercent: watchPercent[key] ?? null,
+      status: progress[key] || null,
+      source: completionSources[key] || null,
+      busy: updatingLesson === key,
+    });
+  };
+
+  // Completar SOLO a través de complete_lesson: el servidor valida el 85 %
+  // en clases con video de Mux, guarda el origen y otorga los XP una única
+  // vez. No existe la opción de desmarcar.
   const handleMarkComplete = async (moduleId, lessonId) => {
     const key = progressKey(moduleId, lessonId);
-    const wasCompleted = progress[key] === 'completed';
-    const status = wasCompleted ? 'pending' : 'completed';
+    if (updatingLesson) return;
     setUpdatingLesson(key);
     setProgressError('');
-    const { progress: savedProgress, error } = await setLessonProgress({
-      userId: user.id,
-      courseId: START_COURSE_ID,
-      moduleId,
-      lessonId,
-      status,
-    });
+    const { result, error } = await completeLesson({ courseId: START_COURSE_ID, moduleId, lessonId });
     setUpdatingLesson('');
 
     if (error) {
-      setProgressError(`No pudimos actualizar la clase: ${error}`);
+      setProgressError(`No pudimos completar la clase: ${error}`);
       return;
     }
-    setProgress(current => ({ ...current, [progressKey(moduleId, savedProgress.lesson_id)]: savedProgress.status }));
-
-    if (!wasCompleted && status === 'completed') {
-      await addXp({ userId: user.id, amount: 25 });
-      setXpToast('¡Clase completada! +25 XP');
-      setTimeout(() => setXpToast(''), 4000);
+    const message = describeCompletionResult(result);
+    if (!message.ok) {
+      setProgressError(message.text);
+      return;
     }
+    setProgress(current => ({ ...current, [key]: 'completed' }));
+    setCompletionSources(current => ({ ...current, [key]: result.completion_source }));
+    setXpToast(message.text);
+    setTimeout(() => setXpToast(''), 4000);
   };
 
   return (
@@ -340,11 +335,11 @@ const Academy = () => {
                   {expanded && (
                     <div className="border-t border-border-subtle px-4 pb-4 pt-4">
                       <p className="mt-2 text-sm leading-relaxed text-text-secondary">{lesson.description}</p>
-                      <LessonVideo lesson={lesson} />
+                      <LessonVideo lesson={lesson} onWatchProgress={trackWatch(START_MODULE_ID, lesson.id)} />
                       {!isLessonAvailable(lesson) && <div className="mt-4 rounded-xl border border-border-subtle bg-bg-input px-4 py-3 text-sm text-text-secondary">Disponible después de la clase en vivo</div>}
                       {Array.isArray(lesson.topics) && lesson.topics.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{lesson.topics.map(topic => <span key={topic} className="max-w-full rounded-full border border-border-subtle bg-bg-input px-3 py-1.5 text-xs text-text-secondary">{topic}</span>)}</div>}
                       <PracticeCta
-                        completed={completed}
+                        completion={completionFor(START_MODULE_ID, lesson)}
                         marking={updating}
                         onGoSimulate={() => navigate('/simulate')}
                         onMarkComplete={() => handleMarkComplete(START_MODULE_ID, lesson.id)}
@@ -374,7 +369,6 @@ const Academy = () => {
           <div key={group.moduleId} className="space-y-4">
             {group.lessons.map((lesson) => {
               const available = isLessonAvailable(lesson);
-              const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5 hover:border-accent-coral/30 transition-colors">
@@ -386,14 +380,14 @@ const Academy = () => {
                     </span>
                   </div>
                   <h2 className="text-lg font-bold text-text-primary min-h-14">{lesson.title}</h2>
-                  <LessonVideo lesson={lesson} />
+                  <LessonVideo lesson={lesson} onWatchProgress={trackWatch(group.moduleId, lesson.id)} />
                   <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
                   <PracticeCta
                     available={available}
-                    completed={completed}
+                    completion={completionFor(group.moduleId, lesson, available)}
                     marking={updating}
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}
@@ -412,7 +406,6 @@ const Academy = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {labLessons.map((lesson) => {
               const available = isLessonAvailable(lesson);
-              const completed = progress[progressKey('practical-labs', lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey('practical-labs', lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -424,14 +417,14 @@ const Academy = () => {
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-text-primary">{lesson.title}</h3>
-                  <LessonVideo lesson={lesson} />
+                  <LessonVideo lesson={lesson} onWatchProgress={trackWatch('practical-labs', lesson.id)} />
                   <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
                   <PracticeCta
                     available={available}
-                    completed={completed}
+                    completion={completionFor('practical-labs', lesson, available)}
                     marking={updating}
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete('practical-labs', lesson.id)}
@@ -450,7 +443,6 @@ const Academy = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {group.lessons.map((lesson) => {
               const available = isLessonAvailable(lesson);
-              const completed = progress[progressKey(group.moduleId, lesson.id)] === 'completed';
               const updating = updatingLesson === progressKey(group.moduleId, lesson.id);
               return (
                 <article key={lesson.id} className="bg-bg-card border border-border-subtle rounded-2xl p-5">
@@ -462,14 +454,14 @@ const Academy = () => {
                     </span>
                   </div>
                   <h3 className="text-lg font-bold text-text-primary">{lesson.title}</h3>
-                  <LessonVideo lesson={lesson} />
+                  <LessonVideo lesson={lesson} onWatchProgress={trackWatch(group.moduleId, lesson.id)} />
                   <div className="flex items-center gap-2 text-text-secondary text-sm mt-4">
                     <CalendarDays size={14} /> {formatScheduledAt(lesson.scheduled_at)}
                   </div>
                   {!available && <p className="mt-3 text-sm text-text-secondary">Disponible después de la clase en vivo</p>}
                   <PracticeCta
                     available={available}
-                    completed={completed}
+                    completion={completionFor(group.moduleId, lesson, available)}
                     marking={updating}
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}

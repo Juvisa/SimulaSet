@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MuxPlayer from '@mux/mux-player-react';
 import LessonWatchProgress from './LessonWatchProgress';
 import { useLessonWatch } from '../hooks/useLessonWatch';
@@ -10,8 +10,13 @@ import { PLAYBACK_RATES, readPreferredPlaybackRate, savePreferredPlaybackRate } 
 // igual que antes.
 // Velocidad: selector nativo de MuxPlayer (1x–2x). La última elegida se
 // recuerda en este dispositivo y se aplica al abrir cualquier clase.
-const MuxLessonVideo = ({ lesson }) => {
+// onProgressChange recibe el porcentaje verificado por el servidor para
+// habilitar el botón de finalización de la clase (fase 3).
+const MuxLessonVideo = ({ lesson, onProgressChange }) => {
   const { trackable, progress, startTime, handlers } = useLessonWatch(lesson);
+  const onProgressRef = useRef(onProgressChange);
+  useEffect(() => { onProgressRef.current = onProgressChange; }, [onProgressChange]);
+  useEffect(() => { if (progress) onProgressRef.current?.(progress); }, [progress]);
   // En estado (no solo en el elemento) para que los re-renders no la devuelvan a 1x.
   const [playbackRate, setPlaybackRate] = useState(readPreferredPlaybackRate);
   const handleRateChange = (e) => {
