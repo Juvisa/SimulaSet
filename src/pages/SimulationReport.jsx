@@ -54,7 +54,7 @@ const SimulationReport = () => {
       const result = await callClaude(
         'Eres un coach experto. Responde SOLO en JSON.',
         [{ role: 'user', content: prompt }],
-        { maxTokens: 2000 }
+        { maxTokens: 2000, operation: 'simulation_report' }
       );
       setReport(result);
     } catch (err) {

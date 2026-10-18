@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { saveSimulatorSession } from '../utils/simulatorSessions';
 import { getProjectById } from '../utils/projects';
-import { callClaude, generateProspectProfile } from '../utils/anthropic';
+import { AiRequestError, callClaude, generateProspectProfile } from '../utils/anthropic';
 import {
   buildOutboundSystemPrompt,
   buildInboundSystemPrompt,
@@ -26,7 +26,7 @@ const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#D
 // margen no cuesta más que lo que el modelo realmente responde. El
 // reintento automático de callClaude (ver utils/anthropic.js) es la defensa
 // real contra esto; el margen extra de tokens es una segunda capa.
-const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 800 };
+const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 800, operation: 'simulator_turn' };
 
 const buildSystemPrompt = (mode, project, prospectProfile) => {
   if (mode === 'outbound') return buildOutboundSystemPrompt(project, prospectProfile);
@@ -260,7 +260,8 @@ const Simulator = () => {
       setMessages([{
         id: crypto.randomUUID(),
         role: 'system',
-        content: `Error iniciando simulación: ${err.message}. Verifica tu API key.`,
+        // AiRequestError ya trae un mensaje para el alumno (sesión, acceso, límite).
+        content: err instanceof AiRequestError ? err.message : `Error iniciando simulación: ${err.message}. Inténtalo de nuevo.`,
         time: formatTime(),
       }]);
     }
@@ -354,10 +355,15 @@ const Simulator = () => {
         setPendingClose({ finalState: response.estado_lead, finalMessages: [...updatedMessages, prospectMsg] });
       }
     } catch (err) {
-      setMessages(prev => [...prev, {
+      // Si el servidor rechazó la solicitud (sesión, acceso o límite), el
+      // mensaje del setter no llegó a evaluarse: se quita del chat y vuelve al
+      // campo de texto para reenviarlo sin perder la conversación.
+      const rejected = err instanceof AiRequestError;
+      if (rejected) setInput(text);
+      setMessages(prev => [...(rejected ? prev.filter(m => m.id !== setterMsg.id) : prev), {
         id: crypto.randomUUID(),
         role: 'system',
-        content: `Error: ${err.message}`,
+        content: rejected ? err.message : `Error: ${err.message}`,
         time: formatTime(),
       }]);
     }

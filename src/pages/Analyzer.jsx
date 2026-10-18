@@ -124,7 +124,7 @@ const Analyzer = () => {
       // en el mismo punto — el reintento no ayuda si la causa es falta de
       // espacio, no falta de disciplina de formato. Mismo presupuesto que
       // callSetEngine, que tiene una forma de respuesta similar.
-      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { maxTokens: 3000 });
+      const analysis = await callClaude('Eres un experto analizador de conversaciones de ventas. Responde SOLO en JSON.', [{ role: 'user', content: prompt }], { maxTokens: 3000, operation: 'analyzer_analysis' });
 
       setResult(analysis);
       // Persistencia en Supabase — no se espera esta llamada para no retrasar

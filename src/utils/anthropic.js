@@ -61,29 +61,48 @@ const requestClaudeDirect = async ({ systemPrompt, messages, maxTokens, mode, mo
   return mode === 'set_engine' ? { text, stop_reason: data.stop_reason } : { text };
 };
 
-const requestClaude = async ({ systemPrompt, messages, maxTokens, mode, model }) => {
+// Error de /api/anthropic con su estado HTTP y su código (unauthenticated,
+// forbidden, invalid_request, too_large, rate_limited, upstream_error…). El
+// mensaje ya viene redactado por el servidor para mostrarlo al alumno.
+export class AiRequestError extends Error {
+  constructor(message, { status, code } = {}) {
+    super(message);
+    this.name = 'AiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+const postToAi = async (payload, signal, refreshSession = false) => fetch('/api/anthropic', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(await getAiAuthHeaders({ refresh: refreshSession })),
+  },
+  body: JSON.stringify(payload),
+  signal,
+});
+
+// `operation` es obligatoria: el servidor solo acepta las operaciones de su
+// lista cerrada (api/_anthropic/operations.js), con su modelo y tope de tokens.
+export const requestClaude = async ({ operation, systemPrompt, messages, maxTokens, mode, model, signal }) => {
   if (useDirectAnthropicCall) {
     const { text, stop_reason } = await requestClaudeDirect({ systemPrompt, messages, maxTokens, mode, model });
     return mode === 'set_engine' ? { text, stop_reason } : text;
   }
+  if (!operation) throw new AiRequestError('Falta declarar la operación de IA.', { code: 'missing_operation' });
 
-  const payload = { systemPrompt, messages, maxTokens };
-  if (mode !== undefined) payload.mode = mode;
+  const payload = { operation, systemPrompt, messages, maxTokens };
   if (model !== undefined) payload.model = model;
-  const response = await fetch('/api/anthropic', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(await getAiAuthHeaders()),
-    },
-    body: JSON.stringify(payload),
-  });
+
+  let response = await postToAi(payload, signal);
+  // Sesión caducada: se renueva el token una sola vez y se reintenta.
+  if (response.status === 401) response = await postToAi(payload, signal, true);
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    const message = [err?.error, err?.reason].filter(Boolean).join(': ') || `API error ${response.status}`;
-    console.error('[anthropic] Solicitud a /api/anthropic falló:', message);
-    throw new Error(message);
+    console.error('[anthropic] /api/anthropic respondió', response.status, err?.code || '');
+    throw new AiRequestError(err?.error || `No se pudo completar la solicitud de IA (${response.status}).`, { status: response.status, code: err?.code });
   }
 
   const data = await response.json();
@@ -105,23 +124,25 @@ const requestClaude = async ({ systemPrompt, messages, maxTokens, mode, model })
 // el system prompt dual-rol del simulador: actuar de prospecto Y evaluar al
 // setter en la misma respuesta) tumbaba el turno entero sin darle una segunda
 // oportunidad al modelo. Mismo patrón de reintento que ya usa SET Engine.
+// options.operation es obligatoria (ver requestClaude). Los errores del
+// servidor (AiRequestError: 401, 403, 429…) no pasan por el reintento de JSON.
 export const callClaude = async (systemPrompt, messages, options = {}) => {
-  const { model = 'sonnet', maxTokens = MAX_TOKENS } = options;
-  const text = await requestClaude({ systemPrompt, messages, maxTokens, model });
+  const { model = 'sonnet', maxTokens = MAX_TOKENS, operation } = options;
+  const text = await requestClaude({ operation, systemPrompt, messages, maxTokens, model });
   const parsed = tryExtractJson(text);
   if (parsed) return parsed;
 
   const retrySystemPrompt = systemPrompt !== undefined
     ? `${systemPrompt}\n${JSON_RETRY_INSTRUCTION}`
     : JSON_RETRY_INSTRUCTION;
-  const retryText = await requestClaude({ systemPrompt: retrySystemPrompt, messages, maxTokens, model });
+  const retryText = await requestClaude({ operation, systemPrompt: retrySystemPrompt, messages, maxTokens, model });
   const retryParsed = tryExtractJson(retryText);
   if (!retryParsed) throw new Error('Respuesta inválida de la IA');
   return retryParsed;
 };
 
 const runSetEngineAttempt = async (request, systemPrompt, messages, project) => {
-  const result = await request({ systemPrompt, messages, maxTokens: 3000, mode: 'set_engine' });
+  const result = await request({ operation: 'set_engine', systemPrompt, messages, maxTokens: 3000, mode: 'set_engine' });
   if (result.stop_reason === 'max_tokens') {
     throw new SetEngineError(SET_ENGINE_ERROR_CODES.MAX_TOKENS, 'La respuesta de la IA se truncó por límite de tokens.');
   }
@@ -179,7 +200,7 @@ RESPONDE EN JSON (sin markdown):
   // "Respuesta inválida de la IA" en el chat del simulador.
   let profile;
   try {
-    profile = await callClaude(undefined, [{ role: 'user', content: prompt }], { maxTokens: 500, model: 'haiku' });
+    profile = await callClaude(undefined, [{ role: 'user', content: prompt }], { maxTokens: 500, model: 'haiku', operation: 'simulator_prospect' });
   } catch {
     throw new Error('Perfil inválido');
   }
@@ -187,7 +208,7 @@ RESPONDE EN JSON (sin markdown):
 };
 
 export const extractConversationText = async (messages) => {
-  return requestClaude({ messages, maxTokens: 2000 });
+  return requestClaude({ operation: 'analyzer_extract', messages, maxTokens: 2000 });
 };
 
 const VALUE_BUILDER_SYSTEM_PROMPT = `Eres el motor "SET Value Builder", un estratega de contenido y retención conversacional de élite para High-Ticket Setters.
@@ -232,7 +253,7 @@ Genera el Microactivo de Reactivación y los 2 mensajes de entrega siguiendo exa
   // heredar el reintento automático, igual que generateProspectProfile.
   let parsed;
   try {
-    parsed = await callClaude(VALUE_BUILDER_SYSTEM_PROMPT, [{ role: 'user', content: prompt }], { maxTokens: 2000 });
+    parsed = await callClaude(VALUE_BUILDER_SYSTEM_PROMPT, [{ role: 'user', content: prompt }], { maxTokens: 2000, operation: 'value_asset' });
   } catch {
     throw new Error('No pudimos generar el microactivo. Inténtalo de nuevo.');
   }
@@ -275,6 +296,7 @@ REGLAS:
 // margen de sobra para 1-2 frases de diagnóstico + 1-2 opciones de respuesta.
 export const askSetCoach = async (userId, query) => {
   return requestClaude({
+    operation: 'set_coach',
     systemPrompt: SET_COACH_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: query }],
     maxTokens: 450,

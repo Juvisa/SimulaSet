@@ -221,7 +221,7 @@ const BriefingModal = ({
       const result = await callClaude(
         'Eres un experto en ventas de alto ticket. Genera briefings de traspaso setter→closer. Responde SOLO en JSON.',
         [{ role: 'user', content: prompt }],
-        { maxTokens: 2500 }
+        { maxTokens: 2500, operation: 'briefing' }
       );
       setBriefing(result.briefing);
     } catch (err) {

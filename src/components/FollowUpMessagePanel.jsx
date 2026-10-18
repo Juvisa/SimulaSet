@@ -50,7 +50,7 @@ const FollowUpMessagePanel = ({ isOpen, onClose, followUp, lead, project, onSent
       const res = await callClaude(
         'Eres un experto en follow-ups de appointment setting. Responde SOLO en JSON.',
         [{ role: 'user', content: prompt }],
-        { maxTokens: 2000 }
+        { maxTokens: 2000, operation: 'follow_up' }
       );
       setResult(res);
       // No se bloquea ni se falla la vista si esto no se guarda — el setter
