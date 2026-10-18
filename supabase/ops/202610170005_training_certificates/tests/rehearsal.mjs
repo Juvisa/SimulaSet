@@ -79,7 +79,8 @@ async function setup({ defaults }) {
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;`);
   for (const f of ['202608270001_create_profiles_auth.sql', '202609010002_create_lesson_progress.sql', '202609010003_create_academy_lessons.sql',
     '202609010004_seed_set_academy_weeks.sql', '202609090001_create_daily_missions.sql', '202609090004_create_rewards_system.sql',
-    '202609110005_redeem_reward_rpc.sql', '202609140001_add_academy_video_url.sql']) await db.exec(read(MIG + f));
+    '202609110005_redeem_reward_rpc.sql', '202609140001_add_academy_video_url.sql', '202609100001_create_simulator_sessions.sql',
+    '202610130001_create_setter_passports.sql', '202610160001_passport_professional_profile.sql']) await db.exec(read(MIG + f));
   await db.exec(`insert into auth.users (id, email) values ('${S1}','s1@x'),('${S2}','s2@x'),('${S3}','s3@x'),('${SX}','sx@x'),('${T}','qa@digitalset.test'),('${ADM}','${ADMIN_EMAIL}');
     update public.profiles set email = u.email, name = 'Alumna ' || right(u.id::text, 2) from auth.users u where u.id = profiles.id;
     update public.profiles set name = 'María José Pérez' where id = '${S1}';
@@ -88,7 +89,10 @@ async function setup({ defaults }) {
     insert into public.lesson_progress (user_id, course_id, module_id, lesson_id, status, completed_at) values
       ${LESSONS.map(([m, l]) => `('${S3}', 'set-academy', '${m}', '${l}', 'completed', '2026-09-20')`).join(',\n')},
       ('${S2}', 'set-academy', 'week-04', 'opportunities-and-interviews', 'completed', '2026-09-20');
-    insert into public.user_streaks (user_id, total_xp, lifetime_xp) values ('${S1}', 10, 10), ('${S2}', 20, 20);`);
+    insert into public.user_streaks (user_id, total_xp, lifetime_xp) values ('${S1}', 10, 10), ('${S2}', 20, 20);
+    insert into public.simulator_sessions (user_id, mode, average_score, scores) values
+      ('${S1}', 'outbound', 72, '[7, 8, 7]'::jsonb), ('${S1}', 'inbound', 65, '[6, 7]'::jsonb), ('${S2}', 'outbound', 0, '[]'::jsonb);
+    insert into public.setter_passports (user_id, headline, summary) values ('${S1}', 'Setter en formación', 'Resumen declarado');`);
   for (const f of ['202610170001_create_xp_ledger.sql', '202610170002_verified_lesson_progress.sql', '202610170003_lock_lesson_progress_writes.sql']) await db.exec(read(MIG + f));
 
   const as = async (uid, sql, params = []) => {
@@ -140,6 +144,9 @@ const dataSnapshot = async (db) => JSON.stringify({
   lessons: (await db.query(`select * from public.lesson_progress order by user_id, module_id, lesson_id`)).rows,
   xp: (await db.query(`select user_id, total_xp, lifetime_xp from public.user_streaks order by 1`)).rows,
   ledger: (await db.query(`select user_id, source, source_ref, amount from public.xp_ledger order by 1, 2, 3`)).rows,
+  simulations: (await db.query(`select user_id, mode, average_score, scores from public.simulator_sessions order by user_id, mode`)).rows,
+  passports: (await db.query(`select user_id, headline, summary from public.setter_passports order by user_id`)).rows,
+  setScores: (await db.query(`select id, set_score from public.profiles order by id`)).rows,
 });
 const credSnapshot = async (db) => JSON.stringify((await db.query(`select * from public.issued_credentials order by issued_at, public_code`)).rows);
 
@@ -171,7 +178,7 @@ for (const editor of [false, true]) {
       await run(a.db, ops('02_apply.sql'), editor);
       const sm = await schemaSnapshot(m.db); const sa = await schemaSnapshot(a.db);
       check(combo, 'EQUIVALENCIA: columnas, permisos, RLS, políticas, funciones, triggers, índices y definición idénticos', sm === sa);
-      check(combo, 'la migración no cambia clases, XP ni ledger', (await dataSnapshot(m.db)) === d0);
+      check(combo, 'la migración no cambia clases, XP, ledger, simulaciones, SET Score ni pasaportes', (await dataSnapshot(m.db)) === d0);
       let again = '';
       try { await run(a.db, ops('02_apply.sql'), editor); } catch (e) { again = e.message; }
       check(combo, 'repetir 02_apply: avisa y no cambia nada', again === '' && (await schemaSnapshot(a.db)) === sa, again);
@@ -236,7 +243,7 @@ for (const editor of [false, true]) {
     check(combo, 'evidencia congelada: 4 clases verified_watch ≥ 85 y hash SHA-256 correcto', row.sha_ok === true
       && row.evidence.lessons.length === 4 && row.evidence.lessons.every((l) => l.completion_source === 'verified_watch' && Number(l.verified_percent) >= 85));
     check(combo, 'auditoría: evento issued con actor = alumno', Number((await db.query(`select count(*) n from public.credential_events where credential_id = $1 and event = 'issued' and actor = $2`, [row.id, S1])).rows[0].n) === 1);
-    check(combo, 'emitir no cambia clases, XP ni ledger', (await dataSnapshot(db)) === xpBefore);
+    check(combo, 'emitir no cambia clases, XP, ledger, simulaciones, SET Score ni pasaportes', (await dataSnapshot(db)) === xpBefore);
     const again = (await as(S1, `select public.issue_training_certificate('publica_v1') as r`)).rows[0].r;
     check(combo, 'IDEMPOTENTE: emitir otra vez → already_issued, mismo código, 1 fila', again.outcome === 'already_issued' && again.credential.public_code === code
       && Number((await db.query(`select count(*) n from public.issued_credentials where user_id = $1`, [S1])).rows[0].n) === 1);
@@ -327,7 +334,7 @@ for (const editor of [false, true]) {
       await run(f.db, ops('02_apply.sql'), editor);
       check(combo, 're-aplicar tras rollback → POST todo_ok', (await json(f.db, ops('03_post.sql'))).todo_ok === true);
     }
-    check(combo, 'datos de clases, XP y ledger nunca cambiaron', (await dataSnapshot(db)) === d0);
+    check(combo, 'clases, XP, ledger, simulaciones, SET Score y pasaportes nunca cambiaron', (await dataSnapshot(db)) === d0);
   }
 }
 

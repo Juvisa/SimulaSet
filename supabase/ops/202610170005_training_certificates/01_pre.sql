@@ -15,6 +15,13 @@ verified as (
 )
 select json_build_object(
   'requisitos', json_build_object(
+    'fase1_presente', to_regprocedure('public.complete_lesson(text,text,text)') is not null
+                      and to_regprocedure('public.record_lesson_watch(uuid,jsonb,integer)') is not null
+                      and to_regclass('public.xp_ledger') is not null,
+    'pasaporte_aplicado', to_regclass('public.setter_passports') is not null
+                          and to_regclass('public.passport_ai_generations') is not null
+                          and exists (select 1 from information_schema.columns
+                                      where table_schema = 'public' and table_name = 'setter_passports' and column_name = 'experiences'),
     'fase3_aplicada', not exists (
         select 1 from pg_class c cross join lateral aclexplode(c.relacl) x
         where c.oid = 'public.lesson_progress'::regclass and x.privilege_type in ('INSERT', 'UPDATE', 'DELETE')
@@ -33,8 +40,12 @@ select json_build_object(
     'con_4', (select count(*) from verified where clases = 4),
     'con_3', (select count(*) from verified where clases = 3),
     'con_1_o_2', (select count(*) from verified where clases between 1 and 2)),
+  -- Foto de los datos existentes: 03_post.sql debe devolver lo mismo.
   'referencia', json_build_object(
     'lesson_progress', (select count(*) from public.lesson_progress),
+    'lesson_progress_verificadas', (select count(*) from public.lesson_progress where completion_source = 'verified_watch'),
+    'xp_ledger', (select count(*) from public.xp_ledger),
     'xp_total', (select coalesce(sum(total_xp), 0) from public.user_streaks),
-    'xp_lifetime', (select coalesce(sum(lifetime_xp), 0) from public.user_streaks))
+    'xp_lifetime', (select coalesce(sum(lifetime_xp), 0) from public.user_streaks),
+    'simulaciones', (select count(*) from public.simulator_sessions))
 ) as pre_0005;

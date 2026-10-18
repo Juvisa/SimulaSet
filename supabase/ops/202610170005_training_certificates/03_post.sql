@@ -32,7 +32,10 @@ select json_build_object(
   -- Comparar con el PRE: la migración no toca datos existentes.
   'referencia', json_build_object(
     'lesson_progress', (select count(*) from public.lesson_progress),
+    'lesson_progress_verificadas', (select count(*) from public.lesson_progress where completion_source = 'verified_watch'),
+    'xp_ledger', (select count(*) from public.xp_ledger),
     'xp_total', (select coalesce(sum(total_xp), 0) from public.user_streaks),
-    'xp_lifetime', (select coalesce(sum(lifetime_xp), 0) from public.user_streaks))
+    'xp_lifetime', (select coalesce(sum(lifetime_xp), 0) from public.user_streaks),
+    'simulaciones', (select count(*) from public.simulator_sessions))
 ) as post_0005
 from chk;
