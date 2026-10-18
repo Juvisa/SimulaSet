@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:bundle": "node scripts/check-bundle-env.mjs --simulate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

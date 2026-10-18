@@ -11,9 +11,15 @@ export const normalizeCredentialCode = (raw) => String(raw ?? '').trim().toUpper
 
 export const isCredentialCode = (raw) => CREDENTIAL_CODE_PATTERN.test(normalizeCredentialCode(raw));
 
-export const getPublicSiteUrl = (env = import.meta.env, location = typeof window !== 'undefined' ? window.location : null) => {
-  const configured = String(env?.VITE_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
-  if (/^https:\/\/[^\s/]+$/i.test(configured)) return configured;
+// Se lee SOLO esta variable, de forma estática. Nunca usar import.meta.env como
+// objeto completo: Vite incrustaría en el JavaScript público todas las
+// variables VITE_ (incluidas las de la plataforma Vercel y cualquier otra que
+// se configure). Lo vigila scripts/check-bundle-env.mjs.
+const CONFIGURED_SITE_URL = import.meta.env.VITE_PUBLIC_SITE_URL;
+
+export const getPublicSiteUrl = (configured = CONFIGURED_SITE_URL, location = typeof window !== 'undefined' ? window.location : null) => {
+  const base = String(configured || '').trim().replace(/\/+$/, '');
+  if (/^https:\/\/[^\s/]+$/i.test(base)) return base;
   return location?.origin || '';
 };
 

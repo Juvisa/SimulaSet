@@ -17,10 +17,17 @@ describe('credentialUrls', () => {
 
   it('usa VITE_PUBLIC_SITE_URL si es https válido; si no, el origen actual', () => {
     const location = { origin: 'https://project-jscj2.vercel.app' };
-    expect(getPublicSiteUrl({ VITE_PUBLIC_SITE_URL: 'https://simulaset.digitalset.co/' }, location)).toBe('https://simulaset.digitalset.co');
-    expect(getPublicSiteUrl({ VITE_PUBLIC_SITE_URL: '' }, location)).toBe('https://project-jscj2.vercel.app');
-    expect(getPublicSiteUrl({ VITE_PUBLIC_SITE_URL: 'http://inseguro.com' }, location)).toBe('https://project-jscj2.vercel.app');
-    expect(getPublicSiteUrl({ VITE_PUBLIC_SITE_URL: 'https://a.com/ruta' }, location)).toBe('https://project-jscj2.vercel.app');
+    expect(getPublicSiteUrl('https://simulaset.digitalset.co/', location)).toBe('https://simulaset.digitalset.co');
+    expect(getPublicSiteUrl('', location)).toBe('https://project-jscj2.vercel.app');
+    expect(getPublicSiteUrl(undefined, location)).toBe('https://project-jscj2.vercel.app');
+    expect(getPublicSiteUrl('http://inseguro.com', location)).toBe('https://project-jscj2.vercel.app');
+    expect(getPublicSiteUrl('https://a.com/ruta', location)).toBe('https://project-jscj2.vercel.app');
+  });
+
+  it('sin VITE_PUBLIC_SITE_URL configurada, usa el dominio desde el que se abre la app', () => {
+    expect(getPublicSiteUrl(undefined, { origin: 'https://digitalset.simulaset.com' })).toBe('https://digitalset.simulaset.com');
+    expect(credentialVerifyUrl('DSF-1A2B-3C4D-5E6F-7A8B', getPublicSiteUrl(undefined, { origin: 'https://digitalset.simulaset.com' })))
+      .toBe('https://digitalset.simulaset.com/verificar/DSF-1A2B-3C4D-5E6F-7A8B');
   });
 
   it('arma la ruta y la URL de verificación', () => {
