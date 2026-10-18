@@ -1,70 +1,21 @@
 // Revisa el JavaScript público generado por Vite para detectar variables de
-// entorno o secretos incrustados por accidente. Nunca imprime valores: solo
-// nombres de variables, patrones y archivos.
+// entorno o secretos incrustados por accidente. Nunca imprime valores.
 //
-//   node scripts/check-bundle-env.mjs            revisa dist/ (tras `npm run build`)
-//   node scripts/check-bundle-env.mjs --simulate compila en una carpeta temporal con
-//                                                variables "canario" falsas (como las de
-//                                                Vercel) y comprueba que no se filtran
+//   node scripts/check-bundle-env.mjs            revisa dist/ con el entorno del build
+//                                                (se ejecuta en `npm run build`, también en Vercel)
+//   node scripts/check-bundle-env.mjs --simulate compila en una carpeta temporal con un
+//                                                entorno falso equivalente al de Vercel
+//                                                Production y comprueba que no se filtra
+//                                                nada y que lo público legítimo sí llega
 //
 // Sale con código 1 si encuentra algo.
-import { readdirSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import process from 'node:process';
-
-// Únicas variables VITE_ que el frontend puede incrustar (son públicas por diseño).
-const ALLOWED_VITE = new Set(['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_PUBLIC_SITE_URL']);
-
-const listJs = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-  const p = join(dir, e.name);
-  if (e.isDirectory()) return listJs(p);
-  return /\.(js|mjs|html)$/.test(e.name) ? [p] : [];
-});
-
-// Decodifica el payload de un JWT sin imprimirlo; devuelve solo el claim "role".
-const jwtRole = (token) => {
-  try {
-    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(Buffer.from(payload, 'base64').toString('utf8')).role || null;
-  } catch { return null; }
-};
-
-export const scanBundle = (dir, canaries = []) => {
-  const problems = [];
-  for (const file of listJs(dir)) {
-    const text = readFileSync(file, 'utf8');
-    const name = file.slice(dir.length + 1);
-    // 1. Objeto de entorno completo incrustado (import.meta.env usado como objeto).
-    const inlinedKeys = [...new Set([...text.matchAll(/\b(VITE_[A-Z0-9_]+)\s*:\s*["'`]/g)].map((m) => m[1]))];
-    if (inlinedKeys.length) problems.push(`${name}: objeto de entorno incrustado con ${inlinedKeys.length} claves (${inlinedKeys.join(', ')})`);
-    // 2. Metadatos de la plataforma Vercel.
-    if (text.includes('VITE_VERCEL_')) problems.push(`${name}: contiene VITE_VERCEL_*`);
-    // 3. Nombres VITE_ fuera de la lista permitida.
-    const names = [...new Set(text.match(/\bVITE_[A-Z0-9_]+/g) || [])].filter((n) => !ALLOWED_VITE.has(n));
-    if (names.length) problems.push(`${name}: nombres VITE_ no permitidos (${names.join(', ')})`);
-    // 4. Patrones de secretos (sin mostrar el valor).
-    const secretPatterns = [
-      ['clave de Anthropic (sk-ant-…)', /sk-ant-[A-Za-z0-9_-]{8,}/g],
-      ['clave secreta de Supabase (sb_secret_…)', /sb_secret_[A-Za-z0-9_-]{8,}/g],
-      ['clave privada PEM', /-----BEGIN [A-Z ]*PRIVATE KEY-----/g],
-    ];
-    for (const [label, re] of secretPatterns) {
-      const n = (text.match(re) || []).length;
-      if (n) problems.push(`${name}: ${n} coincidencia(s) de ${label}`);
-    }
-    for (const token of text.match(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g) || []) {
-      const role = jwtRole(token);
-      if (role && role !== 'anon') problems.push(`${name}: JWT con rol "${role}" (solo se admite "anon")`);
-    }
-    // 5. Canarios de la simulación.
-    for (const { label, value } of canaries) {
-      if (text.includes(value)) problems.push(`${name}: se filtró la variable canario ${label}`);
-    }
-  }
-  return problems;
-};
+import { listBundleFiles, scanBundle, serverSecretsFromEnv } from './bundleEnvScan.mjs';
 
 const report = (title, problems) => {
   if (problems.length === 0) { console.log(`✔ ${title}: sin variables ni secretos filtrados`); return true; }
@@ -73,29 +24,61 @@ const report = (title, problems) => {
   return false;
 };
 
+const fakeJwt = (role, tag) => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ iss: 'supabase', role, ref: tag })}.${'s'.repeat(43)}`;
+};
+
 if (process.argv.includes('--simulate')) {
   const tag = randomBytes(6).toString('hex');
-  const canaries = [
-    { label: 'VITE_VERCEL_GIT_COMMIT_MESSAGE', value: `canary-vercel-${tag}` },
-    { label: 'VITE_VERCEL_DEPLOYMENT_ID', value: `canary-deploy-${tag}` },
-    { label: 'VITE_ZZ_UNUSED_CANARY', value: `canary-unused-${tag}` },
-    { label: 'VITE_ANTHROPIC_API_KEY', value: `sk-ant-canary${tag}` },
-  ];
-  for (const c of canaries) process.env[c.label] = c.value;
-  // La única variable que SÍ debe llegar al bundle: el dominio de verificación.
-  const siteUrl = `https://verificar-${tag}.example.com`;
-  process.env.VITE_PUBLIC_SITE_URL = siteUrl;
+  // Entorno equivalente al de Vercel Production, con valores FALSOS.
+  const publicVars = {
+    VITE_SUPABASE_URL: `https://${tag}abcdefgh.supabase.co`,
+    VITE_SUPABASE_ANON_KEY: `sb_publishable_${tag}Fake0123456789`,
+    VITE_PUBLIC_SITE_URL: `https://verificar-${tag}.example.com`,
+  };
+  // Valores ÚNICOS (con la etiqueta aleatoria): un valor genérico como
+  // "production" aparece en cualquier librería y daría falsos positivos en la
+  // búsqueda por valor. Las variables reales de Vercel se detectan además por
+  // nombre y por objeto de entorno incrustado (ver bundleEnvScan.mjs).
+  const vercelVars = {
+    VITE_VERCEL_ENV: `production-${tag}`, VITE_VERCEL_TARGET_ENV: `production-${tag}`, VITE_VERCEL_URL: `canary-${tag}.vercel.app`,
+    VITE_VERCEL_BRANCH_URL: `canary-branch-${tag}.vercel.app`, VITE_VERCEL_PROJECT_PRODUCTION_URL: `canary-prod-${tag}.example.com`,
+    VITE_VERCEL_DEPLOYMENT_ID: `dpl_canary${tag}`, VITE_VERCEL_PROJECT_ID: `prj_canary${tag}`,
+    VITE_VERCEL_GIT_COMMIT_MESSAGE: `canary commit ${tag}`, VITE_VERCEL_GIT_COMMIT_SHA: `canarysha${tag}`,
+    VITE_VERCEL_GIT_COMMIT_AUTHOR_NAME: `canary-author-${tag}`, VITE_VERCEL_GIT_REPO_ID: `canaryrepo${tag}`,
+  };
+  const serverSecrets = {
+    ANTHROPIC_API_KEY: `sk-ant-api03-canary${tag}000000000000`,
+    SUPABASE_SERVICE_ROLE_KEY: fakeJwt('service_role', tag),
+    MUX_TOKEN_SECRET: `muxsecretcanary${tag}000000`,
+    MUX_WEBHOOK_SECRET: `muxwebhookcanary${tag}0000`,
+    VITE_ZZ_UNUSED_CANARY: `canary-unused-${tag}`,
+    VITE_ANTHROPIC_API_KEY: `sk-ant-canary-vite-${tag}0000`,
+  };
+  Object.assign(process.env, publicVars, vercelVars, serverSecrets);
+
   const outDir = mkdtempSync(join(tmpdir(), 'bundle-check-'));
   try {
     const { build } = await import('vite');
     await build({ logLevel: 'silent', build: { outDir, emptyOutDir: true } });
-    const problems = scanBundle(outDir, canaries);
-    const siteUrlIncluded = listJs(outDir).some((file) => readFileSync(file, 'utf8').includes(siteUrl));
-    if (!siteUrlIncluded) problems.push('VITE_PUBLIC_SITE_URL configurada no llegó al bundle (los enlaces de verificación no la usarían)');
-    process.exitCode = report('Compilación simulada con variables de Vercel', problems) ? 0 : 1;
+    const forbidden = [
+      ...Object.entries(vercelVars).map(([label, value]) => ({ label, value })),
+      ...Object.entries(serverSecrets).map(([label, value]) => ({ label, value })),
+    ];
+    const problems = scanBundle(outDir, forbidden);
+    const all = listBundleFiles(outDir).map((f) => readFileSync(f, 'utf8')).join('\n');
+    // Lo público legítimo SÍ debe llegar; si no, el chequeo estaría rompiendo la app.
+    for (const [label, value] of Object.entries(publicVars)) {
+      if (!all.includes(value)) problems.push(`la variable pública ${label} no llegó al bundle`);
+    }
+    process.exitCode = report('Compilación simulada con un entorno equivalente a Vercel Production', problems) ? 0 : 1;
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
 } else {
-  process.exitCode = report('dist/', scanBundle(join(process.cwd(), 'dist'))) ? 0 : 1;
+  // Modo build: revisa dist/ y además que ningún secreto real del entorno de
+  // build (claves de servidor) aparezca en el bundle. Solo se informa el nombre.
+  const problems = scanBundle(join(process.cwd(), 'dist'), serverSecretsFromEnv(process.env));
+  process.exitCode = report('Bundle de dist/', problems) ? 0 : 1;
 }
