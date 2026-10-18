@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Lock, AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { X, Plus, AlertTriangle, Info, Trash2 } from 'lucide-react';
 import PracticeLevelBadge from '../../components/PracticeLevelBadge';
 import ModeBadge from '../../components/ModeBadge';
 import {
@@ -394,21 +394,5 @@ export const EvidencePanel = ({ evidence }) => (
       El nivel mide volumen de práctica; el SET Score mide desempeño. Ninguno de los dos es una certificación.
       {evidence.progress.next && ` Te faltan ${evidence.progress.simulationsToGo} simulación${evidence.progress.simulationsToGo === 1 ? '' : 'es'} para ${evidence.progress.next.name}.`}
     </p>
-  </section>
-);
-
-export const VerifiedPanel = () => (
-  <section className="card-tactical rounded-2xl p-5 md:p-6 opacity-90">
-    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-      <h2 className="font-display text-lg font-bold text-text-primary">Credenciales verificadas</h2>
-      <LayerTag layer="verified" />
-    </div>
-    <div className="flex items-start gap-3 rounded-xl border border-dashed border-border-subtle p-4">
-      <Lock size={18} className="text-text-secondary shrink-0 mt-0.5" />
-      <p className="text-sm text-text-secondary">
-        Todavía no hay credenciales verificadas. Solo Digital SET podrá emitirlas después de una evaluación formal;
-        no se generan automáticamente por tu práctica ni por tu SET Score.
-      </p>
-    </div>
   </section>
 );

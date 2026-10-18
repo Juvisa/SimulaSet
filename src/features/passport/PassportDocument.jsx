@@ -110,7 +110,16 @@ const PassportDocument = ({ doc }) => (
           <Layer kind="verified">Verificado por Digital SET</Layer>
         </div>
         <ul className="spp-credentials">
-          {doc.verified.map(c => <li key={c.id}><strong>{c.title}</strong> — {c.issuedBy}, {c.issuedAt}</li>)}
+          {doc.verified.map(c => (
+            <li key={c.id}>
+              <strong>{c.title}</strong> — {c.issuedBy}, {c.issuedAt}{c.isTest && ' (constancia de prueba)'}
+              {c.code && (
+                <div className="spp-credential-verify">
+                  Código {c.code}{c.verifyUrl && <> · Verificar en {c.verifyUrl}</>}
+                </div>
+              )}
+            </li>
+          ))}
         </ul>
       </section>
     )}

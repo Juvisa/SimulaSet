@@ -18,9 +18,10 @@ import {
   validatePassport,
 } from './passportModel';
 import {
-  LayerTag, TagInput, LanguagesEditor, EvidencePanel, VerifiedPanel,
+  LayerTag, TagInput, LanguagesEditor, EvidencePanel,
   ExperienceEditor, OpportunityPreferences, TimezoneField,
 } from './PassportSections';
+import TrainingCertificatePanel from '../credentials/TrainingCertificatePanel';
 import { INPUT, LABEL } from './passportStyles';
 
 const availabilityLabel = (value) => AVAILABILITY_OPTIONS.find(o => o.value === value)?.label;
@@ -371,7 +372,7 @@ const PassportPage = () => {
           </div>
         </form>
 
-        <VerifiedPanel />
+        <TrainingCertificatePanel />
       </div>
     </Layout>
   );

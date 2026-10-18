@@ -37,6 +37,7 @@ import TalentVault from './pages/TalentVault';
 import ValueBuilder from './pages/ValueBuilder';
 import PassportPage from './features/passport/PassportPage';
 import PassportProfessionalView from './features/passport/PassportProfessionalView';
+import VerifyCredential from './pages/VerifyCredential';
 
 // La cuenta admin es exclusivamente administrativa — al entrar a "/" o a
 // cualquier ruta no reconocida, se la manda a su panel en vez de al
@@ -67,6 +68,9 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Verificación pública de credenciales: sin inicio de sesión. */}
+          <Route path="/verificar" element={<VerifyCredential />} />
+          <Route path="/verificar/:code" element={<VerifyCredential />} />
           <Route path="/onboarding" element={<ProtectedRoute onboardingOnly><Onboarding /></ProtectedRoute>} />
 
           {/* Setter routes — studentOnly: la cuenta admin nunca debe quedar en

@@ -6,6 +6,17 @@ import { loadPassportSources } from './passportData';
 import { buildPassportEvidence, passportFromRow } from './passportModel';
 import { buildPassportDocument, passportDocumentTitle } from './passportDocumentModel';
 import PassportDocument from './PassportDocument';
+import { getTrainingCertificateStatus } from '../credentials/credentialsApi';
+import { credentialVerifyUrl } from '../credentials/credentialUrls';
+
+// Solo la constancia ACTIVA emitida por el servidor; si no hay o no se pudo
+// leer, el documento omite la sección de credenciales.
+const credentialsFromStatus = (status) => {
+  const c = status?.credential;
+  if (!c || c.status !== 'active') return [];
+  return [{ id: c.public_code, title: c.title, issuedBy: c.issuer, issuedAt: c.issued_at,
+    code: c.public_code, verifyUrl: credentialVerifyUrl(c.public_code), isTest: c.is_test === true }];
+};
 
 // Espera fuentes e imágenes del documento antes de imprimir, para que el PDF
 // no salga sin la foto o con la tipografía de reserva.
@@ -30,8 +41,12 @@ const PassportProfessionalView = () => {
 
   useEffect(() => {
     let active = true;
-    loadPassportSources({ userId: user.id, refreshUser, fallbackSetScore: user.set_score })
-      .then((result) => { if (active) setSources(result); });
+    Promise.all([
+      loadPassportSources({ userId: user.id, refreshUser, fallbackSetScore: user.set_score }),
+      getTrainingCertificateStatus(),
+    ]).then(([result, certificate]) => {
+      if (active) setSources({ ...result, credentials: credentialsFromStatus(certificate.status) });
+    });
     return () => { active = false; };
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -54,7 +69,7 @@ const PassportProfessionalView = () => {
       avatarUrl: user.avatar_url,
       passport: sources.passportRow ? passportFromRow(sources.passportRow) : null,
       evidence: buildPassportEvidence({ sessions: sources.sessions, setScore: sources.setScore }),
-      credentials: [],
+      credentials: sources.credentials,
       generatedAt,
     });
   }, [sources, user.name, user.avatar_url, generatedAt]);

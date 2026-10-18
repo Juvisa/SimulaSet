@@ -168,6 +168,7 @@
 /* ── Credenciales verificadas (solo con registros oficiales) ── */
 .spp-credentials { padding: 0; list-style: none; }
 .spp-credentials li { padding: 2mm 0; border-bottom: 0.2mm solid var(--spp-line); break-inside: avoid; }
+.spp-credential-verify { margin-top: 0.8mm; color: var(--spp-muted); font-size: 8.5pt; overflow-wrap: anywhere; }
 
 /* ── Pie ── */
 .spp-footer {

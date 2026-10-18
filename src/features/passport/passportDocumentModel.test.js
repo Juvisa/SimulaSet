@@ -118,7 +118,18 @@ describe('documento — credenciales y privacidad', () => {
   it('un registro oficial completo sí se muestra', () => {
     const doc = build({ credentials: [{ id: 'c1', title: 'Constancia', issuedBy: 'Digital SET', issuedAt: '2026-10-01T12:00:00Z' }] });
     expect(doc.verified).toHaveLength(1);
-    expect(doc.verified[0]).toMatchObject({ title: 'Constancia', issuedBy: 'Digital SET' });
+    expect(doc.verified[0]).toMatchObject({ title: 'Constancia', issuedBy: 'Digital SET', code: '', verifyUrl: '', isTest: false });
+  });
+
+  it('la constancia emitida muestra su código, su verificación pública y si es de prueba', () => {
+    const doc = build({ credentials: [{
+      id: 'DSF-1A2B-3C4D-5E6F-7A8B', title: 'Constancia de Formación Digital SET', issuedBy: 'DIGITAL SET', issuedAt: '2026-10-17T23:30:25Z',
+      code: 'DSF-1A2B-3C4D-5E6F-7A8B', verifyUrl: 'https://project-jscj2.vercel.app/verificar/DSF-1A2B-3C4D-5E6F-7A8B', isTest: true,
+    }] });
+    expect(doc.verified[0]).toMatchObject({
+      title: 'Constancia de Formación Digital SET', issuedBy: 'DIGITAL SET', code: 'DSF-1A2B-3C4D-5E6F-7A8B',
+      verifyUrl: 'https://project-jscj2.vercel.app/verificar/DSF-1A2B-3C4D-5E6F-7A8B', isTest: true,
+    });
   });
 
   it('no incluye correo ni datos de contacto aunque vengan en la entrada', () => {

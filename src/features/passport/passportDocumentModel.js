@@ -6,7 +6,8 @@
 //   - evidencia registrada en SimulaSET tal cual la compone
 //     buildPassportEvidence (profiles.set_score + practiceLevel.js);
 //   - credenciales verificadas únicamente si se reciben registros oficiales
-//     de emisión (hoy no existe ninguno: el bloque se omite).
+//     de emisión del servidor (hoy, la Constancia de Formación Digital SET
+//     activa); sin ninguno, el bloque se omite.
 // Los campos vacíos se omiten; nunca se rellena con contenido inventado. No
 // incluye correo ni otros datos de contacto.
 
@@ -64,11 +65,20 @@ export const buildPassportDocument = ({ name, avatarUrl, passport, evidence, cre
     byMode: (ev.byMode || []).filter(m => m.simulations > 0).map(m => ({ label: MODE_LABELS[m.mode] || m.mode, simulations: m.simulations })),
   } : null;
 
-  // Solo registros oficiales de emisión (id + título + emisor + fecha). Hoy no
-  // existen: el caller pasa [] y la sección no se renderiza.
+  // Solo registros oficiales de emisión (id + título + emisor + fecha), con su
+  // código y dirección de verificación pública si los traen. Sin registros, la
+  // sección no se renderiza.
   const verified = (Array.isArray(credentials) ? credentials : [])
     .filter(c => c && c.id && text(c.title) && text(c.issuedBy) && c.issuedAt)
-    .map(c => ({ id: c.id, title: text(c.title), issuedBy: text(c.issuedBy), issuedAt: formatGeneratedAt(c.issuedAt) }));
+    .map(c => ({
+      id: c.id,
+      title: text(c.title),
+      issuedBy: text(c.issuedBy),
+      issuedAt: formatGeneratedAt(c.issuedAt),
+      code: text(c.code),
+      verifyUrl: text(c.verifyUrl),
+      isTest: c.isTest === true,
+    }));
 
   return {
     name: text(name) || 'Alumno de SimulaSET',
