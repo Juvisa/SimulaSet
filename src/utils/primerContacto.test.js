@@ -189,17 +189,19 @@ describe('prompt del prospecto (Primer contacto)', () => {
     expect(buildPrimerContactoSystemPrompt(PROJECT, { ...PROFILE, resistencia: 'alta' })).toContain('máximo 14 palabras por mensaje');
     expect(prompt).toContain('Nunca repites ni copias el mensaje del setter');
   });
-  it('precio: insiste ante evasivas y se despide tras las que permita su resistencia', () => {
+  it('precio: insiste ante evasivas; cuándo se despide lo decide el código, no el prompt', () => {
     expect(prompt).toContain('insistes con naturalidad');
-    expect(prompt).toContain('Tras 3 evasivas seguidas, te despides');
-    expect(buildPrimerContactoSystemPrompt(PROJECT, { ...PROFILE, resistencia: 'alta' })).toContain('Tras 2 evasivas seguidas');
+    expect(prompt).toContain('Cuándo te cansas lo indica la situación del turno');
+    expect(prompt).not.toMatch(/Tras \d evasivas/);
   });
   it('acepta respuestas honestas sobre lo no documentado y no inventa la oferta', () => {
     expect(prompt).toContain('responde con honestidad que lo verán en la llamada, lo aceptas');
     expect(prompt).toContain('Nunca inventes datos de la oferta');
   });
   it('no fuerza la cita y define la aceptación explícita (C4)', () => {
-    expect(prompt).toContain('Con encaje "bajo", no aceptas la cita');
+    expect(prompt).toContain('No es obligatorio aceptar: también puedes condicionarla o decir que no');
+    expect(buildPrimerContactoSystemPrompt(PROJECT, { ...PROFILE, encaje: 'bajo', incompatibilidad: 'definitiva', motivo_no_encaje: 'cierra el consultorio en un año' }))
+      .toContain('bajo (definitivo): no te conviene porque cierra el consultorio en un año');
     expect(prompt).toContain('"si": aceptas la llamada o un día/horario');
     expect(prompt).toContain('"condicionada": dices que sí pero pones una condición previa');
     expect(prompt).toContain('"acepta_cita": "no"');
@@ -283,5 +285,57 @@ describe('generación del perfil en la app (fetch simulado)', () => {
     const err = await generateProspectProfile(PROJECT, 'primer_contacto', { temperatura: 'tibio', canal: 'WhatsApp', resistencia: 'media' }).catch((e) => e);
     expect(err).toBeInstanceOf(AiRequestError);
     expect(err.message).toBe('Límite alcanzado');
+  });
+});
+
+describe('ronda 3 · variedad y encaje bajo', () => {
+  const draw = (i, config = { temperatura: 'tibio' }, overrides) => drawProfileSeeds(config, () => ((i * 37) % 100 + 0.5) / 100, overrides);
+  it('forma de trabajo, posición en los rangos del avatar y rasgo varían (ronda 2: 15 de 16 con «2 sillones»)', () => {
+    const seeds = Array.from({ length: 40 }, (_, i) => draw(i));
+    expect(new Set(seeds.map((s) => s.contexto)).size).toBeGreaterThanOrEqual(4);
+    expect(new Set(seeds.map((s) => s.posicion_rango)).size).toBeGreaterThanOrEqual(3);
+    expect(new Set(seeds.map((s) => s.rasgo)).size).toBeGreaterThanOrEqual(5);
+    const prompt = buildPrimerContactoProfilePrompt(PROJECT, { temperatura: 'tibio', resistencia: 'media' }, seeds[0]);
+    expect(prompt).toContain(`este prospecto está ${seeds[0].posicion_rango}`);
+    expect(prompt).toContain('Todo en español');
+  });
+  it('fuera del rango del avatar solo con encaje bajo', () => {
+    for (let i = 0; i < 40; i += 1) {
+      expect(draw(i, { temperatura: 'frio' }, { encaje: 'alto' }).posicion_rango).not.toMatch(/fuera del rango/);
+    }
+  });
+  it('encaje bajo: definitivo o superable, con un motivo; las formas de pago solo si hay precio documentado', () => {
+    const lows = Array.from({ length: 40 }, (_, i) => draw(i, { temperatura: 'frio' }, { encaje: 'bajo' }));
+    expect(new Set(lows.map((s) => s.incompatibilidad))).toEqual(new Set(['definitiva', 'superable']));
+    expect(lows.every((s) => s.motivo_no_encaje)).toBe(true);
+    const pago = /formas de pago/;
+    expect(lows.some((s) => pago.test(s.motivo_no_encaje))).toBe(false);
+    const withPrice = Array.from({ length: 40 }, (_, i) => draw(i, { temperatura: 'frio', priceDocumented: true }, { encaje: 'bajo', incompatibilidad: 'superable' }));
+    expect(withPrice.some((s) => pago.test(s.motivo_no_encaje))).toBe(true);
+    expect(draw(1, { temperatura: 'frio' }, { encaje: 'alto' })).toMatchObject({ incompatibilidad: null, motivo_no_encaje: null });
+  });
+  it('el perfil conserva el tipo de incompatibilidad de la semilla y, si falta el motivo, usa el de la semilla', () => {
+    const seeds = draw(3, { temperatura: 'frio' }, { encaje: 'bajo', incompatibilidad: 'superable' });
+    const p = normalizePrimerContactoProfile({ identidad: 'x', situacion: 'y', motivacion: 'z', que_lo_cambiaria: 'Saber que hay cuotas' }, seeds);
+    expect(p).toMatchObject({ encaje: 'bajo', incompatibilidad: 'superable', motivo_no_encaje: seeds.motivo_no_encaje, que_lo_cambiaria: 'Saber que hay cuotas', campos_faltantes: [] });
+    const prompt = buildPrimerContactoProfilePrompt(PROJECT, { temperatura: 'frio', resistencia: 'media' }, seeds);
+    expect(prompt).toContain('Es SUPERABLE');
+    expect(prompt).toContain('"que_lo_cambiaria"');
+    const alto = buildPrimerContactoProfilePrompt(PROJECT, { temperatura: 'frio', resistencia: 'media' }, draw(3, { temperatura: 'frio' }, { encaje: 'alto' }));
+    expect(alto).not.toContain('motivo_no_encaje');
+  });
+  it('paciencia por resistencia (presión tolerada)', () => {
+    expect([describeBehavior('frio', 'baja').paciencia, describeBehavior('frio', 'media').paciencia, describeBehavior('frio', 'alta').paciencia]).toEqual([4, 3, 2]);
+  });
+});
+
+describe('ronda 3 · calibración del coaching', () => {
+  const coach = buildPrimerContactoCoachPrompt(PROJECT);
+  it('incluye ejemplos de 1–3 y de 9–10, e identificar que no califica puede valer 10', () => {
+    expect(coach).toContain('EJEMPLOS DE CALIBRACIÓN');
+    expect(coach).toMatch(/- 1–2: mandar la oferta completa con un enlace/);
+    expect(coach).toMatch(/- 10: [^\n]*reconocerlo con respeto, sin insistir/);
+    expect(coach).toContain('Identificar bien que alguien no califica es un acierto, aunque no haya cita');
+    expect(coach).toContain('No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja');
   });
 });

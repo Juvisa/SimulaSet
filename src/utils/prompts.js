@@ -187,7 +187,54 @@ Los valores válidos de estado_lead: cerrado | resistente | abierto | interesado
 //      mismo que sabía el alumno al escribir y no puede revelar nada oculto.
 // El perfil privado nunca se muestra en pantalla. Ver la limitación temporal
 // documentada en utils/primerContacto.js.
-export const buildPrimerContactoSystemPrompt = (project, prospectProfile) => {
+const FIT_FOR_PROSPECT = {
+  alto: 'alto: la oferta te conviene; igual necesitas sentir que te entendieron antes de aceptar una llamada.',
+  medio: 'medio: te podría servir, pero tienes una duda real que tiene que resolverse antes de aceptar.',
+};
+const prospectFitText = (p) => {
+  if (p.encaje !== 'bajo') return FIT_FOR_PROSPECT[p.encaje] || FIT_FOR_PROSPECT.medio;
+  const motivo = p.motivo_no_encaje || 'la oferta no encaja con tu situación';
+  if (p.incompatibilidad === 'superable') {
+    return `bajo (superable): crees que no es para ti porque ${motivo}. Si el setter te aclara con información concreta del proyecto${p.que_lo_cambiaria ? ` (${p.que_lo_cambiaria})` : ''}, puedes reconsiderarlo con naturalidad; si no, no aceptas.`;
+  }
+  return `bajo (definitivo): no te conviene porque ${motivo}. Es un hecho de tu vida, no una duda: ninguna información lo cambia y no aceptas una cita.`;
+};
+
+// Situación del turno, calculada por el código (primerContactoControl.js):
+// va al FINAL del prompt para que pese más que el resto en chats largos.
+export const buildPrimerContactoTurnDirective = (plan, profile) => {
+  if (!plan) return '';
+  const b = describeBehavior(profile.temperatura, profile.resistencia);
+  const lines = [];
+  if (plan.despedida === 'evasivas') {
+    lines.push(`- El setter evitó responder tu pregunta de precio ${plan.evasivas} veces. En este mensaje te despides con cortesía y cierras la conversación, sin hacer otra pregunta ("acepta_cita": "no", "estado_lead": "cerrado").`);
+  } else if (plan.despedida === 'presion') {
+    lines.push(`- El setter te presionó ${plan.presiones} veces (cita sin conocerte o enlace para comprar). En este mensaje te despides con cortesía y cierras la conversación ("acepta_cita": "no", "estado_lead": "cerrado").`);
+  } else {
+    if (plan.evasion) lines.push(`- El setter no respondió tu pregunta de precio (evasiva ${plan.evasivas} de ${plan.limiteEvasivas}). Insistes con naturalidad.`);
+    else if (plan.priceAsked && plan.priceAnswered) lines.push('- El setter respondió tu pregunta de precio: lo tomas en cuenta (puede generarte una objeción real, no un rechazo automático).');
+    if (plan.pitch) lines.push('- El setter te mandó la oferta o un enlace sin entenderte: respondes más corto y con menos interés.');
+    else if (plan.presion) lines.push(`- El setter te propone una cita sin conocer todavía tu situación y tu motivo (insistencia ${plan.presiones} de ${plan.limitePaciencia}): respondes con menos interés.`);
+    if (!plan.puedeAceptar) {
+      const why = [];
+      if (plan.bloqueos.includes('encaje_definitivo')) why.push('la oferta no te conviene');
+      if (plan.bloqueos.includes('precio_pendiente')) why.push('todavía no te respondieron el precio (si te proponen la cita, la condicionas a saberlo)');
+      if (plan.bloqueos.includes('sin_descubrimiento')) why.push('el setter todavía no sabe tu situación y por qué escribiste');
+      lines.push(`- En este mensaje NO aceptas una cita ("acepta_cita": "no" o "condicionada"): ${why.join('; ')}. No cuentes por tu cuenta lo que no te preguntaron.`);
+    } else if (plan.requiereEvidencia) {
+      lines.push('- Solo aceptas una cita si el setter te aclaró tu duda con información concreta; en ese caso copia en "cambio_encaje" la frase exacta del setter que te hizo cambiar de opinión.');
+    } else {
+      lines.push('- Si te proponen una cita, decides tú según tu perfil y la conversación: puedes aceptarla, condicionarla o no aceptarla.');
+    }
+  }
+  lines.push(`- Máximo ${b.maxPalabras} palabras. Solo en español.`);
+  return `
+SITUACIÓN DE ESTE TURNO (la calcula el sistema; síguela):
+${lines.join('\n')}
+`;
+};
+
+export const buildPrimerContactoSystemPrompt = (project, prospectProfile, plan = null) => {
   const b = describeBehavior(prospectProfile.temperatura, prospectProfile.resistencia);
   const list = (items) => (Array.isArray(items) && items.length ? items.map((x) => `  • ${x}`).join('\n') : '  • (ninguno)');
   return `
@@ -207,7 +254,7 @@ TU PERFIL PRIVADO (el setter NO lo conoce; nunca lo recites ni lo resumas):
 ${list(prospectProfile.objeciones)}
 - Hechos que solo cuentas si te preguntan bien:
 ${list(prospectProfile.hechos_ocultos)}
-- Encaje real con la oferta: ${prospectProfile.encaje}
+- Encaje real con la oferta: ${prospectFitText(prospectProfile)}
 - Forma de escribir: ${prospectProfile.estilo || 'natural'}
 - Canal: ${prospectProfile.canal}
 
@@ -223,10 +270,11 @@ CÓMO RESPONDES:
 - Revelas tu historia de a poco y en el orden que tenga sentido según lo que te pregunten; nunca la cuentes entera ni sigas un guion fijo.
 - Los hechos ocultos solo salen ante preguntas abiertas y pertinentes; una pregunta cerrada o genérica recibe una respuesta corta.
 - Si el setter te manda la oferta, un enlace o un pitch sin entenderte: respondes más corto y con menos interés.
-- Si preguntas el precio y recibes una evasiva: insistes con naturalidad ("ya, pero ¿más o menos cuánto?"). Tras ${b.evasivas} evasivas seguidas, te despides con cortesía.
+- Si preguntas el precio y recibes una evasiva: insistes con naturalidad ("ya, pero ¿más o menos cuánto?"). Cuándo te cansas lo indica la situación del turno.
 - Si te dan una respuesta honesta sobre el precio: la tomas en cuenta y sigues la conversación (puede generarte una objeción real, no un rechazo automático).
 - Si preguntas algo que el proyecto no documenta (qué incluye, cuánto tiempo exige, garantías) y el setter responde con honestidad que lo verán en la llamada, lo aceptas; puedes volver a preguntarlo una vez, sin castigarlo.
-- NO aceptas una cita si el setter no entendió tu situación y por qué escribiste. Con encaje "bajo", no aceptas la cita aunque te la ofrezcan: lo dices con naturalidad y, si el setter lo reconoce con respeto, cierras bien.
+- Una cita se acepta cuando el setter entendió tu situación y por qué escribiste, y la propuesta tiene sentido para ti. No es obligatorio aceptar: también puedes condicionarla o decir que no.
+- Con encaje bajo: si te preguntan bien, cuentas el motivo con naturalidad. Si el setter lo reconoce con respeto, cierras bien ("estado_lead": "no_califica").
 - Nunca inventes datos de la oferta (precio, garantías, condiciones, bonos, características): si el setter afirma algo que no está documentado, puedes dudar o pedir detalles.
 - Eres una persona creíble: ni hostil sin motivo ni demasiado fácil.
 
@@ -243,13 +291,21 @@ ESTADOS ("estado_lead"):
 - no_califica: quedó claro, con respeto, que la oferta no te conviene
 - cerrado: te fuiste o cortaste la conversación
 
+LO QUE CUENTAS ("revela"): las partes de tu perfil que cuentas POR PRIMERA VEZ en este mensaje:
+- "situacion": tu situación actual o a qué te dedicas
+- "motivo": por qué escribiste hoy o qué quieres resolver
+- "no_encaje": el motivo por el que la oferta no te conviene
+Si no cuentas nada nuevo, va vacío: [].
+
 RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
 {
   "respuesta_prospecto": "tu mensaje",
+  "revela": [],
   "acepta_cita": "no",
+  "cambio_encaje": "",
   "estado_lead": "abierto"
 }
-`;
+${buildPrimerContactoTurnDirective(plan, prospectProfile)}`;
 };
 
 // Coaching de Primer contacto. Recibe solo lo documentado del proyecto y la
@@ -275,6 +331,7 @@ CRITERIOS:
 - Premia: preguntas abiertas que construyen sobre lo que dijo el prospecto, activar el problema sin presión, respuestas honestas, proponer la cita cuando ya se entendió su situación y su motivo, y reconocer con respeto que no hay encaje (es un buen resultado: puntúalo alto).
 - ${priceRule}
 - Si el prospecto preguntó algo que el proyecto no documenta (qué incluye, tiempo, garantías), la respuesta honesta "eso lo detalla el equipo en la llamada" es correcta.
+- No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja: cerrar bien también es el objetivo.
 - Penaliza: evasivas reiteradas sobre el precio, afirmar precios, garantías, plazos, horas, contenidos o resultados que no estén documentados, pitch prematuro, interrogatorio en lista, ignorar una pregunta directa del prospecto y proponer la cita sin haber descubierto nada.
 
 REGLAS DEL FEEDBACK:
@@ -282,7 +339,13 @@ REGLAS DEL FEEDBACK:
 - "alerta" solo para: evasiva reiterada de precio, promesa no documentada, pitch o cita sin descubrimiento, insistir en la cita después de un no. En los demás casos, "alerta" va vacía. Máximo 20 palabras, sin mayúsculas de alarma.
 - Longitud: "que_hizo_bien" y "que_mejorar" máximo 25 palabras cada uno; "mensaje_alternativo" máximo 40 palabras (o vacío si el mensaje ya era muy bueno).
 - "etapa_set": exactamente "S", "E" o "T".
-- "puntuacion_mensaje": un número entero de 1 a 10, decidido DESPUÉS de escribir el feedback y coherente con él. Escala: 1–3 dañino o contraproducente; 4–5 débil; 6–7 correcto con algo importante que mejorar; 8–9 muy bueno; 10 excelente, sin nada relevante que mejorar. Nunca uses 0.
+- "puntuacion_mensaje": un número entero de 1 a 10, decidido DESPUÉS de escribir el feedback y coherente con él. Escala: 1–3 dañino o contraproducente; 4–5 débil; 6–7 correcto con algo importante que mejorar; 8 muy bueno; 9–10 excelente, sin nada relevante que mejorar. Nunca uses 0. Usa toda la escala: los extremos existen.
+
+EJEMPLOS DE CALIBRACIÓN (orientativos; adapta al caso):
+- 1–2: mandar la oferta completa con un enlace de compra sin haber preguntado nada; afirmar una garantía, un descuento o un resultado no documentado; insistir con la cita después de que el prospecto explicó que no es para él.
+- 3: tercera evasiva al precio cuando está documentado; proponer día y hora en el primer mensaje sin saber nada del prospecto.
+- 9: una pregunta abierta que retoma las palabras del prospecto y abre su motivo («Dijiste que este mes vino flojo, ¿qué pasó?»); responder el precio documentado con claridad y seguir con una pregunta pertinente.
+- 10: proponer la cita cuando el prospecto ya contó su situación y su motivo, conectándola con lo que dijo; o, cuando el prospecto ya contó por qué la oferta no le conviene, reconocerlo con respeto, sin insistir y dejando la puerta abierta. Identificar bien que alguien no califica es un acierto, aunque no haya cita.
 
 RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
 {

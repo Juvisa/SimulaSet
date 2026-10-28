@@ -77,11 +77,13 @@ export const TEMPERATURE_CONTEXT = Object.freeze({
 });
 
 // Parámetros observables por resistencia: longitud de los mensajes, cuánto
-// revela por pregunta y cuánta paciencia tiene con las evasivas.
+// revela por pregunta, cuántas evasivas de precio tolera y cuánta paciencia
+// tiene con la presión (citas propuestas sin descubrimiento, pitch con
+// enlace). Los límites los aplica el código (primerContactoControl.js).
 export const RESISTANCE_RULES = Object.freeze({
-  baja: Object.freeze({ maxPalabras: 30, revela: 'hasta dos datos por pregunta abierta', evasivas: 3, texto: 'Responde con buena disposición y cuenta cosas si le preguntan bien. Pocas objeciones.' }),
-  media: Object.freeze({ maxPalabras: 22, revela: 'un dato por pregunta abierta; nada ante preguntas cerradas', evasivas: 3, texto: 'Responde corto al principio y se abre cuando siente que lo entienden. Plantea una o dos dudas reales.' }),
-  alta: Object.freeze({ maxPalabras: 14, revela: 'un dato solo ante una pregunta abierta y pertinente; en los dos primeros mensajes, casi nada personal', evasivas: 2, texto: 'Es escéptico y seco. Plantea objeciones firmes y se va si no lo escuchan.' }),
+  baja: Object.freeze({ maxPalabras: 30, revela: 'hasta dos datos por pregunta abierta', evasivas: 3, paciencia: 4, texto: 'Responde con buena disposición y cuenta cosas si le preguntan bien. Pocas objeciones.' }),
+  media: Object.freeze({ maxPalabras: 22, revela: 'un dato por pregunta abierta; nada ante preguntas cerradas', evasivas: 3, paciencia: 3, texto: 'Responde corto al principio y se abre cuando siente que lo entienden. Plantea una o dos dudas reales.' }),
+  alta: Object.freeze({ maxPalabras: 14, revela: 'un dato solo ante una pregunta abierta y pertinente; en los dos primeros mensajes, casi nada personal', evasivas: 2, paciencia: 2, texto: 'Es escéptico y seco. Plantea objeciones firmes y se va si no lo escuchan.' }),
 });
 export const RESISTANCE_CONTEXT = Object.freeze(Object.fromEntries(Object.entries(RESISTANCE_RULES).map(([k, v]) => [k, v.texto])));
 
@@ -114,6 +116,7 @@ export const describeBehavior = (temperatura, resistencia) => {
     maxPalabras: rules.maxPalabras,
     revela: rules.revela,
     evasivas: rules.evasivas,
+    paciencia: rules.paciencia,
   };
 };
 
@@ -121,6 +124,9 @@ export const describeBehavior = (temperatura, resistencia) => {
 // En la primera ronda con Haiku, sin semillas, 21 de 21 perfiles de
 // odontología tenían «2 sillones», casi todos se llamaban Martín o Marcelo y
 // el encaje salió «alto» en 28 de 28. La variedad y el encaje se deciden aquí.
+// En la segunda, con semillas de nombre y ciudad, 15 de 16 seguían con «2
+// sillones» (el valor central del avatar «1 a 3»): ahora también se decide la
+// forma de trabajo, la posición dentro de los rangos del avatar y un rasgo.
 const NAMES = Object.freeze([
   'Lucía Herrera', 'Andrés Molina', 'Camila Duarte', 'Jorge Salinas', 'Valentina Paz', 'Ricardo Ibáñez', 'Fernanda Rojas',
   'Esteban Quiroga', 'Daniela Ortiz', 'Hugo Cárdenas', 'Paola Méndez', 'Sebastián Lara', 'Natalia Fuentes', 'Raúl Benítez',
@@ -145,9 +151,45 @@ const WRITING_STYLES = Object.freeze([
   'escribe rápido, con alguna falta de ortografía leve', 'hace preguntas directas', 'escribe cálido pero cauteloso',
 ]);
 const AGE_RANGES = Object.freeze(['25 a 32', '33 a 40', '41 a 48', '49 a 58']);
+const WORK_CONTEXTS = Object.freeze([
+  'trabaja por su cuenta, sin equipo', 'tiene una persona que lo ayuda', 'lidera un equipo pequeño',
+  'comparte las decisiones con un socio o su pareja', 'tiene horarios rígidos por otro trabajo', 'combina dos actividades',
+]);
+// Dónde cae el prospecto cuando el cliente ideal da un rango («1 a 3 sillones»,
+// «entre el 50 y el 70 %»). Fuera del rango, solo con encaje bajo.
+const RANGE_POSITIONS = Object.freeze(['en el extremo bajo', 'en el extremo alto', 'en un valor intermedio que no sea el número central']);
+const OUT_OF_RANGE = 'fuera del rango (por debajo o por encima)';
+const TRAITS = Object.freeze([
+  'es analítico y pide números concretos', 'ya pagó un curso que no terminó', 'tiene poco tiempo por la familia',
+  'desconfía de las ventas por chat', 'es entusiasta pero disperso', 'decide rápido cuando algo le cierra',
+  'necesita consultarlo con alguien', 'le preocupa sobre todo el tiempo que exige',
+]);
 
 // Encaje real del prospecto con la oferta. Algunos no califican, como en la vida real.
 export const FIT_WEIGHTS = Object.freeze([['alto', 0.55], ['medio', 0.25], ['bajo', 0.2]]);
+
+// Encaje bajo: el motivo y si es definitivo o superable.
+// - definitiva: un HECHO de su vida (no tiene el problema, deja la actividad,
+//   no es su nicho, busca otra cosa). Ninguna información lo cambia: nunca
+//   acepta la cita.
+// - superable: una DUDA o un malentendido que lo documentado del proyecto
+//   puede aclarar (formas de pago, a quién va dirigido, qué promete). Puede
+//   aceptar si el alumno lo aclara con esa información (lo verifica el código).
+export const INCOMPATIBILITY_WEIGHTS = Object.freeze([['definitiva', 0.5], ['superable', 0.5]]);
+export const NO_FIT_REASONS = Object.freeze({
+  definitiva: Object.freeze([
+    'no tiene realmente el problema que resuelve la oferta',
+    'está por dejar o cambiar su actividad en poco tiempo',
+    'su situación no corresponde al cliente ideal del proyecto',
+    'busca algo distinto de lo que ofrece el proyecto',
+  ]),
+  superable: Object.freeze([
+    'cree que la oferta no es para alguien en su situación, por un malentendido sobre a quién va dirigida',
+    'duda de que la promesa aplique a su caso porque entendió mal qué ofrece',
+  ]),
+  // Solo si el proyecto documenta el precio.
+  superablePrecio: 'cree que no puede pagarlo de una sola vez y no sabe qué formas de pago hay',
+});
 
 // Tipos de apertura por temperatura. Los de texto fijo se usan tal cual.
 export const OPENING_TYPES = Object.freeze({
@@ -186,7 +228,7 @@ export const drawProfileSeeds = (config, random = Math.random, overrides = {}) =
   const apertura = overrides.apertura
     ? (OPENING_TYPES[temperatura].find((o) => o.tipo === overrides.apertura) || { tipo: overrides.apertura, texto: overrides.apertura })
     : weighted(OPENING_TYPES[temperatura], random, (o) => o.peso);
-  return {
+  const base = {
     nombre: overrides.nombre || choice(NAMES, random),
     edad: overrides.edad || choice(AGE_RANGES, random),
     lugar: overrides.lugar || choice(PLACES, random),
@@ -194,6 +236,24 @@ export const drawProfileSeeds = (config, random = Math.random, overrides = {}) =
     disparador: overrides.disparador || choice(TRIGGERS, random),
     estilo: overrides.estilo || choice(WRITING_STYLES, random),
     encaje: overrides.encaje || weighted(FIT_WEIGHTS, random, ([, w]) => w)[0],
+  };
+  // Las semillas nuevas se sortean DESPUÉS de las anteriores: con el mismo
+  // generador, nombre, ciudad, encaje… salen igual que antes.
+  const contexto = overrides.contexto || choice(WORK_CONTEXTS, random);
+  const posicion_rango = overrides.posicion_rango
+    || (base.encaje === 'bajo' && random() < 0.4 ? OUT_OF_RANGE : choice(RANGE_POSITIONS, random));
+  const rasgo = overrides.rasgo || choice(TRAITS, random);
+  let incompatibilidad = null;
+  let motivo_no_encaje = null;
+  if (base.encaje === 'bajo') {
+    incompatibilidad = overrides.incompatibilidad || weighted(INCOMPATIBILITY_WEIGHTS, random, ([, w]) => w)[0];
+    const reasons = incompatibilidad === 'definitiva'
+      ? NO_FIT_REASONS.definitiva
+      : [...NO_FIT_REASONS.superable, ...(config?.priceDocumented ? [NO_FIT_REASONS.superablePrecio] : [])];
+    motivo_no_encaje = overrides.motivo_no_encaje || choice(reasons, random);
+  }
+  return {
+    ...base, contexto, posicion_rango, rasgo, incompatibilidad, motivo_no_encaje,
     apertura: { tipo: apertura.tipo, texto: apertura.texto },
   };
 };
@@ -202,7 +262,21 @@ export const drawProfileSeeds = (config, random = Math.random, overrides = {}) =
 const FIT_GUIDE = {
   alto: 'La oferta le conviene de verdad: su problema es justo el que el proyecto resuelve.',
   medio: 'Le podría servir, pero hay una duda real (tiempo, dinero, momento o si es para él) que tendría que resolverse.',
-  bajo: 'La oferta NO le conviene ahora por una razón concreta y creíble (no es su nicho, no tiene el problema, no puede asumirlo o busca otra cosa). Esa razón va en los hechos ocultos.',
+  bajo: 'La oferta NO le conviene ahora.',
+};
+const fitLines = (s) => {
+  if (s.encaje !== 'bajo') return '';
+  const kind = s.incompatibilidad === 'superable'
+    ? 'Es SUPERABLE: es una duda o un malentendido que la información documentada del proyecto podría aclarar.'
+    : 'Es DEFINITIVA: es un hecho de su vida, no una duda; ninguna información lo cambia.';
+  return `\n- Motivo del no encaje: ${s.motivo_no_encaje}. ${kind}`;
+};
+const fitFields = (s) => {
+  if (s.encaje !== 'bajo') return '';
+  const change = s.incompatibilidad === 'superable'
+    ? '\n  "que_lo_cambiaria": "el dato documentado del proyecto que aclararía su duda",'
+    : '';
+  return `\n  "motivo_no_encaje": "el motivo concreto, en sus palabras",${change}`;
 };
 
 // Esquema compacto: debe caber holgado en los 500 tokens de simulator_prospect.
@@ -226,7 +300,10 @@ DATOS FIJOS DE ESTE PROSPECTO (respétalos):
 - Momento: ${s.etapa}
 - Por qué escribe hoy: ${s.disparador}
 - Forma de escribir: ${s.estilo}
-- Encaje con la oferta: ${s.encaje}. ${FIT_GUIDE[s.encaje] || FIT_GUIDE.medio}
+- Cómo trabaja: ${s.contexto || 'a tu criterio'}
+- Rasgo personal: ${s.rasgo || 'a tu criterio'}
+- Si el cliente ideal da un rango numérico, este prospecto está ${s.posicion_rango || 'en el extremo bajo'}
+- Encaje con la oferta: ${s.encaje}. ${FIT_GUIDE[s.encaje] || FIT_GUIDE.medio}${fitLines(s)}
 
 CONTEXTO:
 - Llega por un anuncio, una publicación o un contenido del experto y escribe primero.
@@ -237,7 +314,8 @@ CONTEXTO:
 
 REGLAS:
 - Coherente con el cliente ideal del proyecto, pero con detalles propios: NO copies las cifras ni las frases del avatar; inventa cifras y circunstancias plausibles y distintas.
-- Cada campo de texto en máximo 20 palabras; listas de máximo 3 elementos.
+- Cada campo de texto en máximo 16 palabras; listas de máximo 3 elementos.
+- Todo en español.
 - ${opening}
 
 RESPONDE SOLO EN JSON (sin markdown):
@@ -250,7 +328,7 @@ RESPONDE SOLO EN JSON (sin markdown):
   "motivacion": "por qué escribió hoy",
   "objeciones": ["objeción 1", "objeción 2"],
   "hechos_ocultos": ["solo lo cuenta si le preguntan bien"],
-  "encaje": "${s.encaje}",
+  "encaje": "${s.encaje}",${fitFields(s)}
   "apertura_inicial": "${s.apertura?.texto || '…'}"
 }
 `;
@@ -273,6 +351,18 @@ export const normalizePrimerContactoProfile = (raw, seeds = null) => {
   profile.encaje = FIT.includes(fit) ? fit : 'medio';
   profile.apertura_inicial = sanitizeText(seeds?.apertura?.texto || p.apertura_inicial, 200);
   profile.estilo = sanitizeText(seeds?.estilo || '', 80);
+  // Encaje bajo: si es definitivo o superable lo decide el código. Si la IA no
+  // escribe el motivo, se usa el de la semilla (el prospecto nunca queda sin
+  // razón para no aceptar).
+  if (profile.encaje === 'bajo') {
+    profile.incompatibilidad = seeds?.incompatibilidad === 'superable' ? 'superable' : 'definitiva';
+    profile.motivo_no_encaje = sanitizeText(p.motivo_no_encaje) || sanitizeText(seeds?.motivo_no_encaje || '');
+    profile.que_lo_cambiaria = profile.incompatibilidad === 'superable' ? sanitizeText(p.que_lo_cambiaria) : '';
+  } else {
+    profile.incompatibilidad = null;
+    profile.motivo_no_encaje = '';
+    profile.que_lo_cambiaria = '';
+  }
   profile.campos_faltantes = ESSENTIAL_PROFILE_FIELDS.filter((k) => (k === 'nombre' ? !profile.nombre || profile.nombre === 'Prospecto' : !profile[k]));
   return profile;
 };

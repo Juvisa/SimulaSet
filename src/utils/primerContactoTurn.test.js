@@ -4,9 +4,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS,
-  generatePrimerContactoProfile, runCoachTurn, runPrimerContactoTurn, runProspectTurn,
+  generatePrimerContactoProfile, runCoachTurn, runPrimerContactoTurn, runProspectTurn, startPrimerContactoTurn,
 } from './primerContactoTurn';
 import { PROFILE, PROJECT } from './primerContacto.fixtures';
+import { createControlState } from './primerContactoControl';
 
 const HISTORY = [
   { role: 'prospect', content: 'Info' },
@@ -99,7 +100,9 @@ describe('C5 · eco', () => {
 });
 
 describe('C4 · aceptación de la cita', () => {
-  const turn = (raw) => runProspectTurn({ call: fakeCall({ prospect: [raw] }), project: PROJECT, profile: PROFILE, history: HISTORY, setterText: '¿Te parece una llamada el jueves?' });
+  // El alumno ya conoce la situación y el motivo: la cita está permitida.
+  const discovered = { ...createControlState(PROFILE), revelado: ['situacion', 'motivo'] };
+  const turn = (raw, profile = PROFILE, control = discovered) => runProspectTurn({ call: fakeCall({ prospect: [raw] }), project: PROJECT, profile, history: HISTORY, setterText: '¿Te parece una llamada el jueves?', control });
   it('«Dale, el jueves» con acepta_cita "si" registra pidio_llamada aunque el modelo diga interesado (ronda 1: C07)', async () => {
     expect((await turn({ respuesta_prospecto: 'Dale, dale. Pero quiero que me expliquen paso a paso.', acepta_cita: 'si', estado_lead: 'interesado' })).estado_lead).toBe('pidio_llamada');
   });
@@ -109,8 +112,15 @@ describe('C4 · aceptación de la cita', () => {
   it('pedir información no es aceptar', async () => {
     expect((await turn({ respuesta_prospecto: '¿Qué incluye exactamente?', acepta_cita: 'no', estado_lead: 'interesado' })).estado_lead).toBe('interesado');
   });
-  it('no_califica y cerrado se respetan', async () => {
-    expect((await turn({ respuesta_prospecto: 'Gracias, no es para mí ahora.', acepta_cita: 'no', estado_lead: 'no_califica' })).estado_lead).toBe('no_califica');
+  it('no_califica se respeta cuando el encaje es bajo y el motivo ya salió', async () => {
+    const low = { ...PROFILE, encaje: 'bajo', incompatibilidad: 'definitiva', motivo_no_encaje: 'Cierra el consultorio' };
+    const r = await turn({ respuesta_prospecto: 'Gracias, no es para mí ahora.', acepta_cita: 'no', estado_lead: 'no_califica', revela: ['no_encaje'] }, low, createControlState(low));
+    expect(r).toMatchObject({ estado_lead: 'no_califica', desenlace: 'no_califica' });
+  });
+  it('con encaje alto, no_califica no se registra (queda resistente)', async () => {
+    const r = await turn({ respuesta_prospecto: 'Gracias, no es para mí ahora.', acepta_cita: 'no', estado_lead: 'no_califica' });
+    expect(r.estado_lead).toBe('resistente');
+    expect(r.prospectIssues).toContain('no_califica_no_permitido');
   });
 });
 
@@ -156,5 +166,85 @@ describe('perfil', () => {
     const call = vi.fn().mockRejectedValue(fatal);
     await expect(generatePrimerContactoProfile({ call, project: PROJECT, config: { temperatura: 'frio' }, isFatal: (e) => e === fatal })).rejects.toBe(fatal);
     expect(call).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('control de estados en el turno', () => {
+  const PROPOSE = '¿Te parece una llamada el jueves?';
+  it('el prompt del prospecto termina con la situación del turno calculada por el código', async () => {
+    const call = fakeCall();
+    await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE });
+    const [system] = call.forProspect()[0];
+    expect(system.trim().split('SITUACIÓN DE ESTE TURNO').length).toBe(2);
+    expect(system).toMatch(/NO aceptas una cita[\s\S]*el setter todavía no sabe tu situación y por qué escribiste[\s\S]*Máximo 22 palabras\. Solo en español\.\s*$/);
+  });
+  it('aceptar una cita no permitida: se repite una vez y, si insiste, se usa un respaldo (nunca se registra la cita)', async () => {
+    const accept = { respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'pidio_llamada', revela: [] };
+    const call = fakeCall({ prospect: [accept, accept] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE });
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call.mock.calls[1][0]).toContain('en este turno NO puedes aceptarla');
+    expect(r).toMatchObject({ estado_lead: 'abierto', acepta_cita: 'no', desenlace: 'abierta', fallback: 'sin_descubrimiento', retried: true });
+    expect(r.respuesta_prospecto).toBe('Antes de agendar, quiero entender bien de qué se trata.');
+  });
+  it('si el reintento corrige, se usa la respuesta de la IA', async () => {
+    const call = fakeCall({ prospect: [
+      { respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'pidio_llamada' },
+      { respuesta_prospecto: 'Antes cuéntame de qué se trata.', acepta_cita: 'no', estado_lead: 'abierto' },
+    ] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE });
+    expect(r).toMatchObject({ respuesta_prospecto: 'Antes cuéntame de qué se trata.', fallback: null, estado_lead: 'abierto' });
+  });
+  it('al llegar al límite de evasivas, el turno cierra la conversación aunque la IA no se despida', async () => {
+    const control = { ...createControlState(PROFILE), evasivas: 2 };
+    const history = [{ role: 'prospect', content: 'Ya, pero ¿cuánto cuesta?' }];
+    const call = fakeCall({ prospect: [
+      { respuesta_prospecto: 'Bueno, ¿y qué incluye?', acepta_cita: 'no', estado_lead: 'interesado' },
+      { respuesta_prospecto: 'Mira, así no sigo. Gracias.', acepta_cita: 'no', estado_lead: 'cerrado' },
+    ] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history, setterText: 'Eso lo vemos más adelante.', control });
+    expect(call.forProspect()[0][0]).toContain('te despides con cortesía y cierras la conversación');
+    expect(call.mock.calls[1][0]).toContain('te despides y cierras la conversación');
+    expect(r).toMatchObject({ estado_lead: 'cerrado', desenlace: 'despedida', respuesta_prospecto: 'Mira, así no sigo. Gracias.' });
+    expect(r.control.evasivas).toBe(3);
+  });
+  it('un mensaje demasiado largo se pide de nuevo más corto', async () => {
+    const long = { respuesta_prospecto: Array.from({ length: 40 }, () => 'palabra').join(' '), acepta_cita: 'no', estado_lead: 'abierto' };
+    const call = fakeCall({ prospect: [long, { respuesta_prospecto: 'Corto.', acepta_cita: 'no', estado_lead: 'abierto' }] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
+    expect(call.mock.calls[1][0]).toContain('máximo 22 palabras');
+    expect(r.respuesta_prospecto).toBe('Corto.');
+  });
+  it('el estado de control avanza turno a turno (lo revelado se acumula)', async () => {
+    const call = fakeCall({ prospect: [{ respuesta_prospecto: 'Agenda al 50 %, quiero otro consultorio.', acepta_cita: 'no', estado_lead: 'interesado', revela: ['situacion', 'motivo'] }] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
+    expect(r.control).toMatchObject({ turno: 1, revelado: ['situacion', 'motivo'] });
+    const call2 = fakeCall({ prospect: [{ respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'interesado' }] });
+    const r2 = await runProspectTurn({ call: call2, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE, control: r.control });
+    expect(r2).toMatchObject({ estado_lead: 'pidio_llamada', desenlace: 'cita_aceptada', fallback: null });
+  });
+});
+
+describe('respuesta progresiva', () => {
+  it('el prospecto se entrega antes de que termine el coaching', async () => {
+    let releaseCoach;
+    const coachGate = new Promise((resolve) => { releaseCoach = resolve; });
+    const call = vi.fn(async (system) => {
+      if (String(system).includes('Eres coach')) { await coachGate; return COACH_OK; }
+      return { respuesta_prospecto: NEW_REPLY, acepta_cita: 'no', estado_lead: 'interesado' };
+    });
+    const { prospect, coach } = startPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
+    let coachDone = false;
+    coach.then(() => { coachDone = true; });
+    const p = await prospect;
+    expect(p.respuesta_prospecto).toBe(NEW_REPLY);
+    expect(coachDone).toBe(false);
+    releaseCoach();
+    expect((await coach).coaching.puntuacion_mensaje).toBe(8);
+  });
+  it('si el coaching falla, la promesa del coaching no rechaza: entrega coaching null', async () => {
+    const call = fakeCall({ coach: [new Error('red')] });
+    const { coach } = startPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
+    expect(await coach).toMatchObject({ coaching: null, coachingIssues: ['coaching_error:red'] });
   });
 });
