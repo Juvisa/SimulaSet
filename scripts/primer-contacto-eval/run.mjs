@@ -1,8 +1,10 @@
 // Validación de Inbound — Primer contacto con la IA real (Haiku), en local.
-// SEGUNDA RONDA: alumno simulado dinámico.
+// TERCERA RONDA: control de estados conversacionales (evasivas, paciencia,
+// descubrimiento, encaje y desenlaces) con alumno simulado dinámico.
 //
 // El prospecto y el coaching se ejecutan con el MISMO código de la aplicación
-// (utils/primerContactoTurn.js: perfil, turno, reintentos y validaciones) y
+// (utils/primerContactoTurn.js y primerContactoControl.js: perfil, plan del
+// turno, reintentos, respaldos y validaciones) y
 // con los mismos parámetros que el servidor (/api/anthropic: modelo, tope de
 // tokens por operación, prompt de sistema con caché, reintento de JSON). El
 // alumno simulado es una llamada aparte a Haiku que solo ve lo documentado del
@@ -33,11 +35,12 @@ import {
   buildPrimerContactoCoachMessage, buildPrimerContactoCoachPrompt, buildPrimerContactoSystemPrompt,
 } from '../../src/utils/prompts.js';
 import {
-  buildPrimerContactoProfilePrompt, buildProjectContext, drawProfileSeeds, isEcho, pickOpeningMessage,
+  RESISTANCE_RULES, buildPrimerContactoProfilePrompt, buildProjectContext, drawProfileSeeds, isPriceDocumented, pickOpeningMessage,
 } from '../../src/utils/primerContacto.js';
 import {
   COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS, generatePrimerContactoProfile, runPrimerContactoTurn,
 } from '../../src/utils/primerContactoTurn.js';
+import { createControlState } from '../../src/utils/primerContactoControl.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
 import { CONVERSATIONS, MAX_TURNS, POLICIES, PROFILE_ONLY, PROJECTS } from './matrix.mjs';
 
@@ -148,9 +151,17 @@ const mockResponse = async (init) => {
     const zero = mockTurn === 2 && !system.includes('Nunca 0.\n') && !/IMPORTANTE: "puntuacion_mensaje"/.test(system);
     out = { etapa_set: 'S', que_hizo_bien: 'Pregunta abierta.', que_mejorar: 'Profundiza.', mensaje_alternativo: mockTurn === 3 ? 'Tienes garantía de devolución del 100 %.' : '¿Qué te preocupa más?', recurso_sugerido: '', alerta: '', nivel_fomo: 20, probabilidad_cita: 30, puntuacion_mensaje: zero ? 0 : 8 };
   } else {
-    const echo = body.messages.length === 4 && !system.includes('repetía el mensaje del setter');
+    // Turno 1: acepta una cita no permitida (reintento y respaldo). Turno 2:
+    // eco (reintento) y revela situación y motivo. Desde el 4: acepta.
     const n = body.messages.filter((m) => m.role === 'user').length;
-    out = { respuesta_prospecto: echo ? lastUser : `Respuesta de prueba ${n}`, acepta_cita: n >= 4 ? 'si' : 'no', estado_lead: n >= 4 ? 'pidio_llamada' : 'interesado' };
+    const echo = n === 2 && !system.includes('repetía el mensaje del setter');
+    out = {
+      respuesta_prospecto: echo ? lastUser : `Respuesta de prueba ${n}`,
+      revela: n === 2 ? ['situacion', 'motivo'] : [],
+      acepta_cita: n === 1 || n >= 4 ? 'si' : 'no',
+      cambio_encaje: '',
+      estado_lead: n >= 4 ? 'pidio_llamada' : 'interesado',
+    };
   }
   const text = JSON.stringify(out);
   return new Response(JSON.stringify({
@@ -196,17 +207,19 @@ const tryExtractJson = (text) => {
 // primerContactoTurn): valida operación, modelo y tope igual que el servidor,
 // y reintenta una vez si el JSON no es válido.
 const roleOf = (options, system) => (options.operation === 'simulator_prospect' ? 'perfil' : String(system).includes('Eres coach') ? 'coaching' : 'prospecto');
-const appCall = (log) => async (system, messages, options) => {
+const appCall = (log, turnLog = []) => async (system, messages, options) => {
   const op = AI_OPERATIONS[options.operation];
   if (!op || !op.models.includes(options.model) || options.maxTokens > op.maxTokens) throw new Error(`Llamada fuera de la lista del servidor: ${JSON.stringify(options)}`);
   const role = roleOf(options, system);
   const first = await callModel(role, options.maxTokens, system, messages);
   log.push({ role, stopReason: first.stopReason, outputTokens: first.usage.output_tokens, ms: first.ms, retry: false });
+  turnLog.push({ role, ms: first.ms });
   const parsed = tryExtractJson(first.text);
   if (parsed) return parsed;
   const retrySystem = system !== undefined ? `${system}\n${JSON_RETRY_INSTRUCTION}` : JSON_RETRY_INSTRUCTION;
   const second = await callModel(role, options.maxTokens, retrySystem, messages);
   log.push({ role, stopReason: second.stopReason, outputTokens: second.usage.output_tokens, ms: second.ms, retry: true });
+  turnLog.push({ role, ms: second.ms });
   const retried = tryExtractJson(second.text);
   if (!retried) throw new Error('Respuesta inválida de la IA');
   return retried;
@@ -253,24 +266,36 @@ const runConversation = async (c) => {
   result.opening = opening;
   result.transcript.push({ role: 'prospect', content: opening.text });
   let state = 'abierto';
+  const fullProfile = { ...profile, ...config };
+  let control = createControlState(fullProfile);
+  let outcome = 'abierta';
   for (let i = 1; i <= MAX_TURNS; i += 1) {
     const setterText = await studentTurn(c, result.transcript, log);
     const history = [...result.transcript];
     let turn;
     const turnStarted = performance.now();
+    // Tiempo hasta ver al prospecto (lo que espera el alumno con la respuesta
+    // progresiva) y hasta tener el coaching.
+    const turnLog = [];
     try {
-      turn = await runPrimerContactoTurn({ call: appCall(log), project, profile: { ...profile, ...config }, history, setterText });
+      turn = await runPrimerContactoTurn({ call: appCall(log, turnLog), project, profile: fullProfile, history, setterText, control });
     } catch (err) {
       if (isStopError(err)) throw err;
       result.turns.push({ index: i, setter: setterText, error: err.message });
       break;
     }
+    const prospectMs = turnLog.filter((l) => l.role === 'prospecto').reduce((a, l) => a + l.ms, 0);
+    control = turn.control;
+    const { control: _c, ...shown } = turn;
     result.transcript.push({ role: 'setter', content: setterText }, { role: 'prospect', content: turn.respuesta_prospecto });
-    result.turns.push({ index: i, setter: setterText, ...turn, turnMs: Math.round(performance.now() - turnStarted), prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
+    result.turns.push({ index: i, setter: setterText, ...shown, turnMs: Math.round(performance.now() - turnStarted), prospectMs, prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
     state = turn.estado_lead;
+    outcome = turn.desenlace;
     if (isTerminalState('primer_contacto', state)) break;
   }
   result.finalState = state;
+  result.finalOutcome = outcome;
+  result.finalControl = control;
   result.observations = observe(result);
   return result;
 };
@@ -294,9 +319,34 @@ const observe = (r) => {
     }
     seen += ` ${t.setter} ${t.respuesta_prospecto}`;
   }
+  const maxWords = (RESISTANCE_RULES[r.resistencia] || RESISTANCE_RULES.media).maxPalabras;
+  const invariantes = [];
+  for (const t of ts) {
+    if (t.estado_lead === 'pidio_llamada' && !t.plan?.puedeAceptar) invariantes.push(`#${t.index}: cita registrada con bloqueos ${t.plan?.bloqueos}`);
+    if (t.estado_lead === 'pidio_llamada' && r.profile?.encaje === 'bajo' && r.profile?.incompatibilidad === 'definitiva') invariantes.push(`#${t.index}: cita con incompatibilidad definitiva`);
+    if (t.plan?.despedida && t.estado_lead !== 'cerrado') invariantes.push(`#${t.index}: despedida no aplicada`);
+  }
+  const closing = ts.at(-1);
   return {
+    desenlace_final: r.finalOutcome,
+    desenlace_aceptable: (r.aceptables || []).includes(r.finalOutcome),
+    desenlace_prohibido: (r.nunca || []).includes(r.finalOutcome),
+    invariantes_rotas: invariantes,
     estado_final: r.finalState,
     turnos: ts.length,
+    evasivas_por_turno: ts.map((t) => t.plan?.evasivas ?? null),
+    presiones_por_turno: ts.map((t) => t.plan?.presiones ?? null),
+    puede_aceptar_por_turno: ts.map((t) => (t.plan?.puedeAceptar ? 1 : 0)),
+    revelado_final: r.finalControl?.revelado || [],
+    cambio_encaje: r.finalControl?.cambioEncaje || null,
+    reintentos_prospecto: ts.filter((t) => t.retried).length,
+    motivos_de_reintento: ts.flatMap((t) => (t.prospectIssues || []).filter((i) => i.startsWith('intento1:')).map((i) => i.slice(9).split(':')[0])),
+    respaldos_usados: ts.filter((t) => t.fallback).map((t) => `#${t.index}:${t.fallback}`),
+    otros_avisos: ts.flatMap((t) => (t.prospectIssues || []).filter((i) => !i.startsWith('intento')).map((i) => `#${t.index}:${i}`)),
+    mensajes_sobre_el_limite: ts.filter((t) => t.prospectWords > maxWords).length,
+    limite_palabras: maxWords,
+    puntuacion_primer_mensaje: ts[0]?.coaching?.puntuacion_mensaje ?? null,
+    puntuacion_ultimo_mensaje: closing?.coaching?.puntuacion_mensaje ?? null,
     acepto_cita_en_turno: accepted?.index ?? null,
     aceptaciones: ts.map((t) => `${t.index}:${t.acepta_cita}`).join(' '),
     palabras_prospecto_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.prospectWords, 0) / ts.length) : 0,
@@ -314,6 +364,7 @@ const observe = (r) => {
     // Tiempo que espera el alumno por turno (prospecto y coaching en paralelo, con reintentos).
     latencia_turno_ms_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.turnMs, 0) / ts.length) : null,
     latencia_turno_ms_max: ts.length ? Math.max(...ts.map((t) => t.turnMs)) : null,
+    hasta_ver_prospecto_ms_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.prospectMs, 0) / ts.length) : null,
   };
 };
 
@@ -334,7 +385,7 @@ const dryRun = () => {
   const rows = [];
   for (const c of conversations) {
     const project = PROJECTS[c.project];
-    const seeds = drawProfileSeeds(c, seeded(c.id), c.overrides);
+    const seeds = drawProfileSeeds({ ...c, priceDocumented: isPriceDocumented(project) }, seeded(c.id), c.overrides);
     const pp = buildPrimerContactoProfilePrompt(project, c, seeds);
     add(pp.length, PROFILE_OPTIONS.maxTokens, 380, 4); // hasta 2 intentos de perfil, cada uno con reintento de JSON
     const prospectSystem = buildPrimerContactoSystemPrompt(project, { ...SAMPLE_PROFILE, ...c });
@@ -347,10 +398,10 @@ const dryRun = () => {
       add(coachSystem.length + buildPrimerContactoCoachMessage([], '').length + transcript, COACH_TURN_OPTIONS.maxTokens, 220, 4);
       transcript += 120;
     }
-    rows.push({ id: c.id, categoria: c.category, combinacion: `${c.temperatura}/${c.resistencia}`, proyecto: c.project, alumno: c.policy, encaje: seeds.encaje, apertura: seeds.apertura.texto || '(propia)' });
+    rows.push({ id: c.id, tipo: c.tipo, combinacion: `${c.temperatura}/${c.resistencia}`, proyecto: c.project, alumno: c.policy, encaje: seeds.encaje + (seeds.incompatibilidad ? ` (${seeds.incompatibilidad})` : ''), apertura: seeds.apertura.texto || '(propia)', aceptables: c.aceptables.join('|') });
   }
   for (const p of profilesOnly) {
-    const pp = buildPrimerContactoProfilePrompt(PROJECTS[p.project], p, drawProfileSeeds(p, seeded(p.id)));
+    const pp = buildPrimerContactoProfilePrompt(PROJECTS[p.project], p, drawProfileSeeds({ ...p, priceDocumented: isPriceDocumented(PROJECTS[p.project]) }, seeded(p.id), p.overrides));
     add(pp.length, PROFILE_OPTIONS.maxTokens, 380, 4);
   }
   console.table(rows);
@@ -365,7 +416,7 @@ const dryRun = () => {
 
 // ─── Ejecución real ────────────────────────────────────────────────────────
 const md = (r) => {
-  const lines = [`## ${r.id} · ${r.title}`, '', `${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · alumno ${r.policy}`, '', `Esperado: ${r.expect}`, ''];
+  const lines = [`## ${r.id} · ${r.title}`, '', `${r.tipo} · ${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · alumno ${r.policy}`, '', `Desenlaces aceptables: ${r.aceptables.join(', ')}${r.nunca.length ? ` · nunca: ${r.nunca.join(', ')}` : ''}`, ''];
   if (r.profile) {
     const { attempts: _a, seeds: _s, ...shown } = r.profile;
     lines.push(`Perfil (encaje ${r.profile.encaje}, ${r.profile.attempts} intento(s)):`, '```json', JSON.stringify(shown, null, 2), '```', '');
@@ -377,7 +428,9 @@ const md = (r) => {
     if (t.error) { lines.push(`> ERROR: ${t.error}`, ''); continue; }
     const k = t.coaching || {};
     lines.push(`> Coaching ${k.puntuacion_mensaje ?? 'sin puntuación'}/10 · ${k.etapa_set ?? '—'} · bien: ${k.que_hizo_bien || '—'} · mejorar: ${k.que_mejorar || '—'}${k.mensaje_alternativo ? ` · sugerido: ${k.mensaje_alternativo}` : ''}${k.alerta ? ` · ALERTA: ${k.alerta}` : ''}${(t.coachingIssues || []).length ? ` · [${t.coachingIssues.join('; ')}]` : ''}`, '');
-    lines.push(`**Prospecto:** ${t.respuesta_prospecto}  _(estado: ${t.estado_lead} · acepta_cita: ${t.acepta_cita} · modelo dijo: ${t.estado_modelo}${t.echoRetried ? ' · reintento por eco' : ''}${t.echo ? ' · ECO' : ''})_`, '');
+    const p = t.plan || {};
+    lines.push(`**Prospecto:** ${t.respuesta_prospecto}  _(desenlace: ${t.desenlace} · estado: ${t.estado_lead} · acepta_cita: ${t.acepta_cita} (modelo: ${t.acepta_cita_modelo}) · revela: ${JSON.stringify(t.revela || [])}${t.cambio_encaje ? ` · cambio_encaje: «${t.cambio_encaje}»` : ''})_`, '');
+    lines.push(`> Plan: evasivas ${p.evasivas} · presiones ${p.presiones} · puede aceptar: ${p.puedeAceptar ? 'sí' : `no (${(p.bloqueos || []).join(', ')})`}${p.despedida ? ` · DESPEDIDA por ${p.despedida}` : ''}${t.retried ? ` · reintento [${(t.prospectIssues || []).join('; ')}]` : ''}${t.fallback ? ` · RESPALDO ${t.fallback}` : ''}`, '');
   }
   lines.push('Observaciones automáticas:', '```json', JSON.stringify(r.observations, null, 2), '```', '');
   return lines.join('\n');
@@ -388,20 +441,20 @@ const main = async () => {
   mkdirSync(OUT_REAL, { recursive: true });
   console.log(`Resultados en: ${OUT_REAL}\nTope de gasto: ${MAX_USD} USD\n`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const results = { ronda: 2, modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
+  const results = { ronda: 3, modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
   try {
     for (const c of conversations) {
       process.stdout.write(`${c.id} … `);
       const r = await runConversation(c);
       results.conversaciones.push(r);
-      console.log(`${r.finalState || r.error} · ${usage.usd.toFixed(4)} USD`);
+      console.log(`${r.finalOutcome || r.error}${r.observations ? (r.observations.desenlace_aceptable ? ' (aceptable)' : ' (NO aceptable)') : ''} · ${usage.usd.toFixed(4)} USD`);
     }
     for (const p of profilesOnly) {
       process.stdout.write(`${p.id} … `);
       const log = [];
       const project = PROJECTS[p.project];
       try {
-        const profile = await generatePrimerContactoProfile({ call: appCall(log), project, config: { projectId: project.id, ...p }, random: seeded(p.id), isFatal: (e) => isStopError(e) });
+        const profile = await generatePrimerContactoProfile({ call: appCall(log), project, config: { projectId: project.id, ...p }, random: seeded(p.id), overrides: p.overrides, isFatal: (e) => isStopError(e) });
         results.perfiles.push({ ...p, ok: true, profile, log });
         console.log(`completo · encaje ${profile.encaje} · ${usage.usd.toFixed(4)} USD`);
       } catch (err) {
@@ -420,8 +473,8 @@ const main = async () => {
   const byRole = Object.fromEntries(Object.entries(usage.byRole).map(([k, v]) => [k, { ...v, usd: Number(v.usd.toFixed(4)), ms: msStats(v.ms) }]));
   const turnMs = results.conversaciones.flatMap((c) => c.turns.filter((t) => t.turnMs).map((t) => t.turnMs));
   results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)), byRole, latencia_turno_ms: msStats(turnMs) };
-  writeFileSync(resolve(OUT_REAL, `ronda2-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
-  writeFileSync(resolve(OUT_REAL, `ronda2-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda 2 · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
+  writeFileSync(resolve(OUT_REAL, `ronda3-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
+  writeFileSync(resolve(OUT_REAL, `ronda3-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda 3 · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
   console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT_REAL}`);
 };
 

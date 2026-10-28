@@ -1,11 +1,16 @@
-// Matriz de la SEGUNDA ronda de validación de Inbound — Primer contacto.
+// Matriz de la TERCERA ronda de validación de Inbound — Primer contacto
+// (control de estados conversacionales).
 //
 // Todo es FICTICIO: dos proyectos inventados (sin datos personales reales ni
-// secretos comerciales). El alumno simulado ya no sigue un guion fijo: es
-// otra llamada a Haiku que responde a lo que dice el prospecto según una
-// política (competente, evasivo con el precio, fuerza la cita, inventa una
-// promesa o hace pitch al inicio). Solo conoce lo que conocería un alumno real:
-// lo documentado del proyecto y la conversación visible.
+// secretos comerciales). El alumno simulado es otra llamada a Haiku que
+// responde a lo que dice el prospecto según una política; solo conoce lo
+// documentado del proyecto y la conversación visible.
+//
+// Cada caso declara los desenlaces ACEPTABLES, no uno solo: hay casos
+// positivos, negativos y ambiguos, y en varios el prospecto puede cambiar de
+// opinión con motivo (precio respondido después de una evasiva, duda de pago
+// aclarada con información documentada, encaje medio). Lo que no se acepta
+// nunca está en `nunca`.
 
 export const PROJECTS = {
   dental: {
@@ -51,36 +56,41 @@ export const PROJECTS = {
 
 // Políticas del alumno simulado.
 export const POLICIES = {
-  competente: 'Eres un setter competente que aplica S.E.T.: una pregunta abierta por mensaje, construyes sobre lo que dice el prospecto, respondes con honestidad lo que te pregunta (si el precio está documentado, lo das; si algo no está documentado, dices con honestidad que lo detalla el equipo en la llamada). Propones una llamada solo cuando entendiste su situación y su motivo. Si te das cuenta de que la oferta no le conviene, lo dices con respeto y cierras sin insistir.',
+  competente: 'Eres un setter competente que aplica S.E.T.: una pregunta abierta por mensaje, construyes sobre lo que dice el prospecto, respondes con honestidad lo que te pregunta (si el precio está documentado, lo das; si algo no está documentado, dices con honestidad que lo detalla el equipo en la llamada). Propones una llamada solo cuando entendiste su situación y su motivo. Si te das cuenta de que la oferta no le conviene, lo dices con respeto y cierras sin insistir. Si el prospecto tiene una duda que lo documentado del proyecto responde (por ejemplo, formas de pago), se lo aclaras.',
   evasivo_precio: 'Eres un setter que NUNCA dice el precio: cada vez que el prospecto pregunta por el precio o el costo, respondes "eso lo vemos más adelante" y cambias de tema con una pregunta. En lo demás preguntas con normalidad.',
+  evasivo_una_vez: 'Eres un setter que la PRIMERA vez que el prospecto pregunta el precio responde "eso lo vemos más adelante" y cambia de tema. Si vuelve a preguntarlo, te das cuenta del error, te disculpas y das el precio documentado con claridad. Después sigues como un setter competente: preguntas abiertas y propones una llamada cuando entiendes su situación y su motivo.',
   cita_forzada: 'Eres un setter impaciente: desde tu primer mensaje propones una llamada y en cada mensaje insistes en agendarla (día y hora), sin preguntar por su situación ni atender sus objeciones.',
-  promesa: 'Eres un setter que, en tu SEGUNDO mensaje, afirma que el programa tiene "garantía de resultados en 30 días o te devolvemos el dinero" (aunque no esté documentado). Fuera de eso, preguntas con normalidad.',
   pitch: 'Eres un setter que en tu PRIMER mensaje manda la oferta completa sin preguntar nada: describe el programa con entusiasmo y termina con "inscríbete aquí: [enlace]". Después de eso, si el prospecto responde, pasas a preguntar con normalidad.',
 };
 
 export const MAX_TURNS = 8;
 
+// tipo: positivo | negativo | ambiguo. aceptables: desenlaces razonables.
+// nunca: desenlaces que indicarían un error del simulador.
 export const CONVERSATIONS = [
-  { id: 'E01', category: 'precio_honesto', title: 'Pregunta de precio respondida con honestidad (precio documentado)', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'La respuesta honesta no se penaliza; el prospecto sigue la conversación.' },
-  { id: 'E02', category: 'precio_evasivo', title: 'Evasivas de precio (resistencia media: se va a la tercera)', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'Insiste y se despide tras 3 evasivas (cerrado); alerta por evasiva reiterada.' },
-  { id: 'E03', category: 'precio_evasivo', title: 'Evasivas de precio (resistencia alta: se va a la segunda)', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'Instagram DM', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'Se despide tras 2 evasivas; mensajes muy cortos.' },
-  { id: 'E04', category: 'precio_no_documentado', title: 'Precio no documentado respondido con honestidad', project: 'bienestar', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'La respuesta "lo vemos en la llamada" no se penaliza; nadie inventa una cifra.' },
-  { id: 'E05', category: 'cita_aceptada', title: 'Camino S.E.T. hasta la cita (odontología)', project: 'dental', temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'info' }, expect: 'Acepta la cita tras el descubrimiento y queda registrada (pidio_llamada).' },
-  { id: 'E06', category: 'cita_aceptada', title: 'Camino S.E.T. hasta la cita (bienestar)', project: 'bienestar', temperatura: 'caliente', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto' }, expect: 'Acepta la cita y queda registrada; no se inventa precio.' },
-  { id: 'E07', category: 'no_califica', title: 'Falta de encaje descubierta y bien cerrada', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'bajo' }, expect: 'El alumno descubre la falta de encaje; cierre no_califica; coaching alto.' },
-  { id: 'E08', category: 'no_califica', title: 'Cita forzada a un prospecto sin encaje', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp', policy: 'cita_forzada', overrides: { encaje: 'bajo' }, expect: 'No acepta la cita; coaching bajo y alerta por insistir.' },
-  { id: 'E09', category: 'revelacion_resistencia_alta', title: 'Revelación progresiva con resistencia alta (odontología)', project: 'dental', temperatura: 'frio', resistencia: 'alta', canal: 'Facebook Messenger', policy: 'competente', overrides: { encaje: 'medio' }, expect: 'Mensajes muy cortos al inicio; revela un dato por pregunta buena.' },
-  { id: 'E10', category: 'revelacion_resistencia_alta', title: 'Revelación progresiva con resistencia alta (bienestar)', project: 'bienestar', temperatura: 'tibio', resistencia: 'alta', canal: 'Instagram DM', policy: 'competente', overrides: { encaje: 'alto' }, expect: 'Escéptica y breve; se abre de a poco.' },
-  { id: 'E11', category: 'coaching_promesa', title: 'El alumno afirma una garantía no documentada', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'promesa', overrides: { encaje: 'alto' }, expect: 'Alerta por promesa no documentada; ningún mensaje sugerido inventa condiciones.' },
-  { id: 'E12', category: 'coaching_pitch', title: 'Pitch con enlace en el primer mensaje', project: 'dental', temperatura: 'frio', resistencia: 'baja', canal: 'Instagram DM', policy: 'pitch', overrides: { encaje: 'alto', apertura: 'info' }, expect: 'Coaching bajo y alerta por pitch; el prospecto se enfría.' },
+  { id: 'R01', tipo: 'positivo', title: 'Descubrimiento completo hasta la cita (odontología)', project: 'dental', temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'info' }, aceptables: ['cita_aceptada', 'cita_condicionada'], nunca: ['despedida', 'no_califica'] },
+  { id: 'R02', tipo: 'positivo', title: 'Descubrimiento hasta la cita sin precio documentado (bienestar)', project: 'bienestar', temperatura: 'caliente', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto' }, aceptables: ['cita_aceptada', 'cita_condicionada'], nunca: ['despedida', 'no_califica'] },
+  { id: 'R03', tipo: 'positivo', title: 'Abre con «Precio» y recibe el precio honesto', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'precio' }, aceptables: ['cita_aceptada', 'cita_condicionada', 'abierta'], nunca: ['despedida'] },
+  { id: 'R04', tipo: 'negativo', title: 'Evasivas de precio (resistencia media: límite 3)', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, aceptables: ['despedida'], nunca: ['cita_aceptada'] },
+  { id: 'R05', tipo: 'negativo', title: 'Evasivas de precio (resistencia alta: límite 2)', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'Instagram DM', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, aceptables: ['despedida'], nunca: ['cita_aceptada'] },
+  { id: 'R06', tipo: 'negativo', title: 'Cita forzada a un prospecto con buen encaje', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp', policy: 'cita_forzada', overrides: { encaje: 'alto' }, aceptables: ['despedida', 'abierta'], nunca: ['cita_aceptada'] },
+  { id: 'R07', tipo: 'negativo', title: 'Incompatibilidad definitiva bien identificada', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'bajo', incompatibilidad: 'definitiva' }, aceptables: ['no_califica', 'abierta'], nunca: ['cita_aceptada'], cierreBienPuntuado: true },
+  { id: 'R08', tipo: 'negativo', title: 'Cita forzada a un prospecto con incompatibilidad definitiva', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'cita_forzada', overrides: { encaje: 'bajo', incompatibilidad: 'definitiva' }, aceptables: ['despedida', 'no_califica', 'abierta'], nunca: ['cita_aceptada'] },
+  { id: 'R09', tipo: 'ambiguo', title: 'Duda de pago superable: puede cambiar de opinión si le aclaran las cuotas', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'bajo', incompatibilidad: 'superable', motivo_no_encaje: 'cree que no puede pagarlo de una sola vez y no sabe qué formas de pago hay' }, aceptables: ['cita_aceptada', 'cita_condicionada', 'no_califica', 'abierta'], nunca: ['despedida'] },
+  { id: 'R10', tipo: 'ambiguo', title: 'Una evasiva y luego el precio honesto: debe seguir la conversación', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'evasivo_una_vez', overrides: { encaje: 'alto', apertura: 'precio' }, aceptables: ['cita_aceptada', 'cita_condicionada', 'abierta'], nunca: ['despedida'] },
+  { id: 'R11', tipo: 'ambiguo', title: 'Encaje medio con resistencia alta', project: 'dental', temperatura: 'frio', resistencia: 'alta', canal: 'Facebook Messenger', policy: 'competente', overrides: { encaje: 'medio' }, aceptables: ['cita_aceptada', 'cita_condicionada', 'abierta', 'no_califica'], nunca: [] },
+  { id: 'R12', tipo: 'ambiguo', title: 'Pitch con enlace al inicio y luego preguntas', project: 'bienestar', temperatura: 'frio', resistencia: 'baja', canal: 'Instagram DM', policy: 'pitch', overrides: { encaje: 'alto', apertura: 'info' }, aceptables: ['abierta', 'cita_condicionada', 'cita_aceptada', 'despedida'], nunca: [], primerMensajeBajo: true },
 ];
 
-// Perfiles sin forzar nada, para medir variedad, encaje, aperturas y el tope de 500 tokens.
-const COMBOS = [];
-for (const temperatura of ['frio', 'tibio', 'caliente']) for (const resistencia of ['baja', 'media', 'alta']) COMBOS.push({ temperatura, resistencia });
+// Perfiles sin forzar nada: variedad (forma de trabajo, posición en los
+// rangos, rasgo, encaje bajo) y el tope de 500 tokens con los campos nuevos.
 export const PROFILE_ONLY = [
-  ...COMBOS.map((c, i) => ({ id: `Q${String(i + 1).padStart(2, '0')}`, project: i % 2 ? 'bienestar' : 'dental', ...c, canal: 'WhatsApp' })),
-  { id: 'Q10', project: 'dental', temperatura: 'frio', resistencia: 'baja', canal: 'Instagram DM' },
-  { id: 'Q11', project: 'bienestar', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp' },
-  { id: 'Q12', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'Facebook Messenger' },
+  { id: 'Q01', project: 'dental', temperatura: 'frio', resistencia: 'baja', canal: 'WhatsApp' },
+  { id: 'Q02', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp' },
+  { id: 'Q03', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'Instagram DM' },
+  { id: 'Q04', project: 'dental', temperatura: 'tibio', resistencia: 'alta', canal: 'Facebook Messenger', overrides: { encaje: 'bajo', incompatibilidad: 'superable' } },
+  { id: 'Q05', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', overrides: { encaje: 'bajo', incompatibilidad: 'definitiva' } },
+  { id: 'Q06', project: 'bienestar', temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp' },
+  { id: 'Q07', project: 'bienestar', temperatura: 'caliente', resistencia: 'media', canal: 'WhatsApp', overrides: { encaje: 'bajo', incompatibilidad: 'superable' } },
+  { id: 'Q08', project: 'bienestar', temperatura: 'frio', resistencia: 'alta', canal: 'Instagram DM' },
 ];
