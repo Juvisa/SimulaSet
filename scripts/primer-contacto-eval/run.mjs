@@ -172,15 +172,18 @@ const callModel = async (role, maxTokens, system, messages) => {
   if (usage.usd + worst > MAX_USD) throw new BudgetStop(`Presupuesto: ${usage.usd.toFixed(4)} USD gastados; la siguiente llamada podría superar ${MAX_USD} USD.`);
   const params = { model: MODEL, max_tokens: maxTokens, messages };
   if (system !== undefined) params.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
+  const started = performance.now();
   const res = await client.messages.create(params);
+  const ms = Math.round(performance.now() - started);
   const u = res.usage || {};
   const cost = costOf(u);
   usage.calls += 1; usage.input += u.input_tokens || 0; usage.output += u.output_tokens || 0;
   usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0; usage.usd += cost;
-  const r = (usage.byRole[role] ||= { calls: 0, input: 0, output: 0, usd: 0, maxTokensHits: 0 });
+  const r = (usage.byRole[role] ||= { calls: 0, input: 0, output: 0, usd: 0, maxTokensHits: 0, ms: [] });
+  r.ms.push(ms);
   r.calls += 1; r.input += u.input_tokens || 0; r.output += u.output_tokens || 0; r.usd += cost;
   if (res.stop_reason === 'max_tokens') r.maxTokensHits += 1;
-  return { text: res.content?.find((b) => b.type === 'text')?.text || '', stopReason: res.stop_reason, usage: u };
+  return { text: res.content?.find((b) => b.type === 'text')?.text || '', stopReason: res.stop_reason, usage: u, ms };
 };
 
 const tryExtractJson = (text) => {
@@ -198,12 +201,12 @@ const appCall = (log) => async (system, messages, options) => {
   if (!op || !op.models.includes(options.model) || options.maxTokens > op.maxTokens) throw new Error(`Llamada fuera de la lista del servidor: ${JSON.stringify(options)}`);
   const role = roleOf(options, system);
   const first = await callModel(role, options.maxTokens, system, messages);
-  log.push({ role, stopReason: first.stopReason, outputTokens: first.usage.output_tokens, retry: false });
+  log.push({ role, stopReason: first.stopReason, outputTokens: first.usage.output_tokens, ms: first.ms, retry: false });
   const parsed = tryExtractJson(first.text);
   if (parsed) return parsed;
   const retrySystem = system !== undefined ? `${system}\n${JSON_RETRY_INSTRUCTION}` : JSON_RETRY_INSTRUCTION;
   const second = await callModel(role, options.maxTokens, retrySystem, messages);
-  log.push({ role, stopReason: second.stopReason, outputTokens: second.usage.output_tokens, retry: true });
+  log.push({ role, stopReason: second.stopReason, outputTokens: second.usage.output_tokens, ms: second.ms, retry: true });
   const retried = tryExtractJson(second.text);
   if (!retried) throw new Error('Respuesta inválida de la IA');
   return retried;
@@ -254,6 +257,7 @@ const runConversation = async (c) => {
     const setterText = await studentTurn(c, result.transcript, log);
     const history = [...result.transcript];
     let turn;
+    const turnStarted = performance.now();
     try {
       turn = await runPrimerContactoTurn({ call: appCall(log), project, profile: { ...profile, ...config }, history, setterText });
     } catch (err) {
@@ -262,7 +266,7 @@ const runConversation = async (c) => {
       break;
     }
     result.transcript.push({ role: 'setter', content: setterText }, { role: 'prospect', content: turn.respuesta_prospecto });
-    result.turns.push({ index: i, setter: setterText, ...turn, prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
+    result.turns.push({ index: i, setter: setterText, ...turn, turnMs: Math.round(performance.now() - turnStarted), prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
     state = turn.estado_lead;
     if (isTerminalState('primer_contacto', state)) break;
   }
@@ -307,6 +311,9 @@ const observe = (r) => {
     posibles_fugas_de_perfil: leaks,
     turnos_con_error: r.turns.filter((t) => t.error).length,
     precio_preguntado_por_prospecto: ts.filter((t) => t.askedPrice).length,
+    // Tiempo que espera el alumno por turno (prospecto y coaching en paralelo, con reintentos).
+    latencia_turno_ms_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.turnMs, 0) / ts.length) : null,
+    latencia_turno_ms_max: ts.length ? Math.max(...ts.map((t) => t.turnMs)) : null,
   };
 };
 
@@ -409,7 +416,10 @@ const main = async () => {
     results.detenido = redact(err instanceof BudgetStop ? err.message : `Error: ${err?.status || ''} ${err?.message || err}`);
     console.log(`\nDetenido: ${results.detenido}`);
   }
-  results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)) };
+  const msStats = (arr) => { const v = [...arr].sort((a, b) => a - b); return v.length ? { n: v.length, media: Math.round(v.reduce((a, b) => a + b, 0) / v.length), p50: v[Math.floor(v.length / 2)], p90: v[Math.floor(v.length * 0.9)], max: v.at(-1) } : null; };
+  const byRole = Object.fromEntries(Object.entries(usage.byRole).map(([k, v]) => [k, { ...v, usd: Number(v.usd.toFixed(4)), ms: msStats(v.ms) }]));
+  const turnMs = results.conversaciones.flatMap((c) => c.turns.filter((t) => t.turnMs).map((t) => t.turnMs));
+  results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)), byRole, latencia_turno_ms: msStats(turnMs) };
   writeFileSync(resolve(OUT_REAL, `ronda2-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
   writeFileSync(resolve(OUT_REAL, `ronda2-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda 2 · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
   console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT_REAL}`);
