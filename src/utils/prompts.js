@@ -1,4 +1,4 @@
-import { buildProjectContext, describeBehavior, isPriceDocumented } from './primerContacto';
+import { buildProjectContext, describeBehavior, isPriceDocumented } from './primerContacto.js';
 
 const buildRecursosContext = (project) => {
   const r = project?.recursos;
