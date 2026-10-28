@@ -1,12 +1,11 @@
-// Matriz de validación de Inbound — Primer contacto con la IA real.
+// Matriz de la SEGUNDA ronda de validación de Inbound — Primer contacto.
 //
 // Todo es FICTICIO: dos proyectos inventados (sin datos personales reales ni
-// secretos comerciales) y turnos del alumno predefinidos. El alumno simulado
-// sigue un guion fijo con una sola regla reactiva: si el prospecto pregunta
-// por el precio, el siguiente mensaje empieza con la respuesta que marque la
-// política de precio del caso (honesta o evasiva). Así se aísla lo que se
-// quiere observar: cómo reacciona el PROSPECTO (Haiku) y cómo lo EVALÚA el
-// coaching.
+// secretos comerciales). El alumno simulado ya no sigue un guion fijo: es
+// otra llamada a Haiku que responde a lo que dice el prospecto según una
+// política (competente, evasivo con el precio, fuerza la cita, inventa una
+// promesa o hace pitch al inicio). Solo conoce lo que conocería un alumno real:
+// lo documentado del proyecto y la conversación visible.
 
 export const PROJECTS = {
   dental: {
@@ -50,151 +49,38 @@ export const PROJECTS = {
   },
 };
 
-// Respuestas de precio que antepone el alumno simulado cuando el prospecto
-// pregunta por el precio.
-export const PRICE_REPLIES = {
-  honest: {
-    dental: 'Claro, te cuento: la inversión es de 1.800 USD o 3 cuotas de 650 USD.',
-    bienestar: 'Te soy honesta: el valor depende del plan que te recomienden y no te quiero dar un número inventado; lo ven contigo en la llamada.',
-  },
-  evasive: {
-    dental: 'Eso lo vemos más adelante 😊',
-    bienestar: 'Eso lo vemos más adelante 😊',
-  },
+// Políticas del alumno simulado.
+export const POLICIES = {
+  competente: 'Eres un setter competente que aplica S.E.T.: una pregunta abierta por mensaje, construyes sobre lo que dice el prospecto, respondes con honestidad lo que te pregunta (si el precio está documentado, lo das; si algo no está documentado, dices con honestidad que lo detalla el equipo en la llamada). Propones una llamada solo cuando entendiste su situación y su motivo. Si te das cuenta de que la oferta no le conviene, lo dices con respeto y cierras sin insistir.',
+  evasivo_precio: 'Eres un setter que NUNCA dice el precio: cada vez que el prospecto pregunta por el precio o el costo, respondes "eso lo vemos más adelante" y cambias de tema con una pregunta. En lo demás preguntas con normalidad.',
+  cita_forzada: 'Eres un setter impaciente: desde tu primer mensaje propones una llamada y en cada mensaje insistes en agendarla (día y hora), sin preguntar por su situación ni atender sus objeciones.',
+  promesa: 'Eres un setter que, en tu SEGUNDO mensaje, afirma que el programa tiene "garantía de resultados en 30 días o te devolvemos el dinero" (aunque no esté documentado). Fuera de eso, preguntas con normalidad.',
+  pitch: 'Eres un setter que en tu PRIMER mensaje manda la oferta completa sin preguntar nada: describe el programa con entusiasmo y termina con "inscríbete aquí: [enlace]". Después de eso, si el prospecto responde, pasas a preguntar con normalidad.',
 };
 
-// Turnos base por proyecto (S → E → T). Cada turno lleva su intención.
-const goodPath = {
-  dental: [
-    { kind: 'situacion', text: '¡Hola! Gracias por escribir 😊 Para orientarte bien, ¿qué fue lo que te llamó la atención de la publicación?' },
-    { kind: 'situacion', text: 'Entiendo. ¿Y cómo te llegan hoy los pacientes nuevos al consultorio?' },
-    { kind: 'emocion', text: '¿Y qué pasa en los meses en que llegan menos? ¿Cómo te afecta eso?' },
-    { kind: 'emocion', text: 'Tiene sentido. Si eso se resolviera, ¿qué te gustaría lograr en los próximos meses?' },
-    { kind: 'cita', text: 'Por lo que me cuentas, vale la pena verlo con calma. ¿Te parece una llamada de 30 minutos con el equipo de la Dra. Ana para revisar tu caso y ver si el programa encaja? ¿Mejor jueves o viernes?' },
-    { kind: 'confirmacion', text: 'Perfecto. Te envío el enlace por aquí y una guía corta para que llegues con tus números a mano. ¿Te parece?' },
-  ],
-  bienestar: [
-    { kind: 'situacion', text: '¡Hola! Qué bueno que escribiste 😊 Para orientarte, ¿qué te llamó la atención de la publicación?' },
-    { kind: 'situacion', text: 'Te entiendo. ¿Cómo es hoy un día normal para ti, entre trabajo y descanso?' },
-    { kind: 'emocion', text: '¿Y cómo te está afectando ese cansancio en lo que más te importa?' },
-    { kind: 'emocion', text: 'Gracias por contármelo. ¿Por qué sientes que es el momento de hacer algo ahora?' },
-    { kind: 'cita', text: 'Creo que vale la pena verlo con calma. ¿Te parece una llamada corta con el equipo de Marta para revisar tu caso y ver si el programa te encaja? ¿Mejor esta semana o la próxima?' },
-    { kind: 'confirmacion', text: 'Genial. Te envío el enlace por aquí. ¿Algo que quieras que veamos sí o sí en la llamada?' },
-  ],
-};
-
-const replace = (turns, index, turn) => turns.map((t, i) => (i === index ? turn : t));
-
-// 9 combinaciones con el camino S.E.T. completo y precio honesto.
-const COMBOS = [];
-for (const temperatura of ['frio', 'tibio', 'caliente']) {
-  for (const resistencia of ['baja', 'media', 'alta']) COMBOS.push({ temperatura, resistencia });
-}
-const CHANNELS = ['WhatsApp', 'Instagram DM', 'Facebook Messenger'];
+export const MAX_TURNS = 8;
 
 export const CONVERSATIONS = [
-  ...COMBOS.map((c, i) => ({
-    id: `C${String(i + 1).padStart(2, '0')}`,
-    category: 'combinacion',
-    title: `Camino S.E.T. completo · ${c.temperatura} / ${c.resistencia}`,
-    project: 'dental', ...c, canal: CHANNELS[i % 3], pricePolicy: 'honest',
-    turns: goodPath.dental,
-    expect: 'Diferencias visibles por temperatura y resistencia; revelación gradual; la cita solo después de descubrir (no antes del turno 4).',
-  })),
-  {
-    id: 'C10', category: 'precio_honesto_sin_documentar', title: 'Precio no documentado respondido con honestidad',
-    project: 'bienestar', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', pricePolicy: 'honest', turns: goodPath.bienestar,
-    expect: 'La respuesta honesta sin cifra no se penaliza; el prospecto no inventa un precio.',
-  },
-  {
-    id: 'C11', category: 'precio_evasivo', title: 'Evasivas reiteradas sobre el precio (frío)',
-    project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', pricePolicy: 'evasive', forcePriceOpening: true,
-    turns: goodPath.dental.slice(0, 5),
-    expect: 'El prospecto insiste, se enfría y a la tercera evasiva se va (cerrado); el coaching marca la evasiva desde la segunda.',
-  },
-  {
-    id: 'C12', category: 'precio_evasivo', title: 'Evasivas reiteradas sobre el precio (caliente)',
-    project: 'dental', temperatura: 'caliente', resistencia: 'media', canal: 'Instagram DM', pricePolicy: 'evasive', forcePriceOpening: true,
-    turns: goodPath.dental.slice(0, 5),
-    expect: 'Igual que C11, con un prospecto que quiere avanzar: la evasiva le cuesta interés.',
-  },
-  {
-    id: 'C13', category: 'precio_honesto', title: 'Pregunta de precio respondida con honestidad desde el inicio',
-    project: 'dental', temperatura: 'frio', resistencia: 'alta', canal: 'WhatsApp', pricePolicy: 'honest', forcePriceOpening: true,
-    turns: goodPath.dental,
-    expect: 'La respuesta honesta no se penaliza; puede generar una objeción real, no un rechazo automático.',
-  },
-  {
-    id: 'C14', category: 'promesa_inventada', title: 'El alumno afirma una garantía que no está documentada',
-    project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', pricePolicy: 'honest',
-    turns: replace(goodPath.dental, 2, { kind: 'promesa_inventada', text: 'Además tienes garantía de devolución del 100 % y resultados asegurados en 30 días. ¿Qué pasa hoy en los meses flojos?' }),
-    expect: 'El coaching marca la promesa no documentada; el prospecto puede dudar o pedir detalles.',
-  },
-  {
-    id: 'C15', category: 'cierre_prematuro', title: 'Cita propuesta en los dos primeros mensajes',
-    project: 'dental', temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp', pricePolicy: 'honest',
-    turns: [
-      { kind: 'cita', text: '¡Hola! ¿Agendamos una llamada hoy mismo y te cuento todo?' },
-      { kind: 'cita', text: 'Es mejor verlo en llamada, son 30 minutos. ¿Te queda bien hoy a las 6?' },
-      ...goodPath.dental.slice(1, 5),
-    ],
-    expect: 'No acepta la cita sin descubrimiento; el coaching penaliza la cita prematura.',
-  },
-  {
-    id: 'C16', category: 'cierre_prematuro', title: 'Pitch con enlace en el primer mensaje',
-    project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'Instagram DM', pricePolicy: 'honest',
-    turns: [
-      { kind: 'pitch', text: 'Hola! El programa Agenda Llena incluye 12 sesiones, plantillas y acompañamiento. Inscríbete aquí: [enlace]' },
-      ...goodPath.dental.slice(1, 5),
-    ],
-    expect: 'Respuesta más corta y con menos interés; el coaching penaliza el pitch prematuro.',
-  },
-  {
-    id: 'C17', category: 'no_califica', title: 'Falta de encaje identificada con respeto',
-    project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', pricePolicy: 'honest', forceLowFit: true,
-    turns: [
-      ...goodPath.dental.slice(0, 3),
-      { kind: 'cierre_no_encaje', text: 'Gracias por contarme con tanta claridad. Siendo honesta, por lo que me dices no creo que el programa sea lo que necesitas ahora y no te quiero vender algo que no te sirva. ¿Te parece si te escribo más adelante si tenemos algo que encaje mejor?' },
-      { kind: 'cierre_no_encaje', text: 'Con gusto. Mucho éxito y aquí estoy si te surge cualquier duda.' },
-    ],
-    expect: 'Cierre no_califica; el coaching puntúa alto la identificación de la falta de encaje.',
-  },
-  {
-    id: 'C18', category: 'no_califica', title: 'Se fuerza la cita aunque no hay encaje',
-    project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp', pricePolicy: 'honest', forceLowFit: true,
-    turns: [
-      goodPath.dental[0], goodPath.dental[1],
-      { kind: 'cita', text: 'Igual te conviene la llamada, ahí te explican todo. ¿Jueves o viernes?' },
-      { kind: 'cita', text: 'Son solo 30 minutos, no pierdes nada. ¿Te agendo el jueves?' },
-      { kind: 'cita', text: 'Te dejo agendado el jueves a las 5, ¿listo?' },
-    ],
-    expect: 'No acepta la cita; el coaching penaliza forzarla.',
-  },
-  {
-    id: 'C19', category: 'interrogatorio', title: 'Interrogatorio en lista en el primer mensaje',
-    project: 'bienestar', temperatura: 'frio', resistencia: 'alta', canal: 'Instagram DM', pricePolicy: 'honest',
-    turns: [
-      { kind: 'interrogatorio', text: 'Hola! Para ayudarte dime: 1) ¿cuántos años tienes? 2) ¿a qué te dedicas? 3) ¿cuánto pesas? 4) ¿cuánto puedes invertir?' },
-      ...goodPath.bienestar.slice(1, 5),
-    ],
-    expect: 'Respuesta corta o incómoda; el coaching penaliza el interrogatorio.',
-  },
-  {
-    id: 'C20', category: 'segundo_proyecto', title: 'Camino S.E.T. completo en otro nicho',
-    project: 'bienestar', temperatura: 'caliente', resistencia: 'baja', canal: 'WhatsApp', pricePolicy: 'honest', turns: goodPath.bienestar,
-    expect: 'El prospecto usa el contexto del segundo proyecto (no mezcla odontología) y no inventa precio.',
-  },
+  { id: 'E01', category: 'precio_honesto', title: 'Pregunta de precio respondida con honestidad (precio documentado)', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'La respuesta honesta no se penaliza; el prospecto sigue la conversación.' },
+  { id: 'E02', category: 'precio_evasivo', title: 'Evasivas de precio (resistencia media: se va a la tercera)', project: 'dental', temperatura: 'frio', resistencia: 'media', canal: 'WhatsApp', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'Insiste y se despide tras 3 evasivas (cerrado); alerta por evasiva reiterada.' },
+  { id: 'E03', category: 'precio_evasivo', title: 'Evasivas de precio (resistencia alta: se va a la segunda)', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'Instagram DM', policy: 'evasivo_precio', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'Se despide tras 2 evasivas; mensajes muy cortos.' },
+  { id: 'E04', category: 'precio_no_documentado', title: 'Precio no documentado respondido con honestidad', project: 'bienestar', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'precio' }, expect: 'La respuesta "lo vemos en la llamada" no se penaliza; nadie inventa una cifra.' },
+  { id: 'E05', category: 'cita_aceptada', title: 'Camino S.E.T. hasta la cita (odontología)', project: 'dental', temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto', apertura: 'info' }, expect: 'Acepta la cita tras el descubrimiento y queda registrada (pidio_llamada).' },
+  { id: 'E06', category: 'cita_aceptada', title: 'Camino S.E.T. hasta la cita (bienestar)', project: 'bienestar', temperatura: 'caliente', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'alto' }, expect: 'Acepta la cita y queda registrada; no se inventa precio.' },
+  { id: 'E07', category: 'no_califica', title: 'Falta de encaje descubierta y bien cerrada', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'competente', overrides: { encaje: 'bajo' }, expect: 'El alumno descubre la falta de encaje; cierre no_califica; coaching alto.' },
+  { id: 'E08', category: 'no_califica', title: 'Cita forzada a un prospecto sin encaje', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp', policy: 'cita_forzada', overrides: { encaje: 'bajo' }, expect: 'No acepta la cita; coaching bajo y alerta por insistir.' },
+  { id: 'E09', category: 'revelacion_resistencia_alta', title: 'Revelación progresiva con resistencia alta (odontología)', project: 'dental', temperatura: 'frio', resistencia: 'alta', canal: 'Facebook Messenger', policy: 'competente', overrides: { encaje: 'medio' }, expect: 'Mensajes muy cortos al inicio; revela un dato por pregunta buena.' },
+  { id: 'E10', category: 'revelacion_resistencia_alta', title: 'Revelación progresiva con resistencia alta (bienestar)', project: 'bienestar', temperatura: 'tibio', resistencia: 'alta', canal: 'Instagram DM', policy: 'competente', overrides: { encaje: 'alto' }, expect: 'Escéptica y breve; se abre de a poco.' },
+  { id: 'E11', category: 'coaching_promesa', title: 'El alumno afirma una garantía no documentada', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'WhatsApp', policy: 'promesa', overrides: { encaje: 'alto' }, expect: 'Alerta por promesa no documentada; ningún mensaje sugerido inventa condiciones.' },
+  { id: 'E12', category: 'coaching_pitch', title: 'Pitch con enlace en el primer mensaje', project: 'dental', temperatura: 'frio', resistencia: 'baja', canal: 'Instagram DM', policy: 'pitch', overrides: { encaje: 'alto', apertura: 'info' }, expect: 'Coaching bajo y alerta por pitch; el prospecto se enfría.' },
 ];
 
-// Perfiles adicionales solo para medir el límite de 500 tokens.
+// Perfiles sin forzar nada, para medir variedad, encaje, aperturas y el tope de 500 tokens.
+const COMBOS = [];
+for (const temperatura of ['frio', 'tibio', 'caliente']) for (const resistencia of ['baja', 'media', 'alta']) COMBOS.push({ temperatura, resistencia });
 export const PROFILE_ONLY = [
-  ...COMBOS.map((c, i) => ({ id: `P${String(i + 1).padStart(2, '0')}`, project: i % 2 ? 'bienestar' : 'dental', ...c, canal: CHANNELS[i % 3] })),
-  { id: 'P10', project: 'dental', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp' },
+  ...COMBOS.map((c, i) => ({ id: `Q${String(i + 1).padStart(2, '0')}`, project: i % 2 ? 'bienestar' : 'dental', ...c, canal: 'WhatsApp' })),
+  { id: 'Q10', project: 'dental', temperatura: 'frio', resistencia: 'baja', canal: 'Instagram DM' },
+  { id: 'Q11', project: 'bienestar', temperatura: 'caliente', resistencia: 'alta', canal: 'WhatsApp' },
+  { id: 'Q12', project: 'dental', temperatura: 'tibio', resistencia: 'media', canal: 'Facebook Messenger' },
 ];
-
-// Solo para C17/C18 (prueba): se pide al generador de perfiles un caso con
-// encaje bajo. No forma parte del prompt de la aplicación.
-export const LOW_FIT_HINT = '\nEN ESTE CASO DE PRUEBA el encaje debe ser "bajo": dale al prospecto una razón concreta y creíble por la que la oferta no le conviene ahora.';
-
-// Primer mensaje forzado en los casos de precio (para que el precio aparezca).
-export const PRICE_OPENING = 'Precio';

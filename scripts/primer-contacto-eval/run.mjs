@@ -1,9 +1,12 @@
 // Validación de Inbound — Primer contacto con la IA real (Haiku), en local.
+// SEGUNDA RONDA: alumno simulado dinámico.
 //
-// Reproduce el flujo de la aplicación con las MISMAS funciones del frontend
-// (prompt del perfil, limpieza, primer mensaje, prompt del prospecto, estados)
-// y los MISMOS parámetros que el servidor (/api/anthropic: modelo, tope de
-// tokens por operación, prompt de sistema con caché, reintento de JSON).
+// El prospecto y el coaching se ejecutan con el MISMO código de la aplicación
+// (utils/primerContactoTurn.js: perfil, turno, reintentos y validaciones) y
+// con los mismos parámetros que el servidor (/api/anthropic: modelo, tope de
+// tokens por operación, prompt de sistema con caché, reintento de JSON). El
+// alumno simulado es una llamada aparte a Haiku que solo ve lo documentado del
+// proyecto y la conversación visible.
 //
 // Garantías:
 //   - No importa ni usa Supabase: no lee ni escribe ningún dato de alumnos.
@@ -12,25 +15,31 @@
 //   - Sin --run no hace ninguna llamada: construye los prompts y calcula el
 //     presupuesto.
 //   - Con --run se detiene antes de cualquier llamada que pudiera superar
-//     --max-usd (por defecto 2 USD), calculado con el uso real devuelto por la API.
-//   - Los resultados se escriben fuera del repositorio.
+//     --max-usd, calculado con el uso real devuelto por la API.
+//   - Solo puede conectarse a api.anthropic.com y los resultados se escriben
+//     fuera del repositorio.
 //
 // Uso (desde la raíz del repo):
 //   node scripts/primer-contacto-eval/run.mjs                 # simulación, gratis
 //   node scripts/primer-contacto-eval/run.mjs --run           # llamadas reales
-//   Opciones: --max-usd 1.5  --only C01,C11  --no-profiles  --out <carpeta>
+//   Opciones: --max-usd 1.5  --only E01,E05  --no-profiles  --out <carpeta>
 //   (--output-dir es sinónimo de --out; también se acepta --opcion=valor)
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_OPERATIONS, MODELS } from '../../api/_anthropic/operations.js';
-import { buildPrimerContactoSystemPrompt } from '../../src/utils/prompts.js';
 import {
-  buildPrimerContactoProfilePrompt, normalizePrimerContactoProfile, pickOpeningMessage, OPENING_MAX_WORDS,
+  buildPrimerContactoCoachMessage, buildPrimerContactoCoachPrompt, buildPrimerContactoSystemPrompt,
+} from '../../src/utils/prompts.js';
+import {
+  buildPrimerContactoProfilePrompt, buildProjectContext, drawProfileSeeds, isEcho, pickOpeningMessage,
 } from '../../src/utils/primerContacto.js';
+import {
+  COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS, generatePrimerContactoProfile, runPrimerContactoTurn,
+} from '../../src/utils/primerContactoTurn.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
-import { CONVERSATIONS, PROFILE_ONLY, PROJECTS, PRICE_REPLIES, LOW_FIT_HINT, PRICE_OPENING } from './matrix.mjs';
+import { CONVERSATIONS, MAX_TURNS, POLICIES, PROFILE_ONLY, PROJECTS } from './matrix.mjs';
 
 // ─── Configuración ─────────────────────────────────────────────────────────
 const fail = (message) => { console.error(message); process.exit(2); };
@@ -43,7 +52,7 @@ const parseArgs = (argv) => {
   for (let i = 0; i < argv.length; i += 1) {
     const [name, inline] = argv[i].split(/=(.*)/s);
     if (FLAGS.has(name) && inline === undefined) { parsed.flags.add(name); continue; }
-    if (!(name in OPTIONS)) fail(`Opción no reconocida: ${argv[i]}\nOpciones válidas: --run, --no-profiles, --max-usd <USD>, --only <C01,C02>, --out <carpeta> (o --output-dir <carpeta>).`);
+    if (!(name in OPTIONS)) fail(`Opción no reconocida: ${argv[i]}\nOpciones válidas: --run, --no-profiles, --max-usd <USD>, --only <E01,E02>, --out <carpeta> (o --output-dir <carpeta>).`);
     const value = inline !== undefined ? inline : argv[i + 1];
     if (!value || (inline === undefined && value.startsWith('--'))) fail(`Falta el valor de ${name}.`);
     if (inline === undefined) i += 1;
@@ -54,7 +63,7 @@ const parseArgs = (argv) => {
 const parsedArgs = parseArgs(process.argv.slice(2));
 const flag = (name) => parsedArgs.flags.has(name);
 const RUN = flag('--run');
-const MAX_USD = Number(parsedArgs.values.maxUsd ?? '2');
+const MAX_USD = Number(parsedArgs.values.maxUsd ?? '1.5');
 if (!Number.isFinite(MAX_USD) || MAX_USD <= 0) fail(`--max-usd debe ser un número mayor que 0 (recibido: ${parsedArgs.values.maxUsd}).`);
 const ONLY = parsedArgs.values.only ? parsedArgs.values.only.split(',').map((s) => s.trim()).filter(Boolean) : null;
 const WITH_PROFILES = !flag('--no-profiles');
@@ -69,8 +78,7 @@ const realPath = (p) => {
   return join(realpathSync.native(existing), ...rest);
 };
 // Dentro del repositorio = la misma carpeta o una subcarpeta (comparación por
-// segmentos de ruta, no por prefijo de texto: «primer-contacto-eval-output» no
-// está dentro de «primer-contacto»).
+// segmentos de ruta, no por prefijo de texto).
 const isInside = (child, parent) => {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
@@ -78,26 +86,32 @@ const isInside = (child, parent) => {
 const OUT_REAL = realPath(OUT);
 if (isInside(OUT_REAL, realPath(REPO))) fail(`La carpeta de resultados debe estar fuera del repositorio (${OUT_REAL}).`);
 
-const MODEL_KEY = 'haiku';
-const MODEL = MODELS[MODEL_KEY]; // claude-haiku-4-5-20251001, igual que producción
-const OPS = { profile: AI_OPERATIONS.simulator_prospect, turn: AI_OPERATIONS.simulator_turn };
+const MODEL = MODELS.haiku; // claude-haiku-4-5-20251001, igual que producción
+const STUDENT_MAX_TOKENS = 200;
 // Precio de Claude Haiku 4.5 (USD por millón de tokens).
 const PRICE = { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 };
 const JSON_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior no fue JSON válido (o quedó incompleta). Responde ÚNICAMENTE con el objeto JSON solicitado — nada de texto antes o después, nada de markdown.';
-const LEAD_STATES = ['abierto', 'interesado', 'resistente', 'pidio_llamada', 'no_califica', 'cerrado'];
-const ASKS_PRICE = /precio|cu[aá]nto (cuesta|vale|es|sale|cobran|ser[ií]a|cobras)|costo|inversi[oó]n|tarifa|valor/i;
-// Estimación conservadora para el presupuesto (el español suele dar más de 3 caracteres por token).
+const ASKS_PRICE = /precio|cu[aá]nto (cuesta|vale|es|sale|cobran|ser[ií]a|cobras)|costo|inversi[oó]n|tarifa/i;
 const estTokens = (chars) => Math.ceil(chars / 3);
 
 const conversations = CONVERSATIONS.filter((c) => !ONLY || ONLY.includes(c.id));
 const profilesOnly = WITH_PROFILES ? PROFILE_ONLY.filter((p) => !ONLY || ONLY.includes(p.id)) : [];
 
+// Aleatoriedad reproducible por caso (mulberry32).
+const seeded = (text) => {
+  let a = [...text].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 2654435761) >>> 0, 1779033703);
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+};
+
 // ─── Cliente y presupuesto ─────────────────────────────────────────────────
-const usage = { calls: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0 };
+const usage = { calls: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, byRole: {} };
 const costOf = (u) => ((u.input_tokens || 0) * PRICE.input + (u.output_tokens || 0) * PRICE.output
   + (u.cache_creation_input_tokens || 0) * PRICE.cacheWrite + (u.cache_read_input_tokens || 0) * PRICE.cacheRead) / 1e6;
 
 class BudgetStop extends Error {}
+// Errores que detienen TODA la batería: presupuesto y cualquier error de la API o
+// de red (incluidos los de conexión, que el SDK envuelve en APIConnectionError).
+const isStopError = (e) => e instanceof BudgetStop || e instanceof Anthropic.APIError || Boolean(e?.status);
 const KEY = process.env.SIMULASET_EVAL_ANTHROPIC_KEY || '';
 // Cualquier texto que se imprima o se guarde pasa por aquí: elimina la clave
 // (y cualquier otra con forma de clave de Anthropic) por si apareciera en un error.
@@ -112,30 +126,60 @@ const guardedFetch = (url, init) => {
   const host = new URL(typeof url === 'string' ? url : url.url).host;
   if (host !== 'api.anthropic.com') throw new Error(`Conexión no permitida: ${host}`);
   if (process.env.SIMULASET_EVAL_BLOCK_NETWORK === '1') throw new Error('Red bloqueada para la prueba de detención');
+  if (process.env.SIMULASET_EVAL_MOCK === '1') return mockResponse(init);
   return globalThis.fetch(url, init);
+};
+
+// SIMULASET_EVAL_MOCK=1: respuestas sintéticas con la forma de la API, sin
+// red, para probar el script de punta a punta antes de gastar. Incluye a
+// propósito un eco y un 0/10 para ejercitar los reintentos.
+let mockTurn = 0;
+const mockResponse = async (init) => {
+  const body = JSON.parse(init.body);
+  const system = (body.system || []).map((b) => b.text).join('\n');
+  const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content || '';
+  let out;
+  if (!system && /perfil PRIVADO/.test(lastUser)) {
+    out = { nombre: 'X', origen: 'Un reel', identidad: 'Profesional ficticio', situacion: 'Situación ficticia', emocion: 'Duda', motivacion: 'Mejorar', objeciones: ['Tiempo'], hechos_ocultos: ['Hecho ficticio oculto'], encaje: 'alto', apertura_inicial: 'Info' };
+  } else if (system.includes('Eres un ALUMNO')) {
+    out = { mensaje: `Mensaje de prueba ${body.messages.length}. ¿Me cuentas un poco más de tu situación?` };
+  } else if (system.includes('Eres coach')) {
+    mockTurn += 1;
+    const zero = mockTurn === 2 && !system.includes('Nunca 0.\n') && !/IMPORTANTE: "puntuacion_mensaje"/.test(system);
+    out = { etapa_set: 'S', que_hizo_bien: 'Pregunta abierta.', que_mejorar: 'Profundiza.', mensaje_alternativo: mockTurn === 3 ? 'Tienes garantía de devolución del 100 %.' : '¿Qué te preocupa más?', recurso_sugerido: '', alerta: '', nivel_fomo: 20, probabilidad_cita: 30, puntuacion_mensaje: zero ? 0 : 8 };
+  } else {
+    const echo = body.messages.length === 4 && !system.includes('repetía el mensaje del setter');
+    const n = body.messages.filter((m) => m.role === 'user').length;
+    out = { respuesta_prospecto: echo ? lastUser : `Respuesta de prueba ${n}`, acepta_cita: n >= 4 ? 'si' : 'no', estado_lead: n >= 4 ? 'pidio_llamada' : 'interesado' };
+  }
+  const text = JSON.stringify(out);
+  return new Response(JSON.stringify({
+    id: 'msg_mock', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text }],
+    stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: Math.ceil(JSON.stringify(body).length / 3), output_tokens: Math.ceil(text.length / 3) },
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
 let client = null;
 if (RUN) {
-  if (!KEY) {
-    console.error('Falta la variable de entorno SIMULASET_EVAL_ANTHROPIC_KEY (clave de DESARROLLO de Anthropic). No se hizo ninguna llamada.');
-    process.exit(2);
-  }
+  if (!KEY) fail('Falta la variable de entorno SIMULASET_EVAL_ANTHROPIC_KEY (clave de DESARROLLO de Anthropic). No se hizo ninguna llamada.');
   // logLevel 'off': el SDK no registra peticiones ni encabezados aunque exista ANTHROPIC_LOG.
   client = new Anthropic({ apiKey: KEY, maxRetries: 2, timeout: 60_000, logLevel: 'off', fetch: guardedFetch });
 }
 
 // Misma forma que el servidor: modelo fijo, tope de la operación, sistema con caché.
-const callModel = async (op, system, messages) => {
+const callModel = async (role, maxTokens, system, messages) => {
   const inputChars = (system || '').length + messages.reduce((a, m) => a + m.content.length, 0);
-  const worst = (estTokens(inputChars) * PRICE.input + op.maxTokens * PRICE.output) / 1e6;
+  const worst = (estTokens(inputChars) * PRICE.input + maxTokens * PRICE.output) / 1e6;
   if (usage.usd + worst > MAX_USD) throw new BudgetStop(`Presupuesto: ${usage.usd.toFixed(4)} USD gastados; la siguiente llamada podría superar ${MAX_USD} USD.`);
-  const params = { model: MODEL, max_tokens: op.maxTokens, messages };
+  const params = { model: MODEL, max_tokens: maxTokens, messages };
   if (system !== undefined) params.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
   const res = await client.messages.create(params);
   const u = res.usage || {};
+  const cost = costOf(u);
   usage.calls += 1; usage.input += u.input_tokens || 0; usage.output += u.output_tokens || 0;
-  usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0;
-  usage.usd += costOf(u);
+  usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0; usage.usd += cost;
+  const r = (usage.byRole[role] ||= { calls: 0, input: 0, output: 0, usd: 0, maxTokensHits: 0 });
+  r.calls += 1; r.input += u.input_tokens || 0; r.output += u.output_tokens || 0; r.usd += cost;
+  if (res.stop_reason === 'max_tokens') r.maxTokensHits += 1;
   return { text: res.content?.find((b) => b.type === 'text')?.text || '', stopReason: res.stop_reason, usage: u };
 };
 
@@ -145,118 +189,124 @@ const tryExtractJson = (text) => {
   try { return JSON.parse(m[0]); } catch { return null; }
 };
 
-// Mismo patrón que callClaude: un reintento si el JSON no es válido.
-const callJson = async (op, system, messages) => {
-  const attempts = [];
-  const first = await callModel(op, system, messages);
-  attempts.push({ stopReason: first.stopReason, usage: first.usage, raw: first.text });
-  let parsed = tryExtractJson(first.text);
-  if (!parsed) {
-    const retrySystem = system !== undefined ? `${system}\n${JSON_RETRY_INSTRUCTION}` : JSON_RETRY_INSTRUCTION;
-    const second = await callModel(op, retrySystem, messages);
-    attempts.push({ stopReason: second.stopReason, usage: second.usage, raw: second.text });
-    parsed = tryExtractJson(second.text);
-  }
-  return { parsed, attempts };
+// Adaptador con el contrato de callClaude (lo que la app inyecta en
+// primerContactoTurn): valida operación, modelo y tope igual que el servidor,
+// y reintenta una vez si el JSON no es válido.
+const roleOf = (options, system) => (options.operation === 'simulator_prospect' ? 'perfil' : String(system).includes('Eres coach') ? 'coaching' : 'prospecto');
+const appCall = (log) => async (system, messages, options) => {
+  const op = AI_OPERATIONS[options.operation];
+  if (!op || !op.models.includes(options.model) || options.maxTokens > op.maxTokens) throw new Error(`Llamada fuera de la lista del servidor: ${JSON.stringify(options)}`);
+  const role = roleOf(options, system);
+  const first = await callModel(role, options.maxTokens, system, messages);
+  log.push({ role, stopReason: first.stopReason, outputTokens: first.usage.output_tokens, retry: false });
+  const parsed = tryExtractJson(first.text);
+  if (parsed) return parsed;
+  const retrySystem = system !== undefined ? `${system}\n${JSON_RETRY_INSTRUCTION}` : JSON_RETRY_INSTRUCTION;
+  const second = await callModel(role, options.maxTokens, retrySystem, messages);
+  log.push({ role, stopReason: second.stopReason, outputTokens: second.usage.output_tokens, retry: true });
+  const retried = tryExtractJson(second.text);
+  if (!retried) throw new Error('Respuesta inválida de la IA');
+  return retried;
 };
 
-// Igual que generatePrimerContactoProfile (anthropic.js): hasta 2 intentos si faltan campos esenciales.
-const generateProfile = async (project, config, lowFit) => {
-  const prompt = buildPrimerContactoProfilePrompt(project, config) + (lowFit ? LOW_FIT_HINT : '');
-  const tries = [];
-  let profile = null;
-  for (let i = 0; i < 2 && (!profile || profile.campos_faltantes.length); i += 1) {
-    const { parsed, attempts } = await callJson(OPS.profile, undefined, [{ role: 'user', content: prompt }]);
-    profile = parsed ? normalizePrimerContactoProfile(parsed) : null;
-    tries.push({ attempts, raw: parsed, normalized: profile });
-  }
-  const ok = Boolean(profile && !profile.campos_faltantes.length);
-  return { ok, prompt, profile: ok ? { ...profile, ...config } : profile, tries };
+// ─── Alumno simulado (solo para la prueba; no es código de la app) ─────────
+const studentSystem = (c) => `
+Eres un ALUMNO que practica appointment setting en un simulador. Atiendes por ${c.canal} a un prospecto que escribió primero tras ver un anuncio o contenido del experto.
+Lo que sabes del proyecto (solo esto; lo "no documentado" no lo sabes):
+${buildProjectContext(PROJECTS[c.project])}
+
+TU FORMA DE ACTUAR:
+${POLICIES[c.policy]}
+
+Escribe como en un chat real: uno o dos mensajes cortos, máximo 45 palabras, en español neutro. No digas que eres una IA.
+RESPONDE SOLO EN JSON: {"mensaje": "tu mensaje al prospecto"}`;
+const studentTurn = async (c, transcript, log) => {
+  const messages = transcript.map((m) => ({ role: m.role === 'prospect' ? 'user' : 'assistant', content: m.content }));
+  const first = await callModel('alumno', STUDENT_MAX_TOKENS, studentSystem(c), messages);
+  log.push({ role: 'alumno', stopReason: first.stopReason, outputTokens: first.usage.output_tokens, retry: false });
+  const parsed = tryExtractJson(first.text);
+  const text = typeof parsed?.mensaje === 'string' && parsed.mensaje.trim() ? parsed.mensaje.trim() : first.text.replace(/[{}"]/g, '').replace(/^mensaje:\s*/i, '').trim();
+  if (!text) throw new Error('El alumno simulado no respondió');
+  return text;
 };
 
-// ─── Observaciones automáticas (ayudan a la revisión; no la sustituyen) ────
+// ─── Ejecución de un caso ──────────────────────────────────────────────────
 const words = (t) => String(t || '').split(/\s+/).filter(Boolean).length;
-const profileChecks = (gen) => {
-  const allAttempts = gen.tries.flatMap((t) => t.attempts);
-  return {
-    completo: gen.ok,
-    intentos_api: allAttempts.length,
-    cortado_por_tokens: allAttempts.some((a) => a.stopReason === 'max_tokens'),
-    tokens_salida_max: Math.max(0, ...allAttempts.map((a) => a.usage?.output_tokens || 0)),
-    campos_faltantes: gen.profile?.campos_faltantes || ['(sin perfil)'],
-    encaje: gen.profile?.encaje,
-    apertura_palabras: words(gen.profile?.apertura_inicial),
-    apertura_breve: words(gen.profile?.apertura_inicial) <= OPENING_MAX_WORDS,
-  };
-};
-
 const runConversation = async (c) => {
   const project = PROJECTS[c.project];
   const config = { projectId: project.id, temperatura: c.temperatura, canal: c.canal, resistencia: c.resistencia };
-  const gen = await generateProfile(project, config, c.forceLowFit);
-  const result = { ...c, profileGeneration: { checks: profileChecks(gen), tries: gen.tries }, transcript: [], turns: [] };
-  if (!gen.ok) { result.error = 'Perfil incompleto: la simulación no arrancaría (igual que en la app).'; return result; }
-
-  const profile = gen.profile;
-  const opening = c.forcePriceOpening ? { text: PRICE_OPENING, source: 'forzado (caso de precio)' } : pickOpeningMessage(profile.apertura_inicial, c.temperatura);
+  const log = [];
+  const result = { ...c, transcript: [], turns: [], log };
+  let profile;
+  try {
+    profile = await generatePrimerContactoProfile({ call: appCall(log), project, config, random: seeded(c.id), overrides: c.overrides, isFatal: (e) => isStopError(e) });
+  } catch (err) {
+    if (isStopError(err)) throw err;
+    result.error = `Perfil: ${err.message}`;
+    return result;
+  }
+  result.profile = profile;
+  const opening = pickOpeningMessage(profile.apertura_inicial, c.temperatura, seeded(`${c.id}-apertura`));
   result.opening = opening;
   result.transcript.push({ role: 'prospect', content: opening.text });
-  const system = buildPrimerContactoSystemPrompt(project, profile);
-  result.systemPromptChars = system.length;
-
-  let leadState = 'abierto';
-  for (let i = 0; i < c.turns.length; i += 1) {
-    const turn = c.turns[i];
-    const lastProspect = [...result.transcript].reverse().find((m) => m.role === 'prospect')?.content || '';
-    const askedPrice = ASKS_PRICE.test(lastProspect);
-    const text = askedPrice ? `${PRICE_REPLIES[c.pricePolicy][c.project]} ${turn.text}` : turn.text;
-    const history = result.transcript.map((m) => ({ role: m.role === 'prospect' ? 'assistant' : 'user', content: m.content }));
-    const { parsed, attempts } = await callJson(OPS.turn, system, [...history, { role: 'user', content: text }]);
-    result.transcript.push({ role: 'setter', content: text });
-    const t = {
-      index: i + 1, kind: turn.kind, priceReply: askedPrice ? c.pricePolicy : null, setter: text,
-      jsonRetries: attempts.length - 1, stopReasons: attempts.map((a) => a.stopReason),
-      outputTokens: attempts.map((a) => a.usage?.output_tokens || 0),
-      ok: Boolean(parsed?.respuesta_prospecto),
-    };
-    if (!t.ok) { t.error = 'Respuesta inválida de la IA (tras el reintento)'; t.raw = attempts.map((a) => a.raw); result.turns.push(t); break; }
-    t.prospect = parsed.respuesta_prospecto;
-    t.prospectWords = words(parsed.respuesta_prospecto);
-    t.coaching = parsed.coaching || null;
-    t.estado = parsed.estado_lead;
-    t.estadoValido = LEAD_STATES.includes(parsed.estado_lead);
-    result.transcript.push({ role: 'prospect', content: parsed.respuesta_prospecto });
-    result.turns.push(t);
-    leadState = parsed.estado_lead;
-    if (isTerminalState('primer_contacto', leadState)) break;
+  let state = 'abierto';
+  for (let i = 1; i <= MAX_TURNS; i += 1) {
+    const setterText = await studentTurn(c, result.transcript, log);
+    const history = [...result.transcript];
+    let turn;
+    try {
+      turn = await runPrimerContactoTurn({ call: appCall(log), project, profile: { ...profile, ...config }, history, setterText });
+    } catch (err) {
+      if (isStopError(err)) throw err;
+      result.turns.push({ index: i, setter: setterText, error: err.message });
+      break;
+    }
+    result.transcript.push({ role: 'setter', content: setterText }, { role: 'prospect', content: turn.respuesta_prospecto });
+    result.turns.push({ index: i, setter: setterText, ...turn, prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
+    state = turn.estado_lead;
+    if (isTerminalState('primer_contacto', state)) break;
   }
-  result.finalState = leadState;
+  result.finalState = state;
   result.observations = observe(result);
   return result;
 };
 
+// Observaciones automáticas (ayudan a la revisión; no la sustituyen).
+const STOP = new Set('para pero porque tiene tienen hace meses años sobre entre desde cuando donde como esto este esta esos estas solo sola muy más menos real realmente quiere cree pacientes agenda consultorio programa dinero gastos tiempo trabajo'.split(' '));
+const keyWords = (s) => (String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').match(/[a-zñ0-9]{5,}|\d{3,}/g) || []).filter((w) => !STOP.has(w));
 const observe = (r) => {
-  const ts = r.turns.filter((t) => t.ok);
-  const at = (k) => ts.filter((t) => t.kind === k);
-  const evasive = ts.filter((t) => t.priceReply === 'evasive');
-  const accepted = ts.find((t) => t.estado === 'pidio_llamada');
+  const ts = r.turns.filter((t) => !t.error);
+  const scores = ts.map((t) => t.coaching?.puntuacion_mensaje ?? null);
+  const accepted = ts.find((t) => t.estado_lead === 'pidio_llamada');
+  // Posible fuga: el coaching usa 2+ palabras distintivas de un hecho oculto no dichas antes del turno.
+  const leaks = [];
+  let seen = r.opening?.text || '';
+  for (const t of ts) {
+    const seenW = new Set(keyWords(`${seen} ${t.setter}`));
+    const coach = keyWords(JSON.stringify(t.coaching || {}));
+    for (const h of r.profile?.hechos_ocultos || []) {
+      const hits = keyWords(h).filter((w) => !seenW.has(w) && coach.includes(w));
+      if (hits.length >= 2) leaks.push(`#${t.index}: ${hits.join(',')}`);
+    }
+    seen += ` ${t.setter} ${t.respuesta_prospecto}`;
+  }
   return {
     estado_final: r.finalState,
     turnos: ts.length,
-    errores_json_o_estado: r.turns.filter((t) => !t.ok || !t.estadoValido).length,
-    reintentos_json: r.turns.reduce((a, t) => a + t.jsonRetries, 0),
-    cortes_por_tokens: r.turns.filter((t) => t.stopReasons.includes('max_tokens')).length,
-    palabras_prospecto_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.prospectWords, 0) / ts.length) : 0,
     acepto_cita_en_turno: accepted?.index ?? null,
-    cita_antes_del_turno_4: Boolean(accepted && accepted.index < 4),
-    evasivas: evasive.length,
-    insistio_tras_evasiva: evasive.some((t) => ASKS_PRICE.test(t.prospect)),
-    alerta_desde_segunda_evasiva: evasive.length >= 2 ? Boolean(evasive[1].coaching?.alerta) : null,
-    puntuacion_respuestas_honestas_precio: ts.filter((t) => t.priceReply === 'honest').map((t) => t.coaching?.puntuacion_mensaje),
-    alerta_promesa_inventada: at('promesa_inventada').map((t) => Boolean(t.coaching?.alerta)),
-    puntuacion_cierre_no_encaje: at('cierre_no_encaje').map((t) => t.coaching?.puntuacion_mensaje),
-    puntuacion_cita_prematura_o_pitch: [...at('cita'), ...at('pitch'), ...at('interrogatorio')].filter((t) => t.index <= 2 || t.kind !== 'cita').map((t) => `${t.kind}@${t.index}:${t.coaching?.puntuacion_mensaje}`),
-    precio_mencionado_por_prospecto_sin_documentar: r.project === 'bienestar' && ts.some((t) => /\d[\d.,]*\s*(usd|d[oó]lares|pesos|€|\$)|\$\s*\d/i.test(t.prospect)),
+    aceptaciones: ts.map((t) => `${t.index}:${t.acepta_cita}`).join(' '),
+    palabras_prospecto_media: ts.length ? Math.round(ts.reduce((a, t) => a + t.prospectWords, 0) / ts.length) : 0,
+    palabras_prospecto_turnos_1_2: ts.slice(0, 2).map((t) => t.prospectWords),
+    ecos_finales: ts.filter((t) => t.echo).length,
+    reintentos_por_eco: ts.filter((t) => t.echoRetried).length,
+    puntuaciones: scores,
+    turnos_sin_puntuacion: scores.filter((s) => s === null).length,
+    reintentos_por_puntuacion: ts.filter((t) => t.coachingRetried).length,
+    mensajes_sugeridos_descartados: ts.filter((t) => (t.coachingIssues || []).some((i) => i.includes('mensaje_alternativo_descartado'))).length,
+    alertas: ts.filter((t) => t.coaching?.alerta).length,
+    posibles_fugas_de_perfil: leaks,
+    turnos_con_error: r.turns.filter((t) => t.error).length,
+    precio_preguntado_por_prospecto: ts.filter((t) => t.askedPrice).length,
   };
 };
 
@@ -264,33 +314,43 @@ const observe = (r) => {
 const SAMPLE_PROFILE = {
   nombre: 'Nombre de ejemplo', origen: 'Un reel del experto', identidad: 'Profesional del nicho', situacion: 'Situación de ejemplo con dos hechos',
   emocion: 'Frustración', motivacion: 'Quiere resolverlo este trimestre', objeciones: ['No tengo tiempo', 'Ya lo intenté'],
-  hechos_ocultos: ['Hecho uno', 'Hecho dos'], encaje: 'medio', apertura_inicial: 'Info',
+  hechos_ocultos: ['Hecho uno', 'Hecho dos'], encaje: 'medio', estilo: 'escribe informal', apertura_inicial: 'Info',
 };
 const dryRun = () => {
   let expected = 0; let worst = 0; let calls = 0; let worstCalls = 0;
-  const rows = [];
-  const add = (inChars, maxOut, typicalOut) => {
-    calls += 1; worstCalls += 2; // reintento de JSON en el peor caso
+  // Peor caso por llamada: reintento de JSON (×2) y, en prospecto/coaching, el reintento por eco o por puntuación (×2 más).
+  const add = (inChars, maxOut, typicalOut, worstFactor) => {
+    calls += 1; worstCalls += worstFactor;
     expected += (estTokens(inChars) * PRICE.input + typicalOut * PRICE.output) / 1e6;
-    worst += 2 * (estTokens(inChars) * PRICE.input + maxOut * PRICE.output) / 1e6;
+    worst += worstFactor * (estTokens(inChars) * PRICE.input + maxOut * PRICE.output) / 1e6;
   };
-  const profileOf = (p, lowFit) => buildPrimerContactoProfilePrompt(PROJECTS[p.project], p) + (lowFit ? LOW_FIT_HINT : '');
+  const rows = [];
   for (const c of conversations) {
-    const pp = profileOf(c, c.forceLowFit);
-    add(pp.length, OPS.profile.maxTokens, 350); add(pp.length, OPS.profile.maxTokens, 350); // hasta 2 intentos de perfil
-    const system = buildPrimerContactoSystemPrompt(PROJECTS[c.project], { ...SAMPLE_PROFILE, ...c });
-    let history = 40;
-    for (const t of c.turns) {
-      history += t.text.length + 260; // mensaje del alumno + respuesta típica del prospecto
-      add(system.length + history, OPS.turn.maxTokens, 320);
+    const project = PROJECTS[c.project];
+    const seeds = drawProfileSeeds(c, seeded(c.id), c.overrides);
+    const pp = buildPrimerContactoProfilePrompt(project, c, seeds);
+    add(pp.length, PROFILE_OPTIONS.maxTokens, 380, 4); // hasta 2 intentos de perfil, cada uno con reintento de JSON
+    const prospectSystem = buildPrimerContactoSystemPrompt(project, { ...SAMPLE_PROFILE, ...c });
+    const coachSystem = buildPrimerContactoCoachPrompt(project);
+    let transcript = 60;
+    for (let i = 0; i < MAX_TURNS; i += 1) {
+      add(studentSystem(c).length + transcript, STUDENT_MAX_TOKENS, 70, 1);
+      transcript += 180;
+      add(prospectSystem.length + transcript, PROSPECT_TURN_OPTIONS.maxTokens, 70, 4);
+      add(coachSystem.length + buildPrimerContactoCoachMessage([], '').length + transcript, COACH_TURN_OPTIONS.maxTokens, 220, 4);
+      transcript += 120;
     }
-    rows.push({ id: c.id, categoria: c.category, combinacion: `${c.temperatura}/${c.resistencia}`, proyecto: c.project, turnos_max: c.turns.length, prompt_sistema_caracteres: system.length });
+    rows.push({ id: c.id, categoria: c.category, combinacion: `${c.temperatura}/${c.resistencia}`, proyecto: c.project, alumno: c.policy, encaje: seeds.encaje, apertura: seeds.apertura.texto || '(propia)' });
   }
-  for (const p of profilesOnly) { const pp = profileOf(p); add(pp.length, OPS.profile.maxTokens, 350); add(pp.length, OPS.profile.maxTokens, 350); }
+  for (const p of profilesOnly) {
+    const pp = buildPrimerContactoProfilePrompt(PROJECTS[p.project], p, drawProfileSeeds(p, seeded(p.id)));
+    add(pp.length, PROFILE_OPTIONS.maxTokens, 380, 4);
+  }
   console.table(rows);
   console.log(JSON.stringify({
-    modelo: MODEL, operaciones: { perfil: { maxTokens: OPS.profile.maxTokens }, turno: { maxTokens: OPS.turn.maxTokens } },
-    conversaciones: conversations.length, perfiles_solo: profilesOnly.length,
+    modelo: MODEL,
+    topes: { perfil: PROFILE_OPTIONS.maxTokens, prospecto: PROSPECT_TURN_OPTIONS.maxTokens, coaching: COACH_TURN_OPTIONS.maxTokens, alumno_simulado: STUDENT_MAX_TOKENS },
+    conversaciones: conversations.length, turnos_maximos_por_conversacion: MAX_TURNS, perfiles_solo: profilesOnly.length,
     llamadas_maximas_sin_reintentos: calls, llamadas_maximas_con_reintentos: worstCalls,
     costo_esperado_usd: Number(expected.toFixed(3)), costo_peor_caso_usd: Number(worst.toFixed(3)), tope_de_gasto_usd: MAX_USD,
   }, null, 2));
@@ -298,19 +358,19 @@ const dryRun = () => {
 
 // ─── Ejecución real ────────────────────────────────────────────────────────
 const md = (r) => {
-  const lines = [`## ${r.id} · ${r.title}`, '', `${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · precio ${r.pricePolicy}${r.forceLowFit ? ' · encaje bajo (prueba)' : ''}`, '', `Esperado: ${r.expect}`, ''];
-  const pc = r.profileGeneration.checks;
-  lines.push(`Perfil: ${pc.completo ? 'completo' : 'INCOMPLETO'} · encaje ${pc.encaje} · ${pc.intentos_api} llamada(s) · salida máx. ${pc.tokens_salida_max} tokens${pc.cortado_por_tokens ? ' · CORTADO' : ''}`, '');
-  const prof = r.profileGeneration.tries.at(-1)?.normalized;
-  if (prof) lines.push('```json', JSON.stringify(prof, null, 2), '```', '');
+  const lines = [`## ${r.id} · ${r.title}`, '', `${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · alumno ${r.policy}`, '', `Esperado: ${r.expect}`, ''];
+  if (r.profile) {
+    const { attempts: _a, seeds: _s, ...shown } = r.profile;
+    lines.push(`Perfil (encaje ${r.profile.encaje}, ${r.profile.attempts} intento(s)):`, '```json', JSON.stringify(shown, null, 2), '```', '');
+  }
   if (r.error) { lines.push(`**${r.error}**`, ''); return lines.join('\n'); }
   lines.push(`**Prospecto:** ${r.opening.text}  _(apertura: ${r.opening.source})_`, '');
   for (const t of r.turns) {
-    lines.push(`**Alumno (${t.kind}${t.priceReply ? `, precio ${t.priceReply}` : ''}):** ${t.setter}`, '');
-    if (!t.ok) { lines.push(`> ${t.error}`, ''); continue; }
+    lines.push(`**Alumno ${t.index}:** ${t.setter}`, '');
+    if (t.error) { lines.push(`> ERROR: ${t.error}`, ''); continue; }
     const k = t.coaching || {};
-    lines.push(`> Coaching ${k.puntuacion_mensaje}/10 · ${k.etapa_set} · bien: ${k.que_hizo_bien || '—'} · mejorar: ${k.que_mejorar || '—'}${k.alerta ? ` · ALERTA: ${k.alerta}` : ''}`, '');
-    lines.push(`**Prospecto:** ${t.prospect}  _(estado: ${t.estado}${t.estadoValido ? '' : ' — INVÁLIDO'})_`, '');
+    lines.push(`> Coaching ${k.puntuacion_mensaje ?? 'sin puntuación'}/10 · ${k.etapa_set ?? '—'} · bien: ${k.que_hizo_bien || '—'} · mejorar: ${k.que_mejorar || '—'}${k.mensaje_alternativo ? ` · sugerido: ${k.mensaje_alternativo}` : ''}${k.alerta ? ` · ALERTA: ${k.alerta}` : ''}${(t.coachingIssues || []).length ? ` · [${t.coachingIssues.join('; ')}]` : ''}`, '');
+    lines.push(`**Prospecto:** ${t.respuesta_prospecto}  _(estado: ${t.estado_lead} · acepta_cita: ${t.acepta_cita} · modelo dijo: ${t.estado_modelo}${t.echoRetried ? ' · reintento por eco' : ''}${t.echo ? ' · ECO' : ''})_`, '');
   }
   lines.push('Observaciones automáticas:', '```json', JSON.stringify(r.observations, null, 2), '```', '');
   return lines.join('\n');
@@ -319,11 +379,9 @@ const md = (r) => {
 const main = async () => {
   if (!RUN) { dryRun(); console.log('\nSimulación: no se hizo ninguna llamada. Usa --run para ejecutar con la IA real.'); return; }
   mkdirSync(OUT_REAL, { recursive: true });
-  console.log(`Resultados en: ${OUT_REAL}
-Tope de gasto: ${MAX_USD} USD
-`);
+  console.log(`Resultados en: ${OUT_REAL}\nTope de gasto: ${MAX_USD} USD\n`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const results = { modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
+  const results = { ronda: 2, modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
   try {
     for (const c of conversations) {
       process.stdout.write(`${c.id} … `);
@@ -333,9 +391,17 @@ Tope de gasto: ${MAX_USD} USD
     }
     for (const p of profilesOnly) {
       process.stdout.write(`${p.id} … `);
-      const gen = await generateProfile(PROJECTS[p.project], { projectId: PROJECTS[p.project].id, ...p }, false);
-      results.perfiles.push({ ...p, checks: profileChecks(gen), tries: gen.tries });
-      console.log(`${gen.ok ? 'completo' : 'INCOMPLETO'} · ${usage.usd.toFixed(4)} USD`);
+      const log = [];
+      const project = PROJECTS[p.project];
+      try {
+        const profile = await generatePrimerContactoProfile({ call: appCall(log), project, config: { projectId: project.id, ...p }, random: seeded(p.id), isFatal: (e) => isStopError(e) });
+        results.perfiles.push({ ...p, ok: true, profile, log });
+        console.log(`completo · encaje ${profile.encaje} · ${usage.usd.toFixed(4)} USD`);
+      } catch (err) {
+        if (isStopError(err)) throw err;
+        results.perfiles.push({ ...p, ok: false, error: err.message, log });
+        console.log(`INCOMPLETO · ${usage.usd.toFixed(4)} USD`);
+      }
     }
   } catch (err) {
     // Cualquier error de la API (tras los reintentos del SDK) o de red detiene
@@ -344,8 +410,8 @@ Tope de gasto: ${MAX_USD} USD
     console.log(`\nDetenido: ${results.detenido}`);
   }
   results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)) };
-  writeFileSync(resolve(OUT_REAL, `resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
-  writeFileSync(resolve(OUT_REAL, `transcripciones-${stamp}.md`), redact([`# Primer contacto · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
+  writeFileSync(resolve(OUT_REAL, `ronda2-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
+  writeFileSync(resolve(OUT_REAL, `ronda2-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda 2 · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
   console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT_REAL}`);
 };
 
