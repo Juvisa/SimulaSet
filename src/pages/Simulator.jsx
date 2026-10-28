@@ -8,12 +8,15 @@ import {
   buildOutboundSystemPrompt,
   buildInboundSystemPrompt,
   buildReactivacionSystemPrompt,
+  buildPrimerContactoSystemPrompt,
 } from '../utils/prompts';
+import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
+import { pickOpeningMessage } from '../utils/primerContacto';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
 
-const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#DC2626' };
+const PRIMER_CONTACTO = 'primer_contacto';
 
 // Chat turno a turno del prospecto: Haiku en vez de Sonnet (mismo modelo para
 // TODO se disparó a $11 USD/24h en Anthropic). La respuesta trae
@@ -29,6 +32,7 @@ const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#D
 const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 800, operation: 'simulator_turn' };
 
 const buildSystemPrompt = (mode, project, prospectProfile) => {
+  if (mode === PRIMER_CONTACTO) return buildPrimerContactoSystemPrompt(project, prospectProfile);
   if (mode === 'outbound') return buildOutboundSystemPrompt(project, prospectProfile);
   if (mode === 'inbound') return buildInboundSystemPrompt(project, prospectProfile);
   return buildReactivacionSystemPrompt(project, prospectProfile);
@@ -66,10 +70,12 @@ const ScoreBadge = ({ score }) => {
 
 // Compartido entre el panel lateral/drawer y la tarjeta inline en el chat —
 // evita recalcular la misma lógica mode-dependiente en dos lugares.
-const getProbInfo = (mode, coaching) => ({
-  label: mode === 'reactivacion' ? 'Probabilidad reagendamiento' : 'Probabilidad asistencia',
-  value: mode === 'reactivacion' ? coaching?.probabilidad_reagendamiento : coaching?.probabilidad_asistencia,
-});
+// La métrica depende de la modalidad (simulatorModes.js); un modo desconocido
+// conserva la de siempre (probabilidad de asistencia).
+const getProbInfo = (mode, coaching) => {
+  const probability = getMode(mode)?.probability || { key: 'probabilidad_asistencia', label: 'Probabilidad asistencia' };
+  return { label: probability.label, value: coaching?.[probability.key] };
+};
 
 const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   if (!coaching) return null;
@@ -243,6 +249,16 @@ const Simulator = () => {
     try {
       const profile = await generateProspectProfile(proj, mode, config);
       setProspectProfile(profile);
+      // Primer contacto: el prospecto escribe primero con un mensaje breve
+      // («Info», «Precio»…) tomado del perfil y validado en el navegador; no
+      // hace falta una llamada extra a la IA para la apertura.
+      if (mode === PRIMER_CONTACTO) {
+        const opening = pickOpeningMessage(profile.apertura_inicial, config.temperatura);
+        setMessages([{ id: crypto.randomUUID(), role: 'prospect', content: opening.text, time: formatTime() }]);
+        setLeadState('abierto');
+        setLoading(false);
+        return;
+      }
       const systemPrompt = buildSystemPrompt(mode, proj, { ...profile, ...config });
       // Get initial message
       const initMessages = [{ role: 'user', content: 'START_SIMULATION' }];
@@ -349,8 +365,9 @@ const Simulator = () => {
       // de inmediato (ver bloque "ended" más abajo); el efecto de arriba
       // (pendingClose) se encarga de navegar al reporte con un pequeño
       // margen después.
-      const terminalStates = ['pidio_llamada', 'cerrado', 'confirmado_con_entusiasmo', 'quiere_reagendar', 'cancelo'];
-      if (terminalStates.includes(response.estado_lead)) {
+      // Los estados que cierran la sesión dependen de la modalidad (las
+      // históricas conservan su lista; Primer contacto suma no_califica).
+      if (isTerminalState(mode, response.estado_lead)) {
         setEnded(true);
         setPendingClose({ finalState: response.estado_lead, finalMessages: [...updatedMessages, prospectMsg] });
       }
@@ -405,7 +422,7 @@ const Simulator = () => {
     navigate('/simulation-report', { state: { session } });
   };
 
-  const modeColor = MODE_COLORS[mode] || '#E0605E';
+  const modeColor = getModeColor(mode);
 
   if (loading) {
     return (
@@ -428,7 +445,8 @@ const Simulator = () => {
             </div>
             <div className="min-w-0">
               <div className="font-semibold text-text-primary text-sm truncate">{prospectProfile?.nombre || 'Prospecto'}</div>
-              <div className="text-text-secondary text-xs truncate">{prospectProfile?.tipNegocio}</div>
+              {/* En Primer contacto el perfil es privado: solo nombre y canal. */}
+              <div className="text-text-secondary text-xs truncate">{mode === PRIMER_CONTACTO ? config?.canal : prospectProfile?.tipNegocio}</div>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -451,6 +469,8 @@ const Simulator = () => {
               ? 'bg-green-500/20 text-green-400'
               : ['cerrado', 'cancelo'].includes(leadState)
               ? 'bg-red-500/20 text-red-400'
+              : leadState === 'no_califica'
+              ? 'bg-slate-500/20 text-slate-300'
               : leadState === 'resistente'
               ? 'bg-orange-500/20 text-orange-400'
               : 'bg-blue-500/20 text-blue-400'

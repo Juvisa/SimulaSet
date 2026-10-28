@@ -1,11 +1,10 @@
-const MODE_CONFIG = {
-  outbound: { label: 'Outbound', color: '#2563EB', bg: '#2563EB20' },
-  inbound: { label: 'Inbound', color: '#1D9E75', bg: '#1D9E7520' },
-  reactivacion: { label: 'Reactivación', color: '#DC2626', bg: '#DC262620' },
-};
+import { getMode } from '../utils/simulatorModes';
 
 const ModeBadge = ({ mode, size = 'md' }) => {
-  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.outbound;
+  // Un modo desconocido (o una sesión antigua sin modo) se sigue mostrando
+  // como Outbound, igual que antes.
+  const meta = getMode(mode) || getMode('outbound');
+  const cfg = { label: meta.label, color: meta.color, bg: `${meta.color}20` };
   const sizes = {
     sm: 'text-xs px-2 py-0.5',
     md: 'text-sm px-3 py-1',

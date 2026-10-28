@@ -301,7 +301,9 @@ const SimulationReport = () => {
             nombre: session.prospectProfile?.nombre || 'Prospecto simulado',
             canal: session.prospectProfile?.canal || 'WhatsApp',
             origen: 'Simulador',
-            dolor_principal: session.prospectProfile?.dolor || '',
+            // En Primer contacto el perfil es privado: el briefing se arma solo
+            // con lo que el alumno descubrió en la conversación.
+            dolor_principal: session.mode === 'primer_contacto' ? '' : (session.prospectProfile?.dolor || ''),
             nivel_consciencia: 'Simulado',
             temperatura: session.prospectProfile?.temperatura || 'Tibio',
           }}

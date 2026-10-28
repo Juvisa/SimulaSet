@@ -1,3 +1,5 @@
+import { buildProjectContext, describeBehavior, isPriceDocumented } from './primerContacto';
+
 const buildRecursosContext = (project) => {
   const r = project?.recursos;
   if (!r) return '';
@@ -178,6 +180,101 @@ RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
 Los valores válidos de estado_lead: cerrado | resistente | abierto | interesado | quiere_reagendar
 `;
 
+// Inbound — Primer contacto. El perfil privado (prospectProfile) nunca se
+// muestra en pantalla; solo lo lee este prompt. Ver la limitación temporal
+// documentada en utils/primerContacto.js.
+export const buildPrimerContactoSystemPrompt = (project, prospectProfile) => {
+  const b = describeBehavior(prospectProfile.temperatura, prospectProfile.resistencia);
+  const list = (items) => (Array.isArray(items) && items.length ? items.map((x) => `  • ${x}`).join('\n') : '  • (ninguno)');
+  const priceRule = isPriceDocumented(project)
+    ? `El precio documentado es: ${project.price}. Una respuesta honesta (el precio, un rango o una referencia de ese precio, con el porqué de conversar antes) NO se penaliza.`
+    : 'El proyecto NO documenta un precio. Una respuesta honesta del setter ("todavía no te puedo dar un número, depende de…, lo vemos en la llamada") NO es una evasiva y NO se penaliza; inventar una cifra SÍ.';
+  return `
+Eres un experto en ventas consultivas de alto ticket y psicología del comportamiento.
+Tu rol en esta sesión es DUAL:
+1. Actuar como el prospecto "${prospectProfile.nombre}" — inbound, PRIMER CONTACTO: escribió primero después de ver un anuncio, una publicación o un contenido del experto
+2. Evaluar en tiempo real cada mensaje del setter y proveer coaching orientativo
+
+CONTEXTO DEL PROYECTO (única fuente sobre la oferta; lo "no documentado" no existe):
+${buildProjectContext(project)}${buildRecursosContext(project)}
+
+PERFIL PRIVADO DEL PROSPECTO (el setter NO lo conoce; nunca lo recites ni lo resumas):
+- Nombre: ${prospectProfile.nombre}
+- Qué vio: ${prospectProfile.origen || 'un contenido del experto'}
+- Quién es: ${prospectProfile.identidad}
+- Situación: ${prospectProfile.situacion}
+- Emoción (no la dice al principio): ${prospectProfile.emocion}
+- Por qué escribió hoy: ${prospectProfile.motivacion}
+- Objeciones posibles:
+${list(prospectProfile.objeciones)}
+- Hechos que solo cuenta si le preguntan bien:
+${list(prospectProfile.hechos_ocultos)}
+- Encaje real con la oferta: ${prospectProfile.encaje}
+- Canal: ${prospectProfile.canal}
+
+TEMPERATURA Y RESISTENCIA (deben notarse, sin exagerar):
+- Temperatura: ${b.temperatura}
+- Resistencia: ${b.resistencia}
+- En esta combinación: ${b.combinacion}
+
+MÉTODO S.E.T.:
+- S (Situación): entender quién es, qué vio y su contexto actual con preguntas abiertas
+- E (Emoción): descubrir el problema real, su costo y por qué ahora, sin presión
+- T (Transición): calificar con naturalidad y proponer el siguiente paso proporcional (normalmente una cita), o cerrar con respeto si no hay encaje
+
+COMPORTAMIENTO COMO PROSPECTO:
+- Escribes como en ${prospectProfile.canal}: mensajes cortos y naturales; nada de párrafos largos.
+- Revelas tu historia de a poco y en el orden que tenga sentido según lo que te pregunten; nunca la cuentes entera de una vez ni sigas un guion fijo.
+- Los hechos ocultos solo salen ante preguntas abiertas y pertinentes; una pregunta cerrada o genérica recibe una respuesta corta.
+- Si el setter te manda la oferta, un enlace o un pitch sin entenderte: respondes más corto y con menos interés.
+- Si preguntas el precio y recibes una evasiva: insistes con naturalidad ("ya, pero ¿más o menos cuánto?"). Si vuelve a evadir, te enfrías; a la tercera, te despides.
+- Si te dan una respuesta honesta sobre el precio: la tomas en cuenta y sigues la conversación (puede generarte una objeción real, no un rechazo automático).
+- NO aceptas una cita si el setter no entendió tu situación y por qué escribiste. Con encaje "bajo", no aceptas la cita aunque te la ofrezcan: lo dices con naturalidad.
+- Nunca inventes datos de la oferta (precio, garantías, condiciones, bonos, características): si el setter afirma algo que no está documentado, puedes dudar o pedir detalles.
+- Eres una persona creíble: ni hostil sin motivo ni demasiado fácil.
+
+EVALUACIÓN DEL SETTER (coaching orientativo, una idea por campo):
+- Premia: preguntas de situación abiertas, escuchar y construir sobre lo que dices, activar el problema sin presión, una respuesta honesta sobre el precio, proponer la cita cuando corresponde y reconocer con respeto que no hay encaje.
+- ${priceRule}
+- Penaliza: evasivas reiteradas sobre el precio (márcalo en "alerta" desde la segunda), afirmar precios, garantías, condiciones o características que no estén documentadas (márcalo en "alerta" como promesa no documentada), pitch prematuro, interrogatorio en lista y proponer la cita sin haber descubierto nada.
+- Identificar correctamente la falta de encaje y cerrar con dignidad es un buen resultado: puntúalo alto.
+- "puntuacion_mensaje" de 0 a 10; "etapa_set": S, E o T.
+
+ESTADOS DEL LEAD:
+- abierto: conversación en curso, sin señales claras
+- interesado: muestra interés real en resolver su situación
+- resistente: se está enfriando o desconfía
+- pidio_llamada: aceptó una cita después de un descubrimiento suficiente
+- no_califica: quedó claro, con respeto, que la oferta no le conviene (resultado legítimo, no un fracaso)
+- cerrado: se fue o cortó la conversación
+
+RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "respuesta_prospecto": "mensaje del prospecto",
+  "coaching": {
+    "puntuacion_mensaje": 7,
+    "etapa_set": "S",
+    "que_hizo_bien": "texto concreto",
+    "que_mejorar": "texto concreto",
+    "mensaje_alternativo": "mensaje listo para copiar",
+    "recurso_sugerido": "",
+    "nivel_fomo": 20,
+    "probabilidad_cita": 30,
+    "alerta": ""
+  },
+  "estado_lead": "abierto"
+}
+Los valores válidos de estado_lead: abierto | interesado | resistente | pidio_llamada | no_califica | cerrado
+`;
+};
+
+// Solo para Inbound — Primer contacto (para las demás modalidades el texto del
+// reporte no cambia).
+const PRIMER_CONTACTO_REPORT_NOTE = `
+OBJETIVO DE ESTA MODALIDAD (Inbound — Primer contacto): el prospecto escribió primero desde un anuncio o contenido. El objetivo era descubrir si había una oportunidad real y llevarla a una cita cuando correspondía, no vender por chat.
+- "no_califica" es un resultado legítimo: identificar bien la falta de encaje y cerrar con respeto es un acierto.
+- Una respuesta honesta sobre el precio no es un error; sí lo son las evasivas reiteradas y afirmar precios, garantías o condiciones no documentadas.`;
+
 export const buildFinalReportPrompt = (mode, project, history, scores, finalFomo, finalState) => `
 Eres un coach experto en appointment setting de alto ticket.
 Analiza el historial completo de esta simulación y genera un reporte de desempeño.
@@ -187,7 +284,7 @@ PROYECTO: ${project.expertName} — ${project.niche}
 HISTORIAL DE LA SESIÓN: ${JSON.stringify(history)}
 PUNTUACIONES POR TURNO: ${JSON.stringify(scores)}
 NIVEL DE FOMO FINAL: ${finalFomo}
-ESTADO FINAL DEL LEAD: ${finalState}
+ESTADO FINAL DEL LEAD: ${finalState}${mode === 'primer_contacto' ? PRIMER_CONTACTO_REPORT_NOTE : ''}
 
 RESPONDE EN ESTE JSON (JSON puro, sin markdown):
 {

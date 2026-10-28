@@ -16,6 +16,7 @@ import {
   getPracticeMinimumStatus,
   getPracticeProgress,
 } from '../../utils/practiceLevel.js';
+import { HISTORICAL_MODE_IDS, MODE_IDS } from '../../utils/simulatorModes.js';
 
 // Límites — reflejan exactamente las restricciones CHECK de las migraciones
 // 202610130001_create_setter_passports.sql y
@@ -453,7 +454,10 @@ export const buildPassportState = ({ passportRow, commercialProfile, onboarding,
 // mínimo y progreso = practiceLevel.js con el conteo de simulaciones válidas.
 // Las sesiones sin puntuar no cuentan (misma regla que el resto de la app).
 
-const MODES = ['outbound', 'inbound', 'reactivacion'];
+// Orden de simulatorModes.js. Las tres modalidades históricas aparecen siempre
+// (como antes); las nuevas, solo cuando el alumno las practicó, así que los
+// pasaportes sin la modalidad nueva conservan exactamente su desglose.
+const MODES = MODE_IDS;
 
 export const buildPassportEvidence = ({ sessions, setScore }) => {
   const validSessions = (Array.isArray(sessions) ? sessions : []).filter(isValidSimulation);
@@ -464,6 +468,7 @@ export const buildPassportEvidence = ({ sessions, setScore }) => {
     practiceLevel: getPracticeLevel(validSimulations),
     practiceMinimum: getPracticeMinimumStatus(validSimulations),
     progress: getPracticeProgress(validSimulations),
-    byMode: MODES.map(mode => ({ mode, simulations: validSessions.filter(s => s.mode === mode).length })),
+    byMode: MODES.map(mode => ({ mode, simulations: validSessions.filter(s => s.mode === mode).length }))
+      .filter(m => HISTORICAL_MODE_IDS.includes(m.mode) || m.simulations > 0),
   };
 };
