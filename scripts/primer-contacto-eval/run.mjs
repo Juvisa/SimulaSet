@@ -19,8 +19,9 @@
 //   node scripts/primer-contacto-eval/run.mjs                 # simulación, gratis
 //   node scripts/primer-contacto-eval/run.mjs --run           # llamadas reales
 //   Opciones: --max-usd 1.5  --only C01,C11  --no-profiles  --out <carpeta>
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+//   (--output-dir es sinónimo de --out; también se acepta --opcion=valor)
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_OPERATIONS, MODELS } from '../../api/_anthropic/operations.js';
@@ -32,20 +33,50 @@ import { isTerminalState } from '../../src/utils/simulatorModes.js';
 import { CONVERSATIONS, PROFILE_ONLY, PROJECTS, PRICE_REPLIES, LOW_FIT_HINT, PRICE_OPENING } from './matrix.mjs';
 
 // ─── Configuración ─────────────────────────────────────────────────────────
-const args = process.argv.slice(2);
-const flag = (name) => args.includes(name);
-const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; };
+const fail = (message) => { console.error(message); process.exit(2); };
+const FLAGS = new Set(['--run', '--no-profiles']);
+const OPTIONS = { '--max-usd': 'maxUsd', '--only': 'only', '--out': 'out', '--output-dir': 'out' };
+// Opciones desconocidas o sin valor detienen el script antes de cualquier
+// llamada (antes, una opción mal escrita se ignoraba en silencio).
+const parseArgs = (argv) => {
+  const parsed = { flags: new Set(), values: {} };
+  for (let i = 0; i < argv.length; i += 1) {
+    const [name, inline] = argv[i].split(/=(.*)/s);
+    if (FLAGS.has(name) && inline === undefined) { parsed.flags.add(name); continue; }
+    if (!(name in OPTIONS)) fail(`Opción no reconocida: ${argv[i]}\nOpciones válidas: --run, --no-profiles, --max-usd <USD>, --only <C01,C02>, --out <carpeta> (o --output-dir <carpeta>).`);
+    const value = inline !== undefined ? inline : argv[i + 1];
+    if (!value || (inline === undefined && value.startsWith('--'))) fail(`Falta el valor de ${name}.`);
+    if (inline === undefined) i += 1;
+    parsed.values[OPTIONS[name]] = value;
+  }
+  return parsed;
+};
+const parsedArgs = parseArgs(process.argv.slice(2));
+const flag = (name) => parsedArgs.flags.has(name);
 const RUN = flag('--run');
-const MAX_USD = Number(opt('--max-usd', '2'));
-const ONLY = opt('--only', '') ? opt('--only', '').split(',').map((s) => s.trim()) : null;
+const MAX_USD = Number(parsedArgs.values.maxUsd ?? '2');
+if (!Number.isFinite(MAX_USD) || MAX_USD <= 0) fail(`--max-usd debe ser un número mayor que 0 (recibido: ${parsedArgs.values.maxUsd}).`);
+const ONLY = parsedArgs.values.only ? parsedArgs.values.only.split(',').map((s) => s.trim()).filter(Boolean) : null;
 const WITH_PROFILES = !flag('--no-profiles');
-const REPO = fileURLToPath(new URL('../../', import.meta.url));
-const OUT = resolve(opt('--out', resolve(REPO, '..', 'primer-contacto-eval-output')));
-// Los resultados nunca se escriben dentro del repositorio.
-if (`${OUT.toLowerCase()}\\`.replace(/\//g, '\\').startsWith(resolve(REPO).toLowerCase().replace(/\//g, '\\'))) {
-  console.error(`La carpeta de resultados debe estar fuera del repositorio (${OUT}).`);
-  process.exit(2);
-}
+const REPO = resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const OUT = resolve(parsedArgs.values.out ?? join(dirname(REPO), 'primer-contacto-eval-output'));
+
+// Ruta real (sin nombres cortos tipo HP-LAP~1 ni diferencias de mayúsculas),
+// aunque la carpeta aún no exista: se resuelve el primer antecesor existente.
+const realPath = (p) => {
+  let existing = p; const rest = [];
+  while (!existsSync(existing) && dirname(existing) !== existing) { rest.unshift(basename(existing)); existing = dirname(existing); }
+  return join(realpathSync.native(existing), ...rest);
+};
+// Dentro del repositorio = la misma carpeta o una subcarpeta (comparación por
+// segmentos de ruta, no por prefijo de texto: «primer-contacto-eval-output» no
+// está dentro de «primer-contacto»).
+const isInside = (child, parent) => {
+  const rel = relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+};
+const OUT_REAL = realPath(OUT);
+if (isInside(OUT_REAL, realPath(REPO))) fail(`La carpeta de resultados debe estar fuera del repositorio (${OUT_REAL}).`);
 
 const MODEL_KEY = 'haiku';
 const MODEL = MODELS[MODEL_KEY]; // claude-haiku-4-5-20251001, igual que producción
@@ -287,7 +318,10 @@ const md = (r) => {
 
 const main = async () => {
   if (!RUN) { dryRun(); console.log('\nSimulación: no se hizo ninguna llamada. Usa --run para ejecutar con la IA real.'); return; }
-  mkdirSync(OUT, { recursive: true });
+  mkdirSync(OUT_REAL, { recursive: true });
+  console.log(`Resultados en: ${OUT_REAL}
+Tope de gasto: ${MAX_USD} USD
+`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const results = { modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
   try {
@@ -310,9 +344,9 @@ const main = async () => {
     console.log(`\nDetenido: ${results.detenido}`);
   }
   results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)) };
-  writeFileSync(resolve(OUT, `resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
-  writeFileSync(resolve(OUT, `transcripciones-${stamp}.md`), redact([`# Primer contacto · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
-  console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT}`);
+  writeFileSync(resolve(OUT_REAL, `resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
+  writeFileSync(resolve(OUT_REAL, `transcripciones-${stamp}.md`), redact([`# Primer contacto · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
+  console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT_REAL}`);
 };
 
 main().catch((err) => { console.error(redact(err?.message || err)); process.exit(1); });
