@@ -1,6 +1,6 @@
 import { parseAndValidateSetEngineResponse, SET_ENGINE_ERROR_CODES, SetEngineError } from './setEngine.js';
 import { getAiAuthHeaders } from './aiAuth.js';
-import { buildPrimerContactoProfilePrompt, normalizePrimerContactoProfile } from './primerContacto.js';
+import { generatePrimerContactoProfile } from './primerContactoTurn.js';
 
 const MAX_TOKENS = 1500;
 const SET_ENGINE_RETRY_INSTRUCTION = 'La respuesta anterior no cumplió el formato. Genera nuevamente la respuesta completa siguiendo exactamente el contrato JSON. Devuelve únicamente JSON puro, sin markdown ni texto adicional.';
@@ -172,27 +172,13 @@ export const callSetEngine = createSetEngineCaller(requestClaude);
 
 const PROFILE_OPTIONS = { maxTokens: 500, model: 'haiku', operation: 'simulator_prospect' };
 
-// Inbound — Primer contacto: perfil privado propio (ver utils/primerContacto.js).
-// Si al perfil le faltan campos esenciales (por ejemplo, porque la respuesta
-// se cortó en los 500 tokens), se pide una vez más; si sigue incompleto, la
-// simulación no arranca con un prospecto vacío.
-const generatePrimerContactoProfile = async (project, config) => {
-  const prompt = buildPrimerContactoProfilePrompt(project, config);
-  let profile = null;
-  for (let attempt = 0; attempt < 2 && (!profile || profile.campos_faltantes.length); attempt += 1) {
-    try {
-      profile = normalizePrimerContactoProfile(await callClaude(undefined, [{ role: 'user', content: prompt }], PROFILE_OPTIONS));
-    } catch (err) {
-      if (err instanceof AiRequestError) throw err;
-      profile = null;
-    }
-  }
-  if (!profile || profile.campos_faltantes.length) throw new Error('Perfil inválido');
-  return { ...profile, temperatura: config.temperatura, canal: config.canal, resistencia: config.resistencia };
-};
-
+// Inbound — Primer contacto: perfil privado propio, generado por el mismo
+// código que usa el script de validación (utils/primerContactoTurn.js). Los
+// rechazos del servidor (sesión, acceso, límite) se muestran tal cual.
 export const generateProspectProfile = async (project, mode, config) => {
-  if (mode === 'primer_contacto') return generatePrimerContactoProfile(project, config);
+  if (mode === 'primer_contacto') {
+    return generatePrimerContactoProfile({ call: callClaude, project, config, isFatal: (err) => err instanceof AiRequestError });
+  }
   const prompt = `
 Genera un perfil realista de prospecto para una simulación de ventas.
 

@@ -8,10 +8,10 @@ import {
   buildOutboundSystemPrompt,
   buildInboundSystemPrompt,
   buildReactivacionSystemPrompt,
-  buildPrimerContactoSystemPrompt,
 } from '../utils/prompts';
 import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
-import { pickOpeningMessage } from '../utils/primerContacto';
+import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
+import { runPrimerContactoTurn } from '../utils/primerContactoTurn';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
@@ -32,7 +32,6 @@ const PRIMER_CONTACTO = 'primer_contacto';
 const CHAT_MODEL_OPTIONS = { model: 'haiku', maxTokens: 800, operation: 'simulator_turn' };
 
 const buildSystemPrompt = (mode, project, prospectProfile) => {
-  if (mode === PRIMER_CONTACTO) return buildPrimerContactoSystemPrompt(project, prospectProfile);
   if (mode === 'outbound') return buildOutboundSystemPrompt(project, prospectProfile);
   if (mode === 'inbound') return buildInboundSystemPrompt(project, prospectProfile);
   return buildReactivacionSystemPrompt(project, prospectProfile);
@@ -60,6 +59,8 @@ const CopyButton = ({ text }) => {
 };
 
 const ScoreBadge = ({ score }) => {
+  // null = turno sin puntuación válida (solo ocurre en Primer contacto).
+  if (score === null) return null;
   const color = score >= 8 ? '#1D9E75' : score >= 5 ? '#C9920A' : '#DC2626';
   return (
     <span className="text-xs font-bold px-2 py-0.5 rounded-full animate-score" style={{ backgroundColor: color + '20', color }}>
@@ -338,9 +339,12 @@ const Simulator = () => {
     setMessages(updatedMessages);
 
     try {
-      const systemPrompt = buildSystemPrompt(mode, project, { ...prospectProfile, ...config });
-      const apiMessages = buildAPIMessages(messages, text);
-      const response = await callClaude(systemPrompt, apiMessages, CHAT_MODEL_OPTIONS);
+      // Primer contacto: prospecto y coaching en llamadas separadas (el
+      // coaching no ve el perfil privado ni la respuesta nueva). Las demás
+      // modalidades siguen con su única llamada de doble rol.
+      const response = mode === PRIMER_CONTACTO
+        ? await runPrimerContactoTurn({ call: callClaude, project, profile: { ...prospectProfile, ...config }, history: messages, setterText: text })
+        : await callClaude(buildSystemPrompt(mode, project, { ...prospectProfile, ...config }), buildAPIMessages(messages, text), CHAT_MODEL_OPTIONS);
 
       const prospectMsg = {
         id: crypto.randomUUID(),
@@ -352,7 +356,11 @@ const Simulator = () => {
       setMessages(prev => [...prev, prospectMsg]);
       if (response.coaching) setLastCoaching(response.coaching);
       setLeadState(response.estado_lead);
-      setScores(prev => [...prev, response.coaching?.puntuacion_mensaje || 0]);
+      // En Primer contacto solo se suman puntuaciones válidas (1–10): un turno
+      // sin puntuación válida no cuenta, en vez de entrar como 0. Las demás
+      // modalidades conservan su regla de siempre.
+      if (mode !== PRIMER_CONTACTO) setScores(prev => [...prev, response.coaching?.puntuacion_mensaje || 0]);
+      else if (validateScore(response.coaching?.puntuacion_mensaje) !== null) setScores(prev => [...prev, response.coaching.puntuacion_mensaje]);
       setLastFomo(response.coaching?.nivel_fomo || 0);
       // Ya NO se auto-abre el drawer mobile: el coaching de este turno queda
       // visible inline en el propio flujo del chat (InlineCoachingCard). El
