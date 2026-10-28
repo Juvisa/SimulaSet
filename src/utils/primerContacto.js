@@ -37,6 +37,22 @@ export const sanitizeText = (v, max = MAX_FIELD_CHARS) => {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 };
 
+// Datos de contacto en una respuesta del prospecto (ronda 3, R12: «Me
+// contactas al +56 9 87654321»). Aunque sean inventados, pueden confundirse
+// con datos reales: se detectan para pedir la respuesta de nuevo y, si
+// persisten, se reemplazan.
+export const findContactData = (v) => {
+  const text = String(v || '');
+  const found = CONTACT_PATTERNS.flatMap((re) => text.match(re) || []);
+  for (const m of text.match(PHONE) || []) if ((m.match(/\d/g) || []).length >= 9) found.push(m.trim());
+  return found;
+};
+export const redactContactData = (v) => {
+  let text = String(v || '');
+  for (const re of CONTACT_PATTERNS) text = text.replace(re, '[dato omitido]');
+  return text.replace(PHONE, (m) => ((m.match(/\d/g) || []).length >= 9 ? '[dato omitido]' : m));
+};
+
 const sanitizeList = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? [v] : [])
   .map((x) => sanitizeText(x)).filter(Boolean).slice(0, MAX_LIST_ITEMS);
 
@@ -46,13 +62,20 @@ const field = (v) => clean(v) || NOT_DOCUMENTED;
 
 export const isPriceDocumented = (project) => Boolean(clean(project?.price));
 
-export const buildProjectContext = (project) => {
+// hidePrice: para el prospecto. Un prospecto que llega por un anuncio no sabe
+// el precio hasta que se lo dicen; si lo conoce, lo usa antes de tiempo
+// (ronda 3, R09: «No tengo dieciocho mil pesos de golpe» antes de que el
+// alumno diera el precio, y con una conversión de moneda inventada).
+export const buildProjectContext = (project, { hidePrice = false } = {}) => {
   const testimonials = Array.isArray(project?.testimonials) && project.testimonials.length
     ? JSON.stringify(project.testimonials) : NOT_DOCUMENTED;
+  const price = hidePrice
+    ? '- Precio: no lo conoces; solo sabes lo que el setter te diga'
+    : `- Precio documentado: ${field(project?.price)}`;
   return `- Experto: ${field(project?.expertName)}
 - Nicho: ${field(project?.niche)}
 - Promesa de la oferta: ${field(project?.promise)}
-- Precio documentado: ${field(project?.price)}
+${price}
 - Negocio o perfil del cliente ideal: ${field(project?.avatarBusiness)}
 - Situación actual del cliente ideal: ${field(project?.avatarCurrentSituation)}
 - Dolor del cliente ideal: ${field(project?.avatarPain)}
@@ -443,7 +466,16 @@ const COMMERCIAL_TERMS = Object.freeze([
   ['garantia', /garant/i], ['devolucion', /devoluci|reembols/i], ['asegurado', /asegurad|aseguramos/i],
   ['bono', /\bbono/i], ['descuento', /descuento|oferta especial|promoci[oó]n/i], ['certificado', /certificad/i],
   ['cupos', /cupos?\b|plazas? limitad/i],
+  // Escasez inventada (ronda 3, R06: «Tenemos pocos espacios disponibles»).
+  ['escasez', /pocos (espacios|lugares|turnos)|[uú]ltimos (lugares|espacios)|solo quedan|quedan pocos/i],
 ]);
+// «No hay garantía escrita» (ronda 3, R07) es una respuesta honesta, no una
+// promesa: el término no cuenta si una negación lo precede de cerca.
+const NEGATED = /\b(no|sin|ning[uú]n[ao]?|tampoco|nunca)\b[^.!?]{0,25}$/i;
+const affirms = (sentence, re) => {
+  const m = re.exec(sentence);
+  return Boolean(m) && !NEGATED.test(sentence.slice(0, m.index));
+};
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 const COMMERCIAL_FIGURE = /(?:[$€]\s*\d+(?:[.,]\d+)*|\d+(?:[.,]\d+)*\s*(?:-\s*\d+\s*)?(?:%|usd|d[oó]lares|pesos|soles|euros|€|horas?|d[ií]as|semanas|meses|a[nñ]os|pacientes|clientes|leads|ventas|citas|sesiones|m[oó]dulos|clases|veces))/gi;
 const digitsOf = (s) => (String(s).match(NUMBER) || []).map((n) => n.replace(/[.,]/g, ''));
@@ -457,7 +489,7 @@ export const findUndocumentedClaims = (text, project, conversationText = '') => 
       if (digitsOf(fig).some((d) => !known.has(d))) claims.push(`cifra «${fig.trim()}»`);
     }
     for (const [name, re] of COMMERCIAL_TERMS) {
-      if (re.test(sentence) && !re.test(doc)) claims.push(name);
+      if (affirms(sentence, re) && !re.test(doc)) claims.push(name);
     }
   }
   return [...new Set(claims)];

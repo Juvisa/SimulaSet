@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   OUTCOMES, amountsIn, answersPrice, asksPrice, asksToAdvance, checkProspectReply, createControlState,
-  fallbackFor, pitchesLink, planTurn, proposesCall, resolveTurn, verifyFitEvidence,
+  applyDiscovery, classifyPriceAnswer, fallbackFor, pitchesLink, planTurn, proposesCall, quoteInMessages, resolveTurn,
+  verifyDiscovery, verifyFitEvidence,
 } from './primerContactoControl';
 import { PRIMER_CONTACTO_STATES } from './primerContacto';
 import { isTerminalState } from './simulatorModes';
@@ -16,13 +17,18 @@ const LOW_DEFINITIVE = { ...PROFILE, encaje: 'bajo', incompatibilidad: 'definiti
 const LOW_SUPERABLE = { ...PROFILE, encaje: 'bajo', incompatibilidad: 'superable', motivo_no_encaje: 'cree que no puede pagarlo de una vez', que_lo_cambiaria: 'las 3 cuotas de 650 USD' };
 
 // Juega una conversación: cada paso es [mensaje previo del prospecto, mensaje
-// del alumno, respuesta del prospecto]. Devuelve el resultado de cada turno.
+// del alumno, respuesta del prospecto, citas que propone el coaching de ese
+// turno (opcional)]. Las citas se verifican contra los mensajes del prospecto
+// anteriores al turno, como en la aplicación. Devuelve cada turno.
 const play = (profile, steps, project = PROJECT) => {
   let control = createControlState(profile);
-  return steps.map(([lastProspectText, setterText, raw]) => {
+  const prospectMessages = [];
+  return steps.map(([lastProspectText, setterText, raw, coachDiscovery]) => {
+    prospectMessages.push(lastProspectText);
+    if (coachDiscovery) control = applyDiscovery(control, verifyDiscovery(coachDiscovery, prospectMessages));
     const plan = planTurn(control, { project, profile, lastProspectText, setterText });
-    const issues = checkProspectReply(raw, plan, control, profile);
-    const r = resolveTurn(control, plan, raw, profile);
+    const issues = checkProspectReply(raw, plan, control, profile, project);
+    const r = resolveTurn(control, plan, raw, profile, project);
     control = r.control;
     return { plan, ...r, issues: [...issues, ...r.issues] };
   });
@@ -41,7 +47,9 @@ describe('señales verificables en el texto', () => {
   });
   it('precio documentado escrito en otros formatos (verificación previa a la ronda 3)', () => {
     for (const t of ['Son 1.800 USD.', 'Son 1,800 USD.', 'US$1.800 de contado.', 'Sale 1.8k.', 'Son 1,8 mil dólares.', 'Mil ochocientos dólares.', 'Tres cuotas de seiscientos cincuenta.', '650 al mes durante 3 meses.', 'Ronda los 2 mil.', 'Menos de 2.000 USD.']) expect(answersPrice(t, PROJECT), t).toBe(true);
-    for (const t of ['Unos 300 dólares menos que una agencia.', 'Tiene 5 módulos.', 'Más o menos lo que pagabas a la agencia.']) expect(answersPrice(t, PROJECT), t).toBe(false);
+    for (const t of ['Tiene 5 módulos.', 'Más o menos lo que pagabas a la agencia.']) expect(answersPrice(t, PROJECT), t).toBe(false);
+    // Una cifra que no es el precio no es una evasiva, pero sí una cifra incorrecta (F4).
+    expect(classifyPriceAnswer('Unos 300 dólares menos que una agencia.', PROJECT)).toMatchObject({ respondio: true, exactitud: 'incorrecta' });
     expect(amountsIn('mil ochocientos')).toEqual([1800]);
     expect(amountsIn('1,8 mil y 1.800 y 1.8k')).toEqual([1800, 1800, 1800]);
   });
@@ -115,21 +123,51 @@ describe('descubrimiento mínimo y paciencia', () => {
     expect(before[0].plan.bloqueos).toContain('sin_descubrimiento');
     expect(before[0].issues).toContain('aceptacion_no_permitida:sin_descubrimiento');
 
+    const situacion = 'Tengo consultorio y la agenda está al 50 %.';
+    const motivo = 'Quiero abrir otro consultorio este año.';
     const turns = play(PROFILE, [
-      ['Info', '¡Hola! ¿Qué te llamó la atención?', reply('Tengo consultorio y la agenda está al 50 %.', { revela: ['situacion'] })],
-      ['Tengo consultorio y la agenda está al 50 %.', '¿Y por qué justo ahora?', reply('Quiero abrir otro consultorio este año.', { revela: ['motivo'], estado_lead: 'interesado' })],
-      ['Quiero abrir otro consultorio este año.', 'Tiene sentido. ¿Te parece una llamada el jueves para ver tu caso?', reply('Dale, el jueves.', { acepta_cita: 'si', estado_lead: 'interesado' })],
+      ['Info', '¡Hola! ¿Qué te llamó la atención?', reply(situacion, { revela: ['situacion'] })],
+      [situacion, '¿Y por qué justo ahora?', reply(motivo, { revela: ['motivo'], estado_lead: 'interesado' })],
+      [motivo, 'Tiene sentido. ¿Te parece una llamada el jueves para ver tu caso?', reply('Dale, el jueves.', { acepta_cita: 'si', estado_lead: 'interesado' }), { situacion, motivo }],
     ]);
     expect(turns[2].plan.puedeAceptar).toBe(true);
     expect(turns[2]).toMatchObject({ issues: [], estado_lead: 'pidio_llamada', desenlace: 'cita_aceptada' });
+    expect(turns[2].control.evidencias).toEqual({ situacion, motivo });
     expect(isTerminalState('primer_contacto', turns[2].estado_lead)).toBe(true);
   });
-  it('si el prospecto cuenta todo en un mensaje, una sola pregunta basta (no hay un número fijo)', () => {
+  it('F1: lo que el prospecto DECLARA haber contado no alcanza; hace falta la cita verificada', () => {
     const turns = play(PROFILE, [
-      ['Info', '¿Qué te trajo por aquí?', reply('Tengo un consultorio con la agenda floja y quiero llenarla antes de fin de año.', { revela: ['situacion', 'motivo'] })],
-      ['Tengo un consultorio…', '¿Te parece una llamada el jueves?', reply('Sí, dale.', { acepta_cita: 'si' })],
+      ['Info', '¿Qué te llamó la atención?', reply('Hola, sí me llamó la atención.', { revela: ['situacion', 'motivo'] })],
+      ['Hola, sí me llamó la atención.', '¿Te parece una llamada el jueves?', reply('Dale.', { acepta_cita: 'si' })],
     ]);
-    expect(turns[1].desenlace).toBe('cita_aceptada');
+    expect(turns[1].plan.puedeAceptar).toBe(true);
+    expect(turns[1].issues).toEqual(['aceptacion_no_permitida:descubrimiento_no_verificado']);
+  });
+  it('F1: una cita del coaching que el prospecto no dijo (o un resumen) no se confirma', () => {
+    const msgs = ['Info', 'Tengo consultorio y la agenda está al 50 %.'];
+    expect(verifyDiscovery({ situacion: 'Tengo consultorio y la agenda está al 50 %', motivo: 'Quiere abrir un segundo consultorio para crecer' }, msgs)).toEqual({ situacion: 'Tengo consultorio y la agenda está al 50 %' });
+    expect(verifyDiscovery({ situacion: 'odontóloga con agenda floja' }, msgs)).toEqual({});
+    expect(verifyDiscovery({ motivo: 'Info' }, msgs)).toEqual({});
+    expect(quoteInMessages('tengo consultorio y la agenda', msgs)).toBe(true);
+    expect(quoteInMessages('la agenda', msgs)).toBe(false); // menos de 3 palabras con contenido
+  });
+  it('F1 (ronda 3, R12): «ando muy cansado con el trabajo» no basta para habilitar la cita si el coaching no confirma el motivo', () => {
+    const p1 = 'Hola, sí me llamó la atención. La verdad ando muy cansado con el trabajo. ¿Qué exactamente incluye el programa?';
+    const turns = play(PROFILE, [
+      ['Info', '¡Hola! Vi que te interesó el programa. ¿Te gustaría conocer más detalles?', reply(p1, { revela: ['situacion', 'motivo'] })],
+      // El coaching de este turno solo encuentra la situación (como en la ronda 3, alertó «sin descubrimiento de motivo»).
+      [p1, '¿Te gustaría reservar una llamada para conocer los detalles?', reply('Dale, el jueves me viene bien.', { acepta_cita: 'si' }), { situacion: 'ando muy cansado con el trabajo', motivo: '' }],
+    ], NO_PRICE_PROJECT);
+    expect(turns[1].control.confirmado).toEqual(['situacion']);
+    expect(turns[1].issues).toEqual(['aceptacion_no_permitida:descubrimiento_no_verificado']);
+  });
+  it('si el prospecto cuenta todo en un mensaje, una sola pregunta basta (no hay un número fijo)', () => {
+    const all = 'Tengo un consultorio con la agenda floja y quiero llenarla antes de fin de año.';
+    const turns = play(PROFILE, [
+      ['Info', '¿Qué te trajo por aquí?', reply(all, { revela: ['situacion', 'motivo'] })],
+      [all, '¿Te parece una llamada el jueves?', reply('Sí, dale.', { acepta_cita: 'si' }), { situacion: 'Tengo un consultorio con la agenda floja', motivo: 'quiero llenarla antes de fin de año' }],
+    ]);
+    expect(turns[1]).toMatchObject({ issues: [], desenlace: 'cita_aceptada' });
   });
   it('aceptar no es obligatorio: con todo cumplido, el prospecto puede decir que no y la conversación sigue', () => {
     const control = { ...createControlState(PROFILE), revelado: ['situacion', 'motivo'] };
@@ -174,11 +212,14 @@ describe('encaje bajo', () => {
     expect(t).toMatchObject({ estado_lead: 'resistente', issues: ['no_califica_no_permitido'] });
   });
   it('superable: acepta solo con información nueva del alumno, dicha después de conocer el motivo', () => {
+    const s = 'Tengo consultorio y la agenda floja.';
+    const m = 'Quiero llenarla, pero no puedo pagar 1.800 de una.';
     const steps = [
-      ['Info', '¿Qué te llamó la atención?', reply('Tengo consultorio y la agenda floja.', { revela: ['situacion'] })],
-      ['…agenda floja.', '¿Por qué ahora?', reply('Quiero llenarla, pero no puedo pagar 1.800 de una.', { revela: ['motivo', 'no_encaje'] })],
+      ['Info', '¿Qué te llamó la atención?', reply(s, { revela: ['situacion'] })],
+      [s, '¿Por qué ahora?', reply(m, { revela: ['motivo', 'no_encaje'] })],
     ];
-    const accept = (setterText, cambio) => play(LOW_SUPERABLE, [...steps, ['…de una.', setterText, reply('Ah, así sí. Dale el jueves.', { acepta_cita: 'si', cambio_encaje: cambio })]])[2];
+    const discovery = { situacion: 'Tengo consultorio y la agenda floja', motivo: 'Quiero llenarla, pero no puedo pagar 1.800 de una' };
+    const accept = (setterText, cambio) => play(LOW_SUPERABLE, [...steps, [m, setterText, reply('Ah, así sí. Dale el jueves.', { acepta_cita: 'si', cambio_encaje: cambio }), discovery]])[2];
 
     const ok = accept('También puede ser en 3 cuotas de 650 USD. ¿Te parece una llamada el jueves?', '3 cuotas de 650 USD');
     expect(ok).toMatchObject({ issues: [], desenlace: 'cita_aceptada' });
@@ -187,10 +228,25 @@ describe('encaje bajo', () => {
     expect(accept('¿Te parece una llamada el jueves?', '').issues).toEqual(['aceptacion_no_permitida:encaje_sin_informacion_nueva']);
     expect(accept('¿Te parece una llamada el jueves?', 'el programa tiene garantía total').issues).toEqual(['aceptacion_no_permitida:encaje_sin_informacion_nueva']);
   });
-  it('la evidencia debe estar en lo que dijo el alumno', () => {
-    expect(verifyFitEvidence('3 cuotas de 650 USD', ['Puede ser en 3 cuotas de 650 USD.'])).toBe(true);
-    expect(verifyFitEvidence('garantía de devolución', ['Puede ser en 3 cuotas de 650 USD.'])).toBe(false);
-    expect(verifyFitEvidence('sí', ['sí'])).toBe(false);
+  it('F2 (ronda 3, R09): una paráfrasis justificada se acepta', () => {
+    const setter = 'El precio es 1.800 USD (o 3 cuotas de 650 USD cada una). ¿Eso cambia las cosas, o prefieres hablar con Ana sobre opciones de pago?';
+    expect(verifyFitEvidence('Las 3 cuotas de 650 USD hicieron la inversión accesible', [setter], PROJECT)).toBe(true);
+    expect(verifyFitEvidence('Saber que se puede pagar en cuotas de 650 me lo hace posible', [setter], PROJECT)).toBe(true);
+  });
+  it('F2: una interpretación inventada o sin dato concreto no habilita la cita', () => {
+    const setter = 'Lo que ofrecemos es diferente: nosotros manejamos todo. ¿Te gustaría una llamada con la Dra. Ana?';
+    // Sin ningún dato documentado en común con lo que dijo el alumno.
+    expect(verifyFitEvidence('Me convenció que manejan todo ustedes', [setter], PROJECT)).toBe(false);
+    // Afirma algo comercial que nadie documentó.
+    expect(verifyFitEvidence('Con pacientes nuevos garantizados en 90 días, sí me sirve', ['Te ayudamos a llenar la agenda con pacientes nuevos en 90 días.'], PROJECT)).toBe(false);
+    // La explicación no se apoya en nada que haya dicho el alumno.
+    expect(verifyFitEvidence('Las 3 cuotas de 650 USD me ayudan', ['¿Qué día te viene bien?'], PROJECT)).toBe(false);
+    expect(verifyFitEvidence('sí', ['sí'], PROJECT)).toBe(false);
+  });
+  it('F2: el respaldo por falta de evidencia no contradice lo dicho (condiciona, no rechaza)', () => {
+    const plan = planTurn(createControlState(LOW_SUPERABLE), { project: PROJECT, profile: LOW_SUPERABLE, lastProspectText: 'Ok', setterText: '¿Agendamos?' });
+    expect(fallbackFor(plan, ['aceptacion_no_permitida:encaje_sin_informacion_nueva']).reply).toMatchObject({ acepta_cita: 'condicionada', estado_lead: 'interesado' });
+    expect(fallbackFor(plan, ['aceptacion_no_permitida:encaje_sin_informacion_nueva']).reply.respuesta_prospecto).not.toMatch(/no (es|sea) para m/);
   });
 });
 
@@ -243,5 +299,39 @@ describe('desenlaces y estados existentes', () => {
     expect(fallbackFor(plan, ['aceptacion_no_permitida:sin_descubrimiento'])).toMatchObject({ key: 'sin_descubrimiento', reply: { acepta_cita: 'no' } });
     const farewell = planTurn({ ...control, evasivas: 2 }, { project: PROJECT, profile: PROFILE, lastProspectText: '¿Cuánto cuesta?', setterText: 'Lo vemos luego.' });
     expect(fallbackFor(farewell, [])).toMatchObject({ key: 'despedida_evasivas', reply: { estado_lead: 'cerrado' } });
+  });
+});
+
+describe('F4 · pregunta de precio, respuesta y exactitud (por separado)', () => {
+  it('pregunta real frente a referencia al precio (ronda 3: R06 #2 y R08 #3)', () => {
+    for (const t of ['¿Y qué incluye exactamente por ese precio? ¿Garantizan pacientes nuevos?', 'Entiendo. El precio es considerable para mí en este momento.', 'Ya vi el precio, me parece bien.', '¿Cuánto tiempo me exige por semana?', 'Me cuesta comprometer una llamada'])
+      expect(asksPrice(t), t).toBe(false);
+    for (const t of ['Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles?', 'Mira, si no me dices el precio ahora, no sigo.', 'Ok, pero necesito saber el precio primero.', '¿Cuánto es el rango?', 'Precio', '¿Y cuánto me costaría?'])
+      expect(asksPrice(t), t).toBe(true);
+  });
+  it('precio documentado: exacto, aproximado, incorrecto o sin cifra', () => {
+    const c = (t, o) => classifyPriceAnswer(t, PROJECT, o);
+    for (const t of ['Son 1.800 USD o 3 cuotas de 650 USD.', 'Tiene un valor de mil ochocientos dólares de contado.', 'Sale 1.8k.', '650 al mes durante 3 meses.']) expect(c(t), t).toMatchObject({ respondio: true, exactitud: 'exacta' });
+    for (const t of ['Ronda los 2 mil.', 'Menos de 2.000 USD.']) expect(c(t), t).toMatchObject({ respondio: true, exactitud: 'aproximada' });
+    // Antes se aceptaba ±25 % sin marca: «1.500» pasaba por correcto.
+    for (const t of ['Son 1.500 USD.', 'Unos 2.500 dólares.', 'Desde 1.200 USD.', 'Son 2.000 USD.']) expect(c(t), t).toMatchObject({ respondio: true, exactitud: 'incorrecta' });
+    expect(c('Eso lo vemos más adelante.')).toMatchObject({ respondio: false, exactitud: 'sin_cifra' });
+    // Cifras que no son el precio: repetidas de la conversación o fuera de una oración de dinero.
+    expect(c('Entiendo que gastaste 2.500 USD con la agencia.', { conversationText: 'Gasté 2.500 USD con una agencia.' })).toMatchObject({ respondio: false, exactitud: 'sin_cifra' });
+    expect(c('¿Facturas unos 1500 al mes?')).toMatchObject({ respondio: false, exactitud: 'sin_cifra' });
+    // Repetir el precio documentado sigue siendo una respuesta exacta.
+    expect(c('Como te dije, son 1.800 USD.', { conversationText: 'Son 1.800 USD.' })).toMatchObject({ exactitud: 'exacta' });
+  });
+  it('precio no documentado: honesta, evasiva (al insistir) o inventada', () => {
+    const c = (t, o) => classifyPriceAnswer(t, NO_PRICE_PROJECT, o);
+    expect(c('El precio exacto lo definimos en la llamada inicial.', { insistencia: 1 })).toMatchObject({ respondio: true, exactitud: 'honesta' });
+    // Ronda 3, R12 #4: segunda pregunta seguida y sigue sin decir que no hay un número.
+    expect(c('Es una inversión accesible para profesionales como tú, pero el rango exacto depende del plan.', { insistencia: 2 })).toMatchObject({ respondio: false, exactitud: 'evasiva' });
+    expect(c('Honestamente no tengo un número documentado; lo define el equipo en la llamada.', { insistencia: 2 })).toMatchObject({ respondio: true, exactitud: 'honesta' });
+    expect(c('Son 500 dólares.')).toMatchObject({ respondio: true, exactitud: 'inventada' });
+  });
+  it('una cifra incorrecta no es evasiva, pero queda marcada', () => {
+    const plan = planTurn(createControlState(PROFILE), { project: PROJECT, profile: PROFILE, lastProspectText: '¿Cuánto cuesta?', setterText: 'Son 1.500 USD.' });
+    expect(plan).toMatchObject({ evasion: false, evasivas: 0, precioExactitud: 'incorrecta' });
   });
 });

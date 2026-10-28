@@ -333,8 +333,12 @@ describe('ronda 3 · calibración del coaching', () => {
   const coach = buildPrimerContactoCoachPrompt(PROJECT);
   it('incluye ejemplos de 1–3 y de 9–10, e identificar que no califica puede valer 10', () => {
     expect(coach).toContain('EJEMPLOS DE CALIBRACIÓN');
-    expect(coach).toMatch(/- 1–2: mandar la oferta completa con un enlace/);
-    expect(coach).toMatch(/- 10: [^\n]*reconocerlo con respeto, sin insistir/);
+    expect(coach).toMatch(/DEFICIENTE \(1–3\)[\s\S]*ACEPTABLE \(5–7\)[\s\S]*EXCELENTE \(9–10\)/);
+    expect(coach).toContain('Inscríbete aquí: [enlace]');
+    expect(coach).toContain('Inventar condiciones siempre es grave');
+    expect(coach).toMatch(/- 9–10: [^\n]*reconocerlo con respeto, sin insistir/);
+    expect(coach).toContain('sin cuotas por nivel');
+    expect(coach).toContain('"descubrimiento": { "situacion": "", "motivo": "" }');
     expect(coach).toContain('Identificar bien que alguien no califica es un acierto, aunque no haya cita');
     expect(coach).toContain('No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja');
   });

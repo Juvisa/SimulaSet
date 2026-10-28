@@ -101,7 +101,7 @@ describe('C5 · eco', () => {
 
 describe('C4 · aceptación de la cita', () => {
   // El alumno ya conoce la situación y el motivo: la cita está permitida.
-  const discovered = { ...createControlState(PROFILE), revelado: ['situacion', 'motivo'] };
+  const discovered = { ...createControlState(PROFILE), revelado: ['situacion', 'motivo'], confirmado: ['situacion', 'motivo'] };
   const turn = (raw, profile = PROFILE, control = discovered) => runProspectTurn({ call: fakeCall({ prospect: [raw] }), project: PROJECT, profile, history: HISTORY, setterText: '¿Te parece una llamada el jueves?', control });
   it('«Dale, el jueves» con acepta_cita "si" registra pidio_llamada aunque el modelo diga interesado (ronda 1: C07)', async () => {
     expect((await turn({ respuesta_prospecto: 'Dale, dale. Pero quiero que me expliquen paso a paso.', acepta_cita: 'si', estado_lead: 'interesado' })).estado_lead).toBe('pidio_llamada');
@@ -215,13 +215,13 @@ describe('control de estados en el turno', () => {
     expect(call.mock.calls[1][0]).toContain('máximo 22 palabras');
     expect(r.respuesta_prospecto).toBe('Corto.');
   });
-  it('el estado de control avanza turno a turno (lo revelado se acumula)', async () => {
+  it('el estado de control avanza turno a turno; sin confirmación del coaching no hay cita (F1)', async () => {
     const call = fakeCall({ prospect: [{ respuesta_prospecto: 'Agenda al 50 %, quiero otro consultorio.', acepta_cita: 'no', estado_lead: 'interesado', revela: ['situacion', 'motivo'] }] });
     const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
-    expect(r.control).toMatchObject({ turno: 1, revelado: ['situacion', 'motivo'] });
-    const call2 = fakeCall({ prospect: [{ respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'interesado' }] });
-    const r2 = await runProspectTurn({ call: call2, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE, control: r.control });
-    expect(r2).toMatchObject({ estado_lead: 'pidio_llamada', desenlace: 'cita_aceptada', fallback: null });
+    expect(r.control).toMatchObject({ turno: 1, revelado: ['situacion', 'motivo'], confirmado: [] });
+    const accept = { respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'interesado' };
+    const r2 = await runProspectTurn({ call: fakeCall({ prospect: [accept, accept] }), project: PROJECT, profile: PROFILE, history: HISTORY, setterText: PROPOSE, control: r.control });
+    expect(r2).toMatchObject({ estado_lead: 'abierto', fallback: 'sin_descubrimiento' });
   });
 });
 
@@ -246,5 +246,116 @@ describe('respuesta progresiva', () => {
     const call = fakeCall({ coach: [new Error('red')] });
     const { coach } = startPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
     expect(await coach).toMatchObject({ coaching: null, coachingIssues: ['coaching_error:red'] });
+  });
+});
+
+describe('F1 · descubrimiento confirmado por el coaching', () => {
+  const PROPOSE = '¿Te parece una llamada el jueves?';
+  const history = [
+    { role: 'prospect', content: 'Info' },
+    { role: 'setter', content: '¿Qué te llamó la atención?' },
+    { role: 'prospect', content: 'Tengo consultorio y la agenda está al 50 %. Quiero abrir otro consultorio este año.' },
+  ];
+  const control = { ...createControlState(PROFILE), revelado: ['situacion', 'motivo'] };
+  const coachWith = (descubrimiento) => ({ ...COACH_OK, descubrimiento });
+  const accept = { respuesta_prospecto: 'Dale, el jueves.', acepta_cita: 'si', estado_lead: 'interesado' };
+  it('si el prospecto acepta, espera las citas del coaching de este turno y, si se verifican, registra la cita', async () => {
+    const call = fakeCall({ prospect: [accept], coach: [coachWith({ situacion: 'Tengo consultorio y la agenda está al 50 %', motivo: 'Quiero abrir otro consultorio este año' })] });
+    const r = await runPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history, setterText: PROPOSE, control });
+    expect(r).toMatchObject({ estado_lead: 'pidio_llamada', desenlace: 'cita_aceptada', awaitedCoach: true, retried: false });
+    expect(r.control.confirmado).toEqual(['situacion', 'motivo']);
+  });
+  it('si el coaching no encuentra el motivo en los mensajes, la cita no se registra', async () => {
+    const call = fakeCall({ prospect: [accept, accept], coach: [coachWith({ situacion: 'Tengo consultorio y la agenda está al 50 %', motivo: 'quiere crecer y ganar más dinero' })] });
+    const r = await runPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history, setterText: PROPOSE, control });
+    expect(r).toMatchObject({ estado_lead: 'abierto', fallback: 'sin_descubrimiento' });
+    expect(r.control.confirmado).toEqual(['situacion']);
+  });
+  it('si el coaching falla, no se confirma nada y la cita no se registra', async () => {
+    const call = fakeCall({ prospect: [accept, accept], coach: [new Error('red'), new Error('red')] });
+    const r = await runPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history, setterText: PROPOSE, control });
+    expect(r.estado_lead).not.toBe('pidio_llamada');
+  });
+  it('sin aceptación, el prospecto no espera al coaching (respuesta progresiva)', async () => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const call = vi.fn(async (system) => {
+      if (String(system).includes('Eres coach')) { await gate; return COACH_OK; }
+      return { respuesta_prospecto: 'Cuéntame más.', acepta_cita: 'no', estado_lead: 'interesado' };
+    });
+    const { prospect } = startPrimerContactoTurn({ call, project: PROJECT, profile: PROFILE, history, setterText: '¿Qué te preocupa?', control });
+    expect((await prospect).awaitedCoach).toBe(false);
+    release();
+  });
+});
+
+describe('F3 · datos de contacto y cifras sin respaldo', () => {
+  it('ronda 3, R12: un teléfono se pide de nuevo y, si persiste, se reemplaza', async () => {
+    const phone = { respuesta_prospecto: 'Dale, perfecto. Me contactas al +56 9 87654321.', acepta_cita: 'no', estado_lead: 'interesado' };
+    const call = fakeCall({ prospect: [phone, phone] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: '¿A qué número te contacto?' });
+    expect(call.mock.calls[1][0]).toContain('no escribas teléfonos, correos');
+    expect(r.respuesta_prospecto).toBe('Dale, perfecto. Me contactas al [dato omitido].');
+    expect(r.prospectIssues).toContain('contacto_reemplazado');
+  });
+  it('correos y enlaces también', async () => {
+    const call = fakeCall({ prospect: [{ respuesta_prospecto: 'Escríbeme a lucia@ejemplo.com', acepta_cita: 'no', estado_lead: 'abierto' }, { respuesta_prospecto: 'Prefiero seguir por acá.', acepta_cita: 'no', estado_lead: 'abierto' }] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: '¿Me pasas tu correo?' });
+    expect(r.respuesta_prospecto).toBe('Prefiero seguir por acá.');
+  });
+  it('ronda 3, R09: una conversión de moneda que nadie dijo se pide de nuevo', async () => {
+    const call = fakeCall({ prospect: [
+      { respuesta_prospecto: 'No tengo dieciocho mil pesos de golpe disponibles ahora.', acepta_cita: 'no', estado_lead: 'interesado' },
+      { respuesta_prospecto: 'Me interesa, pero primero necesito saber cuánto cuesta.', acepta_cita: 'no', estado_lead: 'interesado' },
+    ] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: '¿Te gustaría una llamada?' });
+    expect(call.mock.calls[1][0]).toContain('No conviertas monedas');
+    expect(r.respuesta_prospecto).toBe('Me interesa, pero primero necesito saber cuánto cuesta.');
+  });
+  it('las cifras propias del perfil no se marcan', async () => {
+    const call = fakeCall({ prospect: [{ respuesta_prospecto: 'Ya perdí 2.300 USD con una agencia.', acepta_cita: 'no', estado_lead: 'resistente' }] });
+    const r = await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: '¿Qué pasó con la agencia?' });
+    expect(r.retried).toBe(false);
+  });
+  it('el prospecto no conoce el precio hasta que el alumno lo dice', async () => {
+    const call = fakeCall();
+    await runProspectTurn({ call, project: PROJECT, profile: PROFILE, history: HISTORY, setterText: SETTER });
+    const [system] = call.forProspect()[0];
+    expect(system).not.toContain('1.800');
+    expect(system).toContain('Precio: no lo conoces');
+  });
+});
+
+describe('F5 · tope por afirmaciones no documentadas', () => {
+  it('ronda 3, R13 #5: horas inventadas tienen como máximo 3', async () => {
+    const setter = 'Buena pregunta. Incluye estrategia personalizada, gestión de anuncios y seguimiento directo de pacientes. Requiere ~5-8 horas tuyas en 90 días. ¿Martes o jueves te va?';
+    const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 6, alerta: 'Afirmó horas no documentadas.' }] });
+    const r = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: setter });
+    expect(r.coaching.puntuacion_mensaje).toBe(3);
+    expect(r.issues).toContain('tope_3:6');
+  });
+  it('ronda 3, R06 #2: escasez inventada («pocos espacios»)', async () => {
+    const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 4, alerta: '' }] });
+    const r = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: '¿Mañana 10 AM o prefieres otro horario? Tenemos pocos espacios disponibles.' });
+    expect(r.coaching.puntuacion_mensaje).toBe(3);
+    expect(r.coaching.alerta).toMatch(/no está documentado: escasez/);
+  });
+  it('un precio incorrecto también', async () => {
+    const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 8 }] });
+    const r = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: 'Son 1.500 USD. ¿Te sirve?' });
+    expect(r.coaching.puntuacion_mensaje).toBe(3);
+    expect(r.claims.some((c) => /precio incorrecto \(1500/.test(c))).toBe(true);
+  });
+  it('lo honesto no se penaliza: «No hay garantía escrita» y el precio documentado (ronda 3, R07 #2)', async () => {
+    const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 8 }, { ...COACH_OK, puntuacion_mensaje: 9 }] });
+    const a = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: 'Entiendo la preocupación. No hay garantía escrita, pero el Dr. Luis logró +40 pacientes nuevos en 3 meses.' });
+    expect(a.coaching.puntuacion_mensaje).toBe(8);
+    const b = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: 'Son 1.800 USD o 3 cuotas de 650 USD. ¿Cuál te acomoda más?' });
+    expect(b.coaching.puntuacion_mensaje).toBe(9);
+  });
+  it('un mensaje sin afirmaciones conserva la nota del coaching, alta o baja (no se fuerza una distribución)', async () => {
+    const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 10 }, { ...COACH_OK, puntuacion_mensaje: 2 }] });
+    expect((await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: SETTER })).coaching.puntuacion_mensaje).toBe(10);
+    expect((await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: '¿Agendamos?' })).coaching.puntuacion_mensaje).toBe(2);
   });
 });

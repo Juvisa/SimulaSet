@@ -137,6 +137,7 @@ const guardedFetch = (url, init) => {
 // red, para probar el script de punta a punta antes de gastar. Incluye a
 // propósito un eco y un 0/10 para ejercitar los reintentos.
 let mockTurn = 0;
+const MOCK_DISCOVERY = 'Tengo un consultorio con la agenda floja y quiero llenarla antes de fin de año.';
 const mockResponse = async (init) => {
   const body = JSON.parse(init.body);
   const system = (body.system || []).map((b) => b.text).join('\n');
@@ -149,14 +150,17 @@ const mockResponse = async (init) => {
   } else if (system.includes('Eres coach')) {
     mockTurn += 1;
     const zero = mockTurn === 2 && !system.includes('Nunca 0.\n') && !/IMPORTANTE: "puntuacion_mensaje"/.test(system);
-    out = { etapa_set: 'S', que_hizo_bien: 'Pregunta abierta.', que_mejorar: 'Profundiza.', mensaje_alternativo: mockTurn === 3 ? 'Tienes garantía de devolución del 100 %.' : '¿Qué te preocupa más?', recurso_sugerido: '', alerta: '', nivel_fomo: 20, probabilidad_cita: 30, puntuacion_mensaje: zero ? 0 : 8 };
+    // Cita el descubrimiento solo si el prospecto ya lo dijo (como pide el prompt).
+    const told = lastUser.includes(MOCK_DISCOVERY);
+    out = { etapa_set: 'S', que_hizo_bien: 'Pregunta abierta.', que_mejorar: 'Profundiza.', mensaje_alternativo: mockTurn === 3 ? 'Tienes garantía de devolución del 100 %.' : '¿Qué te preocupa más?', recurso_sugerido: '', alerta: '', nivel_fomo: 20, probabilidad_cita: 30, descubrimiento: told ? { situacion: 'Tengo un consultorio con la agenda floja', motivo: 'quiero llenarla antes de fin de año' } : { situacion: '', motivo: '' }, puntuacion_mensaje: zero ? 0 : 8 };
   } else {
     // Turno 1: acepta una cita no permitida (reintento y respaldo). Turno 2:
-    // eco (reintento) y revela situación y motivo. Desde el 4: acepta.
+    // eco (reintento) y cuenta situación y motivo. Desde el 4: acepta (el
+    // coaching del turno confirma el descubrimiento con una cita).
     const n = body.messages.filter((m) => m.role === 'user').length;
     const echo = n === 2 && !system.includes('repetía el mensaje del setter');
     out = {
-      respuesta_prospecto: echo ? lastUser : `Respuesta de prueba ${n}`,
+      respuesta_prospecto: echo ? lastUser : n === 2 ? MOCK_DISCOVERY : `Respuesta de prueba ${n}`,
       revela: n === 2 ? ['situacion', 'motivo'] : [],
       acepta_cita: n === 1 || n >= 4 ? 'si' : 'no',
       cambio_encaje: '',
@@ -339,6 +343,11 @@ const observe = (r) => {
     puede_aceptar_por_turno: ts.map((t) => (t.plan?.puedeAceptar ? 1 : 0)),
     revelado_final: r.finalControl?.revelado || [],
     cambio_encaje: r.finalControl?.cambioEncaje || null,
+    confirmado_final: r.finalControl?.confirmado || [],
+    evidencias: r.finalControl?.evidencias || {},
+    turnos_que_esperaron_al_coaching: ts.filter((t) => t.awaitedCoach).map((t) => t.index),
+    exactitud_precio_por_turno: ts.map((t) => t.plan?.precioExactitud ?? null),
+    topes_por_afirmacion: ts.filter((t) => (t.coachingIssues || []).some((i) => i.startsWith('tope_'))).map((t) => t.index),
     reintentos_prospecto: ts.filter((t) => t.retried).length,
     motivos_de_reintento: ts.flatMap((t) => (t.prospectIssues || []).filter((i) => i.startsWith('intento1:')).map((i) => i.slice(9).split(':')[0])),
     respaldos_usados: ts.filter((t) => t.fallback).map((t) => `#${t.index}:${t.fallback}`),

@@ -12,7 +12,7 @@ import {
 import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
 import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
 import { startPrimerContactoTurn } from '../utils/primerContactoTurn';
-import { OUTCOME_LABELS, createControlState } from '../utils/primerContactoControl';
+import { OUTCOME_LABELS, applyDiscovery, createControlState } from '../utils/primerContactoControl';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
@@ -356,7 +356,10 @@ const Simulator = () => {
     const terminal = isTerminalState(mode, response.estado_lead);
     if (terminal) setEnded(true);
 
-    const { coaching } = await coach;
+    const { coaching, discovery } = await coach;
+    // El coaching trae las citas que confirman situación y motivo: quedan en
+    // el control para los turnos siguientes.
+    setControl(prev => applyDiscovery(prev, discovery));
     const finalProspectMsg = { ...prospectMsg, coaching, coachingPending: false };
     setMessages(prev => prev.map(m => (m.id === prospectMsg.id ? finalProspectMsg : m)));
     if (coaching) setLastCoaching(coaching);
