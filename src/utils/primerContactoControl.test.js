@@ -4,7 +4,7 @@
 // prospecto. Varias frases son reales de la segunda ronda con Haiku.
 import { describe, expect, it } from 'vitest';
 import {
-  OUTCOMES, answersPrice, asksPrice, asksToAdvance, checkProspectReply, createControlState,
+  OUTCOMES, amountsIn, answersPrice, asksPrice, asksToAdvance, checkProspectReply, createControlState,
   fallbackFor, pitchesLink, planTurn, proposesCall, resolveTurn, verifyFitEvidence,
 } from './primerContactoControl';
 import { PRIMER_CONTACTO_STATES } from './primerContacto';
@@ -38,6 +38,16 @@ describe('señales verificables en el texto', () => {
     expect(answersPrice('Son 1.800 USD de una vez, o 3 cuotas de 650 USD.', PROJECT)).toBe(true);
     expect(answersPrice('Ronda los 1800 o tres cuotas.', PROJECT)).toBe(true);
     for (const t of ['Eso lo vemos más adelante. ¿Cuántos pacientes nuevos tienes al mes?', 'Mira, los rangos que mencionas están en la zona. La Dra. Ana te da el precio exacto en la llamada.', 'Es accesible para consultorio con tu perfil.']) expect(answersPrice(t, PROJECT)).toBe(false);
+  });
+  it('precio documentado escrito en otros formatos (verificación previa a la ronda 3)', () => {
+    for (const t of ['Son 1.800 USD.', 'Son 1,800 USD.', 'US$1.800 de contado.', 'Sale 1.8k.', 'Son 1,8 mil dólares.', 'Mil ochocientos dólares.', 'Tres cuotas de seiscientos cincuenta.', '650 al mes durante 3 meses.', 'Ronda los 2 mil.', 'Menos de 2.000 USD.']) expect(answersPrice(t, PROJECT), t).toBe(true);
+    for (const t of ['Unos 300 dólares menos que una agencia.', 'Tiene 5 módulos.', 'Más o menos lo que pagabas a la agencia.']) expect(answersPrice(t, PROJECT), t).toBe(false);
+    expect(amountsIn('mil ochocientos')).toEqual([1800]);
+    expect(amountsIn('1,8 mil y 1.800 y 1.8k')).toEqual([1800, 1800, 1800]);
+  });
+  it('preguntas de precio en otras formas', () => {
+    for (const t of ['¿Qué valor tiene?', '¿Y cuánto me costaría?', '¿Cuánto hay que pagar?', '¿Es caro?', '$?', '¿Me pasas los costos?']) expect(asksPrice(t), t).toBe(true);
+    expect(asksPrice('¿Cuánto tiempo me exige por semana?')).toBe(false);
   });
   it('precio NO documentado: decir con honestidad que se ve en la llamada no es evasiva', () => {
     expect(answersPrice('Honestamente, el precio no lo tengo documentado; lo define el equipo en la llamada según tu caso.', NO_PRICE_PROJECT)).toBe(true);

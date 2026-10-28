@@ -25,17 +25,50 @@ const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-
 
 // ─── Señales verificables en el texto ──────────────────────────────────────
 // El prospecto pregunta el precio. «Me cuesta comprometerme» no cuenta.
-const PRICE_QUESTION = /\bprecio|\bcosto|\bcuanto (cuesta|sale|vale|es|cobran|cobras|seria|saldria|hay que invertir)|\bcuanto ?\?|\bmas o menos cuanto|(?<!(me|te|le|nos|les) )\bcuesta\b|\binversion\b|\btarifa|\bvalor del|\brango\b/;
+const PRICE_QUESTION = /\bprecio|\bcosto|\bcuanto (cuesta|sale|vale|es|cobran|cobras|seria|saldria|hay que invertir|hay que pagar|tengo que pagar|pago|me costaria|costaria)|\bcuanto ?\?|\bmas o menos cuanto|\bque valor tiene|\bes caro|^\$ ?\?$|(?<!(me|te|le|nos|les) )\bcuesta\b|\binversion\b|\btarifa|\bvalor del|\brango\b/;
 export const asksPrice = (prospectText) => {
   const t = norm(prospectText);
   return t === 'precio' || PRICE_QUESTION.test(t);
 };
 
-const digitsOf = (s) => (String(s).match(/\d+(?:[.,]\d+)*/g) || []).map((n) => n.replace(/[.,]/g, ''));
+// Montos escritos de cualquier forma habitual: «1.800», «1,800», «1800»,
+// «1.8k», «1,8 mil», «2 mil», «mil ochocientos», «seiscientos cincuenta».
+const UNITS = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, quince: 15, veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
+const HUNDREDS = { cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500, seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900 };
+const wordAmounts = (t) => {
+  const out = [];
+  let current = 0; let total = 0; let any = false;
+  const flush = () => { if (any) out.push(total + current); current = 0; total = 0; any = false; };
+  for (const w of t.split(/[\s,.;:!?¿¡()]+/)) {
+    if (w in UNITS) { current += UNITS[w]; any = true; } else if (w in HUNDREDS) { current += HUNDREDS[w]; any = true; } else if (w === 'mil') { total += (current || 1) * 1000; current = 0; any = true; } else if (w === 'y' && any) { /* «cincuenta y cinco» */ } else flush();
+  }
+  flush();
+  return out;
+};
+const toNumber = (raw) => {
+  const s = raw.replace(/\s/g, '');
+  // Separador de miles (1.800 / 1,800) frente a decimal (1,8 / 1.8).
+  if (/^\d{1,3}([.,]\d{3})+$/.test(s)) return Number(s.replace(/[.,]/g, ''));
+  return Number(s.replace(',', '.'));
+};
+export const amountsIn = (text) => {
+  const t = norm(text);
+  const out = [];
+  const NUMERIC = /(\d+(?:[.,]\d+)*)\s*(k\b|mil\b)?/g;
+  for (const m of t.matchAll(NUMERIC)) {
+    const n = toNumber(m[1]);
+    if (Number.isFinite(n)) out.push(m[2] ? n * 1000 : n);
+  }
+  // Las palabras se leen sin los montos en cifras («1,8 mil» ya se contó).
+  return [...out, ...wordAmounts(t.replace(NUMERIC, ' '))];
+};
+
 // El alumno responde la pregunta de precio.
-// - Precio documentado: solo cuenta como respuesta si da la cifra (o una
-//   cifra del precio documentado). «Lo vemos más adelante», «es accesible» o
-//   «los rangos que mencionas están en la zona» son evasivas (ronda 2: E02).
+// - Precio documentado: cuenta como respuesta si da la cifra o una
+//   referencia honesta cercana (±25 % de un monto documentado: «ronda los 2
+//   mil», «menos de 2.000»), escrita en números o en palabras. «Lo vemos más
+//   adelante», «es accesible» o «los rangos que mencionas están en la zona»
+//   son evasivas (ronda 2: E02).
 // - Precio NO documentado: decir con honestidad que no hay un número y que se
 //   verá en la llamada es lo correcto (no es una evasiva). Solo es evasiva no
 //   referirse al precio en absoluto.
@@ -43,8 +76,8 @@ const PRICE_TOPIC = /precio|costo|cuesta|inversion|valor|numero|cifra|rango|cuan
 export const answersPrice = (setterText, project) => {
   const t = norm(setterText);
   if (isPriceDocumented(project)) {
-    const priceDigits = new Set(digitsOf(project.price).filter((d) => d.length >= 2));
-    return digitsOf(setterText).some((d) => priceDigits.has(d));
+    const documented = amountsIn(project.price).filter((n) => n >= 10);
+    return amountsIn(setterText).some((n) => documented.some((d) => n >= d * 0.75 && n <= d * 1.25));
   }
   return PRICE_TOPIC.test(t);
 };
