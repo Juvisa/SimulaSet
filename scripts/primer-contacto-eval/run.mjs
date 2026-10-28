@@ -41,6 +41,11 @@ const ONLY = opt('--only', '') ? opt('--only', '').split(',').map((s) => s.trim(
 const WITH_PROFILES = !flag('--no-profiles');
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const OUT = resolve(opt('--out', resolve(REPO, '..', 'primer-contacto-eval-output')));
+// Los resultados nunca se escriben dentro del repositorio.
+if (`${OUT.toLowerCase()}\\`.replace(/\//g, '\\').startsWith(resolve(REPO).toLowerCase().replace(/\//g, '\\'))) {
+  console.error(`La carpeta de resultados debe estar fuera del repositorio (${OUT}).`);
+  process.exit(2);
+}
 
 const MODEL_KEY = 'haiku';
 const MODEL = MODELS[MODEL_KEY]; // claude-haiku-4-5-20251001, igual que producción
@@ -62,14 +67,30 @@ const costOf = (u) => ((u.input_tokens || 0) * PRICE.input + (u.output_tokens ||
   + (u.cache_creation_input_tokens || 0) * PRICE.cacheWrite + (u.cache_read_input_tokens || 0) * PRICE.cacheRead) / 1e6;
 
 class BudgetStop extends Error {}
+const KEY = process.env.SIMULASET_EVAL_ANTHROPIC_KEY || '';
+// Cualquier texto que se imprima o se guarde pasa por aquí: elimina la clave
+// (y cualquier otra con forma de clave de Anthropic) por si apareciera en un error.
+const redact = (value) => {
+  let s = String(value ?? '');
+  if (KEY.length >= 8) s = s.split(KEY).join('[clave-redactada]');
+  return s.replace(/sk-ant-[A-Za-z0-9_-]{6,}/g, '[clave-redactada]').replace(/x-api-key\s*[:=]\s*\S+/gi, 'x-api-key: [redactado]');
+};
+// Única red permitida: api.anthropic.com. SIMULASET_EVAL_BLOCK_NETWORK=1 bloquea
+// toda llamada (para probar la detención por errores sin tocar la red).
+const guardedFetch = (url, init) => {
+  const host = new URL(typeof url === 'string' ? url : url.url).host;
+  if (host !== 'api.anthropic.com') throw new Error(`Conexión no permitida: ${host}`);
+  if (process.env.SIMULASET_EVAL_BLOCK_NETWORK === '1') throw new Error('Red bloqueada para la prueba de detención');
+  return globalThis.fetch(url, init);
+};
 let client = null;
 if (RUN) {
-  const key = process.env.SIMULASET_EVAL_ANTHROPIC_KEY;
-  if (!key) {
+  if (!KEY) {
     console.error('Falta la variable de entorno SIMULASET_EVAL_ANTHROPIC_KEY (clave de DESARROLLO de Anthropic). No se hizo ninguna llamada.');
     process.exit(2);
   }
-  client = new Anthropic({ apiKey: key, maxRetries: 2, timeout: 60_000 });
+  // logLevel 'off': el SDK no registra peticiones ni encabezados aunque exista ANTHROPIC_LOG.
+  client = new Anthropic({ apiKey: KEY, maxRetries: 2, timeout: 60_000, logLevel: 'off', fetch: guardedFetch });
 }
 
 // Misma forma que el servidor: modelo fijo, tope de la operación, sistema con caché.
@@ -283,13 +304,15 @@ const main = async () => {
       console.log(`${gen.ok ? 'completo' : 'INCOMPLETO'} · ${usage.usd.toFixed(4)} USD`);
     }
   } catch (err) {
-    results.detenido = err instanceof BudgetStop ? err.message : `Error: ${err?.status || ''} ${err?.message || err}`;
+    // Cualquier error de la API (tras los reintentos del SDK) o de red detiene
+    // toda la batería; lo ya obtenido se guarda.
+    results.detenido = redact(err instanceof BudgetStop ? err.message : `Error: ${err?.status || ''} ${err?.message || err}`);
     console.log(`\nDetenido: ${results.detenido}`);
   }
   results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)) };
-  writeFileSync(resolve(OUT, `resultados-${stamp}.json`), JSON.stringify(results, null, 2));
-  writeFileSync(resolve(OUT, `transcripciones-${stamp}.md`), [`# Primer contacto · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n'));
+  writeFileSync(resolve(OUT, `resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
+  writeFileSync(resolve(OUT, `transcripciones-${stamp}.md`), redact([`# Primer contacto · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
   console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT}`);
 };
 
-main().catch((err) => { console.error(err?.message || err); process.exit(1); });
+main().catch((err) => { console.error(redact(err?.message || err)); process.exit(1); });
