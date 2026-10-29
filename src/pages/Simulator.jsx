@@ -9,6 +9,7 @@ import {
   buildInboundSystemPrompt,
   buildReactivacionSystemPrompt,
 } from '../utils/prompts';
+import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
@@ -77,8 +78,9 @@ const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
 
   return (
     <>
-      {/* Mobile: drawer */}
-      <div className={`fixed bottom-24 md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : 'translate-y-full'}`}
+      {/* Mobile: drawer. Oculto, sale por completo de la pantalla (ver
+          utils/mobileDrawer.js); se abre con el botón flotante. */}
+      <div className={`fixed ${MOBILE_DRAWER_BOTTOM_CLASS} md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : MOBILE_DRAWER_HIDDEN_CLASS}`}
         style={{ maxHeight: '60vh', overflowY: 'auto' }}
       >
         <button onClick={onToggle} className="w-full flex items-center justify-center gap-2 py-3 text-text-secondary text-sm border-b border-border-subtle">
