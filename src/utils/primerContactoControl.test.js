@@ -306,7 +306,7 @@ describe('F4 · pregunta de precio, respuesta y exactitud (por separado)', () =>
   it('pregunta real frente a referencia al precio (ronda 3: R06 #2 y R08 #3)', () => {
     for (const t of ['¿Y qué incluye exactamente por ese precio? ¿Garantizan pacientes nuevos?', 'Entiendo. El precio es considerable para mí en este momento.', 'Ya vi el precio, me parece bien.', '¿Cuánto tiempo me exige por semana?', 'Me cuesta comprometer una llamada'])
       expect(asksPrice(t), t).toBe(false);
-    for (const t of ['Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles?', 'Mira, si no me dices el precio ahora, no sigo.', 'Ok, pero necesito saber el precio primero.', '¿Cuánto es el rango?', 'Precio', '¿Y cuánto me costaría?'])
+    for (const t of ['Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles?', 'Mira, si no me dices el precio ahora, no sigo.', 'Ok, pero necesito saber el precio primero.', '¿Cuánto es el rango?', 'Precio', '¿Y cuánto me costaría?', 'Dale, pero quiero que en la llamada me digas el rango de precio.'])
       expect(asksPrice(t), t).toBe(true);
   });
   it('precio documentado: exacto, aproximado, incorrecto o sin cifra', () => {
@@ -333,5 +333,13 @@ describe('F4 · pregunta de precio, respuesta y exactitud (por separado)', () =>
   it('una cifra incorrecta no es evasiva, pero queda marcada', () => {
     const plan = planTurn(createControlState(PROFILE), { project: PROJECT, profile: PROFILE, lastProspectText: '¿Cuánto cuesta?', setterText: 'Son 1.500 USD.' });
     expect(plan).toMatchObject({ evasion: false, evasivas: 0, precioExactitud: 'incorrecta' });
+  });
+});
+
+describe('montos escritos en palabras (del 13 al 29)', () => {
+  it('«dieciocho mil», «veinticinco» y compañía', () => {
+    expect(amountsIn('No tengo dieciocho mil pesos')).toEqual([18000]);
+    expect(amountsIn('veinticinco mil quinientos')).toEqual([25500]);
+    expect(amountsIn('catorce')).toEqual([14]);
   });
 });

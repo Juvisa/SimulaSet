@@ -37,7 +37,7 @@ const sentencesOf = (s) => String(s || '').split(/(?<=[!?¿\n])|(?<=\.)\s+/).map
 const PRICE_NOUN = '(precio|precios|costo|costos|valor|inversion|tarifa|numero|cifra|rango|idea|monto)';
 const NOT_PRICE_AFTER_CUANTO = /^\s*(tiempo|horas?|dias?|semanas?|meses|dura|demora|pacientes|clientes|gente|personas|me va a quitar)\b/;
 const COST_VERB = /^(\s+\S+){0,2}?\s+(cuesta|cuestan|sale|salen|vale|es|son|cobra\w*|cost\w*|pag\w*|invert\w*|seria|saldria)\b/;
-const PRICE_REQUEST = new RegExp(`\\b(cual es|que|dime|dame|decime|pasame|pasas|mandame|me dices|me das|me has dicho|me dijiste|dicho|necesito saber|quiero saber|saber|tienes|hay|me podrias decir)\\s+(el |la |los |las |un |una |algun |alguna |mas o menos )?${PRICE_NOUN}\\b`);
+const PRICE_REQUEST = new RegExp(`\\b(cual es|que|dime|dame|decime|pasame|pasas|mandame|me dices|me digas|me des|me das|me has dicho|me dijiste|dicho|necesito saber|quiero saber|saber|tienes|hay|me podrias decir)\\s+(el |la |los |las |un |una |algun |alguna |mas o menos )?${PRICE_NOUN}\\b`);
 export const asksPrice = (prospectText) => {
   const t = norm(prospectText);
   if (!t) return false;
@@ -56,7 +56,7 @@ export const asksPrice = (prospectText) => {
 // ─── Montos ────────────────────────────────────────────────────────────────
 // Montos escritos de cualquier forma habitual: «1.800», «1,800», «1800»,
 // «1.8k», «1,8 mil», «2 mil», «mil ochocientos», «seiscientos cincuenta».
-const UNITS = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, quince: 15, veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
+const UNITS = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, veintiun: 21, veintiuno: 21, veintidos: 22, veintitres: 23, veinticuatro: 24, veinticinco: 25, veintiseis: 26, veintisiete: 27, veintiocho: 28, veintinueve: 29, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90 };
 const HUNDREDS = { cien: 100, ciento: 100, doscientos: 200, trescientos: 300, cuatrocientos: 400, quinientos: 500, seiscientos: 600, setecientos: 700, ochocientos: 800, novecientos: 900 };
 const wordAmounts = (t) => {
   const out = [];

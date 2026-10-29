@@ -343,3 +343,12 @@ describe('ronda 3 · calibración del coaching', () => {
     expect(coach).toContain('No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja');
   });
 });
+
+describe('F3 · el perfil se genera sin el precio', () => {
+  it('el prompt del perfil no incluye el precio y prohíbe conversiones', () => {
+    const prompt = buildPrimerContactoProfilePrompt(PROJECT, { temperatura: 'tibio', resistencia: 'media' }, drawProfileSeeds({ temperatura: 'tibio' }, () => 0.3, { encaje: 'bajo', incompatibilidad: 'superable' }));
+    expect(prompt).not.toContain('1.800');
+    expect(prompt).toContain('Precio: no lo conoces');
+    expect(prompt).toContain('no escribas precios de la oferta, cuotas ni conversiones de moneda');
+  });
+});

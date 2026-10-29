@@ -303,6 +303,9 @@ const fitFields = (s) => {
 };
 
 // Esquema compacto: debe caber holgado en los 500 tokens de simulator_prospect.
+// El perfil se genera SIN el precio (ronda 3, R09: el perfil traía «No tengo
+// dieciocho mil pesos de golpe», una conversión inventada del precio, y el
+// prospecto la usó antes de que el alumno diera el precio).
 export const buildPrimerContactoProfilePrompt = (project, config, seeds) => {
   const s = seeds || drawProfileSeeds(config);
   const b = describeBehavior(config?.temperatura, config?.resistencia);
@@ -314,7 +317,7 @@ Genera el perfil PRIVADO de un prospecto ficticio para una práctica de appointm
 Es un personaje 100 % ficticio: no uses nombres de personas reales ni famosos, ni datos de contacto (teléfonos, correos, direcciones, enlaces).
 
 PROYECTO (usa solo esto; si algo dice "no documentado", no lo inventes):
-${buildProjectContext(project)}
+${buildProjectContext(project, { hidePrice: true })}
 
 DATOS FIJOS DE ESTE PROSPECTO (respétalos):
 - Nombre: ${s.nombre}
@@ -339,6 +342,7 @@ REGLAS:
 - Coherente con el cliente ideal del proyecto, pero con detalles propios: NO copies las cifras ni las frases del avatar; inventa cifras y circunstancias plausibles y distintas.
 - Cada campo de texto en máximo 16 palabras; listas de máximo 3 elementos.
 - Todo en español.
+- El prospecto todavía no conoce el precio: no escribas precios de la oferta, cuotas ni conversiones de moneda.
 - ${opening}
 
 RESPONDE SOLO EN JSON (sin markdown):
