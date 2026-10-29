@@ -1,6 +1,7 @@
 // Validación de Inbound — Primer contacto con la IA real (Haiku), en local.
-// TERCERA RONDA: control de estados conversacionales (evasivas, paciencia,
-// descubrimiento, encaje y desenlaces) con alumno simulado dinámico.
+// La ronda la define matrix.mjs (ROUND). Ronda 4: confirmación de F1–F5
+// (descubrimiento verificado, cambio de encaje, datos de contacto, precio y
+// coaching) sobre el control de estados conversacionales.
 //
 // El prospecto y el coaching se ejecutan con el MISMO código de la aplicación
 // (utils/primerContactoTurn.js y primerContactoControl.js: perfil, plan del
@@ -42,7 +43,7 @@ import {
 } from '../../src/utils/primerContactoTurn.js';
 import { createControlState } from '../../src/utils/primerContactoControl.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
-import { CONVERSATIONS, MAX_TURNS, POLICIES, PROFILE_ONLY, PROJECTS } from './matrix.mjs';
+import { CONVERSATIONS, MAX_TURNS, POLICIES, PROFILE_ONLY, PROJECTS, ROUND } from './matrix.mjs';
 
 // ─── Configuración ─────────────────────────────────────────────────────────
 const fail = (message) => { console.error(message); process.exit(2); };
@@ -343,6 +344,12 @@ const observe = (r) => {
     puede_aceptar_por_turno: ts.map((t) => (t.plan?.puedeAceptar ? 1 : 0)),
     revelado_final: r.finalControl?.revelado || [],
     cambio_encaje: r.finalControl?.cambioEncaje || null,
+    afirmaciones_no_documentadas_por_turno: ts.filter((t) => (t.setterClaims || []).length).map((t) => `#${t.index}: ${t.setterClaims.join('; ')} → nota ${t.coaching?.puntuacion_mensaje ?? '—'}`),
+    contacto_reemplazado: ts.filter((t) => (t.prospectIssues || []).includes('contacto_reemplazado')).map((t) => t.index),
+    reintentos_por_contacto: ts.filter((t) => (t.prospectIssues || []).includes('intento1:contacto')).map((t) => t.index),
+    reintentos_por_cifra_sin_respaldo: ts.filter((t) => (t.prospectIssues || []).includes('intento1:cifra_sin_respaldo')).map((t) => t.index),
+    notas_9_10: ts.filter((t) => (t.coaching?.puntuacion_mensaje ?? 0) >= 9).map((t) => t.index),
+    notas_1_3: ts.filter((t) => (t.coaching?.puntuacion_mensaje ?? 99) <= 3).map((t) => t.index),
     confirmado_final: r.finalControl?.confirmado || [],
     evidencias: r.finalControl?.evidencias || {},
     turnos_que_esperaron_al_coaching: ts.filter((t) => t.awaitedCoach).map((t) => t.index),
@@ -425,7 +432,7 @@ const dryRun = () => {
 
 // ─── Ejecución real ────────────────────────────────────────────────────────
 const md = (r) => {
-  const lines = [`## ${r.id} · ${r.title}`, '', `${r.tipo} · ${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · alumno ${r.policy}`, '', `Desenlaces aceptables: ${r.aceptables.join(', ')}${r.nunca.length ? ` · nunca: ${r.nunca.join(', ')}` : ''}`, ''];
+  const lines = [`## ${r.id} · ${r.title}`, '', `${r.tipo}${r.foco ? ` · foco ${r.foco}` : ''} · ${r.temperatura} / ${r.resistencia} · ${r.canal} · proyecto ${r.project} · alumno ${r.policy}`, '', `Desenlaces aceptables: ${r.aceptables.join(', ')}${r.nunca.length ? ` · nunca: ${r.nunca.join(', ')}` : ''}`, ...(r.verifica ? ['', `Se verifica: ${r.verifica}`] : []), ''];
   if (r.profile) {
     const { attempts: _a, seeds: _s, ...shown } = r.profile;
     lines.push(`Perfil (encaje ${r.profile.encaje}, ${r.profile.attempts} intento(s)):`, '```json', JSON.stringify(shown, null, 2), '```', '');
@@ -439,7 +446,8 @@ const md = (r) => {
     lines.push(`> Coaching ${k.puntuacion_mensaje ?? 'sin puntuación'}/10 · ${k.etapa_set ?? '—'} · bien: ${k.que_hizo_bien || '—'} · mejorar: ${k.que_mejorar || '—'}${k.mensaje_alternativo ? ` · sugerido: ${k.mensaje_alternativo}` : ''}${k.alerta ? ` · ALERTA: ${k.alerta}` : ''}${(t.coachingIssues || []).length ? ` · [${t.coachingIssues.join('; ')}]` : ''}`, '');
     const p = t.plan || {};
     lines.push(`**Prospecto:** ${t.respuesta_prospecto}  _(desenlace: ${t.desenlace} · estado: ${t.estado_lead} · acepta_cita: ${t.acepta_cita} (modelo: ${t.acepta_cita_modelo}) · revela: ${JSON.stringify(t.revela || [])}${t.cambio_encaje ? ` · cambio_encaje: «${t.cambio_encaje}»` : ''})_`, '');
-    lines.push(`> Plan: evasivas ${p.evasivas} · presiones ${p.presiones} · puede aceptar: ${p.puedeAceptar ? 'sí' : `no (${(p.bloqueos || []).join(', ')})`}${p.despedida ? ` · DESPEDIDA por ${p.despedida}` : ''}${t.retried ? ` · reintento [${(t.prospectIssues || []).join('; ')}]` : ''}${t.fallback ? ` · RESPALDO ${t.fallback}` : ''}`, '');
+    if ((t.setterClaims || []).length) lines.push(`> Afirmaciones no documentadas del alumno: ${t.setterClaims.join('; ')}`, '');
+    lines.push(`> Plan: precio ${p.precioExactitud ?? '—'} · evasivas ${p.evasivas} · presiones ${p.presiones} · puede aceptar: ${p.puedeAceptar ? 'sí' : `no (${(p.bloqueos || []).join(', ')})`}${p.despedida ? ` · DESPEDIDA por ${p.despedida}` : ''}${t.retried ? ` · reintento [${(t.prospectIssues || []).join('; ')}]` : ''}${t.fallback ? ` · RESPALDO ${t.fallback}` : ''}`, '');
   }
   lines.push('Observaciones automáticas:', '```json', JSON.stringify(r.observations, null, 2), '```', '');
   return lines.join('\n');
@@ -450,7 +458,7 @@ const main = async () => {
   mkdirSync(OUT_REAL, { recursive: true });
   console.log(`Resultados en: ${OUT_REAL}\nTope de gasto: ${MAX_USD} USD\n`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const results = { ronda: 3, modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
+  const results = { ronda: ROUND, modelo: MODEL, fecha: new Date().toISOString(), tope_usd: MAX_USD, conversaciones: [], perfiles: [], detenido: null };
   try {
     for (const c of conversations) {
       process.stdout.write(`${c.id} … `);
@@ -464,7 +472,10 @@ const main = async () => {
       const project = PROJECTS[p.project];
       try {
         const profile = await generatePrimerContactoProfile({ call: appCall(log), project, config: { projectId: project.id, ...p }, random: seeded(p.id), overrides: p.overrides, isFatal: (e) => isStopError(e) });
-        results.perfiles.push({ ...p, ok: true, profile, log });
+        // F3: el perfil se genera sin el precio; no debería traer montos de la oferta ni conversiones.
+        const text = JSON.stringify(profile);
+        const montos_de_precio = (text.match(/\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{3,}\s*(?:usd|d[oó]lares|pesos)|\b(?:mil|cien|ciento)\w*\s+\w*\s*(?:usd|d[oó]lares|pesos)/gi) || []);
+        results.perfiles.push({ ...p, ok: true, profile, log, montos_de_precio });
         console.log(`completo · encaje ${profile.encaje} · ${usage.usd.toFixed(4)} USD`);
       } catch (err) {
         if (isStopError(err)) throw err;
@@ -482,8 +493,8 @@ const main = async () => {
   const byRole = Object.fromEntries(Object.entries(usage.byRole).map(([k, v]) => [k, { ...v, usd: Number(v.usd.toFixed(4)), ms: msStats(v.ms) }]));
   const turnMs = results.conversaciones.flatMap((c) => c.turns.filter((t) => t.turnMs).map((t) => t.turnMs));
   results.uso = { ...usage, usd: Number(usage.usd.toFixed(4)), byRole, latencia_turno_ms: msStats(turnMs) };
-  writeFileSync(resolve(OUT_REAL, `ronda3-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
-  writeFileSync(resolve(OUT_REAL, `ronda3-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda 3 · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
+  writeFileSync(resolve(OUT_REAL, `ronda${ROUND}-resultados-${stamp}.json`), redact(JSON.stringify(results, null, 2)));
+  writeFileSync(resolve(OUT_REAL, `ronda${ROUND}-transcripciones-${stamp}.md`), redact([`# Primer contacto · ronda ${ROUND} · ${MODEL} · ${results.fecha}`, '', `Uso: ${JSON.stringify(results.uso)}`, '', ...results.conversaciones.map(md)].join('\n')));
   console.log(`\nUso real: ${JSON.stringify(results.uso)}\nResultados en: ${OUT_REAL}`);
 };
 
