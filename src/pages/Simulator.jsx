@@ -13,6 +13,7 @@ import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/si
 import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
 import { startPrimerContactoTurn } from '../utils/primerContactoTurn';
 import { OUTCOME_LABELS, applyDiscovery, createControlState } from '../utils/primerContactoControl';
+import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
@@ -82,19 +83,12 @@ const getProbInfo = (mode, coaching) => {
 const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   if (!coaching) return null;
   const { label: probLabel, value: prob } = getProbInfo(mode, coaching);
-  // Oculto, el drawer mobile queda anclado a bottom-24 (6rem) y translate-y-full
-  // lo baja solo su propia altura: su borde superior sigue en pantalla, encima
-  // (z-40) de la barra de escritura (z-35), que deja de recibir toques en
-  // cuanto llega el primer coaching. En Primer contacto se baja además esos
-  // 6rem para que salga por completo; se abre con el botón flotante. Las demás
-  // modalidades tienen el mismo comportamiento desde 5c1c7bf y quedan como
-  // estaban hasta que se autorice cambiarlas.
-  const hiddenClass = mode === PRIMER_CONTACTO ? 'translate-y-[calc(100%+6rem)]' : 'translate-y-full';
 
   return (
     <>
-      {/* Mobile: drawer */}
-      <div className={`fixed bottom-24 md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : hiddenClass}`}
+      {/* Mobile: drawer. Oculto, sale por completo de la pantalla (ver
+          utils/mobileDrawer.js); se abre con el botón flotante. */}
+      <div className={`fixed ${MOBILE_DRAWER_BOTTOM_CLASS} md:hidden left-0 right-0 z-40 bg-bg-card border-t-2 border-accent-coral rounded-t-2xl transition-transform duration-300 ${visible ? 'translate-y-0' : MOBILE_DRAWER_HIDDEN_CLASS}`}
         style={{ maxHeight: '60vh', overflowY: 'auto' }}
       >
         <button onClick={onToggle} className="w-full flex items-center justify-center gap-2 py-3 text-text-secondary text-sm border-b border-border-subtle">
