@@ -188,10 +188,13 @@ describe('2 · aceptación explícita con día y hora', () => {
     const ok = await runProspectTurn({ call, project: DENTAL, profile: PROFILE, history, setterText: '¿Qué día y hora te va bien esta semana?', control: discovered });
     expect(ok).toMatchObject({ acepta_cita: 'si', estado_lead: 'pidio_llamada', desenlace: 'cita_aceptada', retried: false });
     expect(ok.prospectIssues).toContain('aceptacion_normalizada:condicionada->si');
-    // Sin descubrimiento confirmado, sigue condicionada (y no se reintenta).
+    // Sin descubrimiento confirmado no hay cita, y el texto tampoco puede
+    // mostrar una aceptación con horario (coherencia, ronda 6): se pide de
+    // nuevo y, si persiste, entra el respaldo.
     const blocked = await runProspectTurn({ call, project: DENTAL, profile: PROFILE, history, setterText: '¿Qué día y hora te va bien esta semana?', control: createControlState(PROFILE) });
-    expect(blocked).toMatchObject({ acepta_cita: 'condicionada', retried: false });
+    expect(blocked).toMatchObject({ retried: true, fallback: 'sin_descubrimiento' });
     expect(blocked.estado_lead).not.toBe('pidio_llamada');
+    expect(blocked.respuesta_prospecto).not.toMatch(/18:30/);
   });
 });
 

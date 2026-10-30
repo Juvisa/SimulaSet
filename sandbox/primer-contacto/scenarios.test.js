@@ -33,6 +33,8 @@ const play = async (scenario) => {
 const EXPECTED = {
   'cita-aceptada': { desenlace: 'cita_aceptada', turnos: 4, espera: [] },
   'cita-espera-coaching': { desenlace: 'cita_aceptada', turnos: 3, espera: [3] },
+  'cita-no-valida': { desenlace: 'cita_aceptada', turnos: 4 },
+  'cita-rectificada': { desenlace: 'cita_aceptada', turnos: 5 },
   'cita-condicionada': { desenlace: 'cita_condicionada', turnos: 4, estado: 'interesado' },
   'despedida-evasivas': { desenlace: 'despedida', turnos: 3 },
   'no-califica': { desenlace: 'no_califica', turnos: 3 },

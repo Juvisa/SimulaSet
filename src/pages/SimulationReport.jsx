@@ -5,6 +5,7 @@ import { getProjectById } from '../utils/projects';
 import { getValidSimulationCount } from '../utils/simulatorSessions';
 import { callClaude } from '../utils/anthropic';
 import { buildFinalReportPrompt } from '../utils/prompts';
+import { finalStateLabel } from '../utils/primerContactoControl';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import FomoBar from '../components/FomoBar';
@@ -65,7 +66,8 @@ const SimulationReport = () => {
         : 50;
       setReport({
         puntuacion_global: avg,
-        resultado_sesion: session.finalState || 'Sesión completada',
+        // Primer contacto: etiqueta legible (p. ej. cita_no_valida); las demás modalidades, sin cambios.
+        resultado_sesion: finalStateLabel(session.mode, session.finalState) || 'Sesión completada',
         etapas_set: { S_dominada: false, E_dominada: false, T_dominada: false },
         nivel_fomo_alcanzado: session.finalFomo || 0,
         errores_criticos: [],

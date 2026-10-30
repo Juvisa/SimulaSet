@@ -37,7 +37,7 @@ const sentencesOf = (s) => String(s || '').split(/(?<=[!?¿\n])|(?<=\.)\s+/).map
 const PRICE_NOUN = '(precio|precios|costo|costos|valor|inversion|tarifa|numero|cifra|rango|idea|monto)';
 const NOT_PRICE_AFTER_CUANTO = /^\s*(tiempo|horas?|dias?|semanas?|meses|dura|demora|pacientes|clientes|gente|personas|me va a quitar)\b/;
 // Hasta tres palabras entre «cuánto» y el verbo: «¿Cuánto más o menos cuesta?» (ronda 4, C09).
-const COST_VERB = /^(\s+\S+){0,3}?\s+(cuesta|cuestan|sale|salen|vale|es|son|cobra\w*|cost\w*|pag\w*|invert\w*|seria|saldria)\b/;
+const COST_VERB = /^(\s+\S+){0,3}?\s+(cuesta|cuestan|sale|salen|vale|es|son|era|eran|cobra\w*|cost\w*|pag\w*|invert\w*|seria|saldria)\b/;
 const PRICE_REQUEST = new RegExp(`\\b(cual es|que|dime|dame|decime|pasame|pasas|mandame|me dices|me digas|me des|me das|me has dicho|me dijiste|dicho|necesito saber|quiero saber|saber|tienes|hay|me podrias decir)\\s+(el |la |los |las |un |una |algun |alguna |mas o menos )?${PRICE_NOUN}\\b`);
 // Preguntas de precio que piden algo concreto: un rango, una cota o la forma
 // de pago (ronda 4, C09: «¿Estamos hablando de 500, 1000, 5000?», «¿Es más de
@@ -64,6 +64,14 @@ export const asksPrice = (prospectText) => {
   if (/\b(cientos|miles) o (cientos|miles)\b/.test(t)) return true;
   if (t.includes('?') && SPECIFIC_PRICE_QUESTION.test(t) && /\d|precio|pag|cuota|cuanto|costo|inversion/.test(t)) return true;
   return /\bes caro\b/.test(t) && t.includes('?');
+};
+// Preguntas de seguimiento sobre un precio ya dado: costos adicionales, qué
+// incluye, pagos aparte. Volver a pedir el monto («¿cuánto era?») no lo es.
+const PRICE_FOLLOW_UP = /\b(costos?|gastos?|pagos?|cargos?) (adicional\w*|extra\w*|ocult\w*|aparte)\b|\bhay (mas|otros|algun\w*) (costos?|gastos?|pagos?|cargos?)\b|\b(que|el precio|eso|esto) incluye\b|\bincluye todo\b|\bse paga (algo )?aparte\b|\bsorpresas?\b/;
+const ASKS_AMOUNT_AGAIN = /\bcuanto (era|es|cuesta|sale|vale|seria)\b|\b(repet\w*|record\w*) el precio\b|\bque precio\b/;
+export const isPriceFollowUp = (prospectText) => {
+  const t = norm(prospectText);
+  return PRICE_FOLLOW_UP.test(t) && !ASKS_AMOUNT_AGAIN.test(t);
 };
 export const asksSpecificPrice = (prospectText) => asksPrice(prospectText) && SPECIFIC_PRICE_QUESTION.test(norm(prospectText));
 
@@ -353,6 +361,7 @@ export const createControlState = (profile = {}) => {
     evasivas: 0,            // evasivas de precio desde la última respuesta
     preguntasPrecio: 0,     // preguntas de precio sin responder desde la última respuesta
     precioHonesto: false,   // sin precio documentado: ya dijo que no tiene el precio
+    precioDado: false,      // con precio documentado: ya lo dio (exacto o aproximado)
     precioCondicion: false, // sin precio documentado: el prospecto condiciona la cita al precio
     remisionesConcretas: 0, // preguntas concretas seguidas respondidas solo remitiendo a la llamada
     presiones: 0,           // citas propuestas sin descubrimiento + pitch con enlace
@@ -378,7 +387,10 @@ const missing = (list) => DISCOVERY_REQUIRED.filter((k) => !list.includes(k));
 // el código descarta lo que no puede ser un motivo: preguntas, condiciones
 // para decidir o agendar y pedidos de información sobre la oferta. El código
 // solo puede quitar evidencia, nunca agregarla.
-const CONDITION = /\bantes de (decidir|agendar|aceptar|comprometer\w*|seguir|avanzar|pagar|inscrib\w*|la llamada|hablar)\b|\bque me (expli\w*|cuent\w*|dig\w*|muestr\w*|aclar\w*)\b|\bme (expliques|explique|expliquen|cuentes|digas|muestres)\b|\bprimero (quiero|necesito)\b|\b(necesito|quiero) (saber|entender|ver) (bien )?(como|que|cuanto|el precio|de que)\b|\bsiempre (que|y cuando)\b|\bsolo si\b|\bcon tal de que\b|\bsi no me\b|\bsi me (explic|dec|da|mand)\w*\b|\bpara decidir\b/;
+// B2 (ronda 6, C10): «Necesito estar segura de que funciona antes de
+// invertir» se confirmó como motivo. Evaluar la oferta antes de comprar es una
+// condición, no una necesidad propia, aunque diga «necesito».
+const CONDITION = /\bantes de (decidir|agendar|aceptar|comprometer\w*|seguir|avanzar|pagar|inscrib\w*|la llamada|hablar|invertir|comprar|contratar|meterme|gastar|arrancar|empezar|firmar|entrar)\b|\b(necesito|quiero|tengo que) (estar segur[oa]|ver|saber|confirmar|comprobar|asegurarme) (de )?(que|si) (esto |el programa |eso |realmente |de verdad )?(funciona|sirve|me (sirve|conviene|va a servir)|es para mi|vale la pena|da resultado)\b|\b(estar|sentirme) segur[oa] de que (funciona|sirve)\b|\bque me (expli\w*|cuent\w*|dig\w*|muestr\w*|aclar\w*)\b|\bme (expliques|explique|expliquen|cuentes|digas|muestres)\b|\bprimero (quiero|necesito)\b|\b(necesito|quiero) (saber|entender|ver) (bien )?(como|que|cuanto|el precio|de que)\b|\bsiempre (que|y cuando)\b|\bsolo si\b|\bcon tal de que\b|\bsi no me\b|\bsi me (explic|dec|da|mand)\w*\b|\bpara decidir\b/;
 const OFFER_INQUIRY = /\b(como funciona|que incluye|cuanto cuesta|de que se trata|el precio|cuanto sale|que ofrecen|es para mi|es diferente)\b/;
 const MOTIVE_MIN_WORDS = 3;
 // Ronda 5, C02: la cita se registró con el «motivo» «No quiero otro curso
@@ -456,7 +468,11 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
   // cita conseguida con ellas no cuenta como éxito (ver citaValidity).
   const afirmaciones = setterClaimsOf(setterText, project, conversationText);
   const invenciones = pendingClaimsAfter(state.invenciones, setterText, project, afirmaciones);
-  const priceAsked = asksPrice(lastProspectText);
+  // B3 (ronda 6, C15): con el precio documentado ya dado, «¿incluye todo o
+  // hay costos adicionales?» es una pregunta de seguimiento, no un nuevo
+  // pedido del precio: no exige repetir la cifra ni cuenta como evasiva.
+  const priceFollowUp = isPriceDocumented(project) && Boolean(state.precioDado) && isPriceFollowUp(lastProspectText);
+  const priceAsked = asksPrice(lastProspectText) && !priceFollowUp;
   // F4 (ronda 4, C09): la insistencia cuenta las preguntas de precio que
   // siguen sin respuesta; ya no vuelve a cero cuando el prospecto pregunta
   // otra cosa entre medio.
@@ -512,7 +528,8 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
     // Respondida la pregunta, la insistencia vuelve a empezar.
     preguntasPrecio: priceAnswered ? 0 : preguntasPrecio,
     precioExactitud: precio.exactitud,
-    precioHonesto, precioCondicion, remisionesConcretas,
+    precioHonesto, precioCondicion, remisionesConcretas, priceFollowUp,
+    precioDado: Boolean(state.precioDado) || ['exacta', 'aproximada'].includes(precio.exactitud),
     afirmaciones, invenciones,
     propone, pitch, presion, presiones,
     despedida,
@@ -577,6 +594,14 @@ export const checkProspectReply = (raw, plan, state, profile = {}, project = nul
     }
   }
   if (plan.despedida && accept === 'si') issues.push(`aceptacion_no_permitida:despedida_${plan.despedida}`);
+  // Coherencia (ronda 6, C02 #6): el texto no puede aceptar un día y una hora
+  // cuando la cita no se va a registrar («A las 3 está bien» con
+  // "acepta_cita": "no"). Se pide de nuevo y, si sigue, entra el respaldo.
+  const text = raw?.respuesta_prospecto || '';
+  const notRegistrable = !plan.puedeAceptar || missing(state.confirmado || []).length > 0 || Boolean(plan.despedida);
+  if (accept !== 'si' && notRegistrable && explicitScheduledAcceptance(text) && !hasPriorCondition(text)) {
+    issues.push(`aceptacion_no_permitida:aceptacion_en_texto${plan.bloqueos.length ? `:${plan.bloqueos.join('+')}` : ':descubrimiento_no_verificado'}`);
+  }
   const maxWords = (RESISTANCE_RULES[profile.resistencia] || RESISTANCE_RULES.media).maxPalabras;
   const count = String(raw?.respuesta_prospecto || '').split(/\s+/).filter(Boolean).length;
   if (count > Math.ceil(maxWords * 1.5)) issues.push(`largo:${count}`);
@@ -661,6 +686,7 @@ export const resolveTurn = (state, plan, raw, profile = {}, project = null) => {
     evasivas: plan.evasivas,
     preguntasPrecio: plan.preguntasPrecio,
     precioHonesto: plan.precioHonesto,
+    precioDado: plan.precioDado,
     precioCondicion: plan.precioCondicion,
     remisionesConcretas: plan.remisionesConcretas,
     invenciones: plan.invenciones || state.invenciones || [],
@@ -683,8 +709,10 @@ export const resolveTurn = (state, plan, raw, profile = {}, project = null) => {
 // aceptar («pero antes dime el precio»), sigue condicionada. El código solo
 // propone el cambio: quien llama vuelve a revisar la respuesta con el plan
 // (sin descubrimiento confirmado, con el precio pendiente, etc., no se acepta).
-const ACCEPT_WORD = /^(dale|si|sí|perfecto|listo|ok|okay|de acuerdo|genial|buenisimo|me va bien|me viene bien|me sirve|agendemos|confirmo|va|vale|bueno)\b|\b(me va bien|me viene bien|me queda bien|me sirve|agendemos|confirmo|nos vemos|quedamos)\b/;
-const WHEN = /\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|pasado manana|pasado|hoy)\b.*\b(a las \d|\d{1,2}(:\d{2})? ?(am|pm|hs)?\b|en la (manana|tarde|noche)|por la (manana|tarde|noche)|tarde|manana)|\ba las \d{1,2}(:\d{2})?\b|\b\d{1,2}:\d{2}\b|\b\d{1,2} ?(am|pm|hs)\b/;
+const ACCEPT_WORD = /^(dale|si|sí|perfecto|listo|ok|okay|de acuerdo|genial|buenisimo|me va bien|me viene bien|me sirve|agendemos|confirmo|va|vale|bueno)\b|\b(me va bien|me viene bien|me queda bien|me sirve|agendemos|confirmo|nos vemos|quedamos|esta bien|me parece bien|perfecto)\b/;
+// Día y hora. Un número suelto no es una hora («Tengo 2 sillones»), y
+// «pasado» solo es un día en «pasado mañana» (ronda 5, C05: «el mes pasado»).
+const WHEN = /\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|pasado manana|hoy)\b.*(\ba las \d|\b\d{1,2}( \d{2}| ?(am|pm|hs))\b|\b(en|por) la (manana|tarde|noche)\b|\b(tarde|noche)\b)|\ba las \d{1,2}\b|\b\d{1,2} ?(am|pm|hs)\b/;
 const PRIOR_CONDITION = /\bantes (de (agendar|confirmar|aceptar|decidir|la llamada)|necesito|quiero|tengo que|dime|decime|me (dices|decis|explicas|confirmas|pasas))\b|\b(necesito|quiero|tengo que) saber\b[^.?!]*\bantes\b|\bprimero (necesito|quiero|dime|decime)\b|\bsiempre (que|y cuando)\b|\bsolo si\b|\bcon la condicion\b|\bsi (antes )?me (dices|decis|das|confirmas|explicas|mandas)\b|\bsi no\b|\bdepende de\b/;
 export const explicitScheduledAcceptance = (prospectText) => {
   const t = norm(prospectText);
@@ -712,9 +740,22 @@ const offerVocabulary = (project) => new Set(contentWords([
   documentedOfferText(project), project?.avatarBusiness, project?.avatarDescription, project?.avatarCurrentSituation,
   project?.avatarDesire, project?.avatarPain, project?.niche, project?.promise,
 ].filter(Boolean).join(' ')));
+// B1 (ronda 6, C02 #7): «La Dra. te envía el link de la llamada una hora
+// antes» se marcó como característica inventada. La logística de la llamada
+// (día, hora, canal, enlace, recordatorio, quién asiste) no es la oferta: no
+// es una condición comercial ni promete un resultado. Solo cuenta si la frase
+// también afirma algo de la oferta (qué incluye, cómo funciona, resultados,
+// garantías, tiempo que exige el programa).
+const CALL_LOGISTICS = /\b(llamada|videollamada|reunion|zoom|meet|link|enlace|whatsapp|por aqui|este chat|horario|hora|horas? antes|minutos|recordatorio|calendario|invitacion|confirm\w*|agend\w*|te escrib\w*|te (envi|mand|pas)\w*|pueden (ir|estar|venir|conectarse)|los dos|tu pareja|tu socio)\b/;
+const OFFER_SUBJECT = /\b(programa|sistema|metodo|incluye|incluimos|resultado\w*|garant\w*|devolv\w*|pacientes|clientes|implement\w*|ejecut\w*|manej\w*|gestion\w*|anuncios|estrategia|semana\w*|exige|requiere|dedica\w*|paso a paso|te guia\w*|acompan\w*|soporte|seguimiento)\b/;
+export const isCallLogistics = (phrase) => {
+  const t = norm(phrase);
+  return CALL_LOGISTICS.test(t) && !OFFER_SUBJECT.test(t);
+};
 export const verifyCoachInvention = (quote, setterText, project) => {
   const q = typeof quote === 'string' ? quote.trim() : '';
   if (!q || !quoteInMessages(q, [setterText])) return null;
+  if (isCallLogistics(q)) return null;
   const words = [...new Set(contentWords(q))];
   const documented = words.filter((w) => offerVocabulary(project).has(w)).length;
   return documented / words.length >= 0.6 ? null : q;
@@ -740,3 +781,17 @@ export const citaValidity = (control) => {
 export const primerContactoFinalState = (estado, control) => (
   estado === 'pidio_llamada' && !citaValidity(control).valida ? INVALID_APPOINTMENT_STATE : estado
 );
+
+// Etiqueta legible del estado final de una sesión de Primer contacto (la usa
+// el informe de respaldo cuando falla el informe con IA). Las demás
+// modalidades siguen mostrando su estado tal cual.
+export const PRIMER_CONTACTO_FINAL_LABELS = Object.freeze({
+  pidio_llamada: 'Cita aceptada',
+  [INVALID_APPOINTMENT_STATE]: 'Cita aceptada, pero no válida: se consiguió con información no documentada que no se corrigió',
+  no_califica: 'No califica: falta de encaje identificada',
+  cerrado: 'El prospecto se despidió',
+  interesado: 'Conversación abierta (sin cita confirmada)',
+  abierto: 'Conversación abierta (sin cita)',
+  resistente: 'Conversación abierta: el prospecto se enfrió',
+});
+export const finalStateLabel = (mode, state) => (mode === 'primer_contacto' ? PRIMER_CONTACTO_FINAL_LABELS[state] : null) || state;

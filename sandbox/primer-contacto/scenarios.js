@@ -49,6 +49,43 @@ export const SCENARIOS = [
     ],
   },
   {
+    id: 'cita-no-valida',
+    title: 'Cita aceptada con una garantía inventada (no válida)',
+    check: [
+      'en el turno 3 el alumno inventa una garantía: la nota baja a 3 con su alerta',
+      'en el turno 4 el prospecto acepta: la conversación muestra la cita aceptada…',
+      '…pero la fila que se guardaría dice final_state = cita_no_valida (no cuenta como éxito)',
+    ],
+    project: PROJECTS.dental,
+    config: { temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp' },
+    profile: LUCIA,
+    turns: [
+      dentalTurns.t0,
+      dentalTurns.t1,
+      { setter: 'Tranquila: tiene garantía, si en 30 días no ves resultados te devolvemos el dinero. ¿Qué pasa hoy en los meses flojos?', prospect: prospect('Casi no llegan pacientes nuevos y me cuesta cubrir los gastos fijos.', { estado_lead: 'interesado' }), coach: coach(7, 'Pregunta por los meses flojos.', '', { descubrimiento: DISCOVERY_1 }) },
+      { setter: 'Para ver cómo llegar a ese segundo consultorio, ¿te parece una llamada corta con la Dra. Ana el jueves a las 5?', prospect: prospect('Dale, el jueves a las 5 me va bien.', { acepta_cita: 'si', estado_lead: 'interesado' }), coach: coach(9, 'Propone la cita conectándola con su motivo.', '', { descubrimiento: DISCOVERY_1 }) },
+    ],
+  },
+  {
+    id: 'cita-rectificada',
+    title: 'Garantía inventada y rectificada antes de la cita (válida)',
+    check: [
+      'en el turno 3 el alumno inventa una garantía (nota 3)',
+      'en el turno 4 la rectifica de forma explícita: sin tope',
+      'en el turno 5 el prospecto acepta y la fila que se guardaría dice final_state = pidio_llamada',
+    ],
+    project: PROJECTS.dental,
+    config: { temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp' },
+    profile: LUCIA,
+    turns: [
+      dentalTurns.t0,
+      dentalTurns.t1,
+      { setter: 'Tranquila: tiene garantía, si en 30 días no ves resultados te devolvemos el dinero. ¿Qué pasa hoy en los meses flojos?', prospect: prospect('Casi no llegan pacientes nuevos y me cuesta cubrir los gastos fijos.', { estado_lead: 'interesado' }), coach: coach(7, 'Pregunta por los meses flojos.', '', { descubrimiento: DISCOVERY_1 }) },
+      { setter: 'Perdón, me equivoqué antes: no hay garantía de devolución, eso no está documentado. ¿Qué te gustaría resolver primero?', prospect: prospect('Gracias por aclararlo. Llenar los martes, que están vacíos.', { estado_lead: 'interesado' }), coach: coach(8, 'Rectifica con honestidad.', '', { descubrimiento: DISCOVERY_1 }) },
+      { setter: 'Para llenar esos martes, ¿te parece una llamada corta con la Dra. Ana el jueves a las 5?', prospect: prospect('Dale, el jueves a las 5 me va bien.', { acepta_cita: 'si', estado_lead: 'interesado' }), coach: coach(9, 'Propone la cita conectándola con su motivo.', '', { descubrimiento: DISCOVERY_1 }) },
+    ],
+  },
+  {
     id: 'cita-espera-coaching',
     title: 'La cita espera al coaching del mismo turno',
     check: [
