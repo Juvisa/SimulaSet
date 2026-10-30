@@ -1,7 +1,7 @@
 // Validación de Inbound — Primer contacto con la IA real (Haiku), en local.
-// La ronda la define matrix.mjs (ROUND). Ronda 4: confirmación de F1–F5
-// (descubrimiento verificado, cambio de encaje, datos de contacto, precio y
-// coaching) sobre el control de estados conversacionales.
+// La ronda la define matrix.mjs (ROUND). Ronda 5: validación final, con los
+// casos de la ronda 4 más C13 (testimonio como promesa) y C14 (remisión
+// repetida del precio).
 //
 // El prospecto y el coaching se ejecutan con el MISMO código de la aplicación
 // (utils/primerContactoTurn.js y primerContactoControl.js: perfil, plan del
@@ -18,7 +18,8 @@
 //   - Sin --run no hace ninguna llamada: construye los prompts y calcula el
 //     presupuesto.
 //   - Con --run se detiene antes de cualquier llamada que pudiera superar
-//     --max-usd, calculado con el uso real devuelto por la API.
+//     --max-usd: suma el uso real devuelto por la API y reserva el peor caso
+//     de las llamadas en curso (ver callModel).
 //   - Solo puede conectarse a api.anthropic.com y los resultados se escriben
 //     fuera del repositorio.
 //
@@ -91,6 +92,7 @@ const OUT_REAL = realPath(OUT);
 if (isInside(OUT_REAL, realPath(REPO))) fail(`La carpeta de resultados debe estar fuera del repositorio (${OUT_REAL}).`);
 
 const MODEL = MODELS.haiku; // claude-haiku-4-5-20251001, igual que producción
+const SDK_MAX_RETRIES = 2; // reintentos del SDK ante errores de red o 5xx (cuentan para la reserva del tope)
 const STUDENT_MAX_TOKENS = 200;
 // Precio de Claude Haiku 4.5 (USD por millón de tokens).
 const PRICE = { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 };
@@ -178,18 +180,34 @@ let client = null;
 if (RUN) {
   if (!KEY) fail('Falta la variable de entorno SIMULASET_EVAL_ANTHROPIC_KEY (clave de DESARROLLO de Anthropic). No se hizo ninguna llamada.');
   // logLevel 'off': el SDK no registra peticiones ni encabezados aunque exista ANTHROPIC_LOG.
-  client = new Anthropic({ apiKey: KEY, maxRetries: 2, timeout: 60_000, logLevel: 'off', fetch: guardedFetch });
+  client = new Anthropic({ apiKey: KEY, maxRetries: SDK_MAX_RETRIES, timeout: 60_000, logLevel: 'off', fetch: guardedFetch });
 }
 
 // Misma forma que el servidor: modelo fijo, tope de la operación, sistema con caché.
+// Tope de gasto: antes de cada llamada se RESERVA su peor caso (entrada al
+// precio de escritura en caché, que es el más caro, y la salida máxima),
+// multiplicado por los intentos que puede hacer el SDK. Prospecto y coaching
+// van en paralelo: cada llamada cuenta lo ya gastado más lo reservado por las
+// que siguen en curso, así que la suma nunca puede pasar el tope aunque todas
+// terminen en su peor caso. Al terminar, la reserva se libera y queda el costo real.
+let reserved = 0;
 const callModel = async (role, maxTokens, system, messages) => {
   const inputChars = (system || '').length + messages.reduce((a, m) => a + m.content.length, 0);
-  const worst = (estTokens(inputChars) * PRICE.input + maxTokens * PRICE.output) / 1e6;
-  if (usage.usd + worst > MAX_USD) throw new BudgetStop(`Presupuesto: ${usage.usd.toFixed(4)} USD gastados; la siguiente llamada podría superar ${MAX_USD} USD.`);
+  // Cota alta de tokens de entrada (caracteres ÷ 2): en la ronda 4 el coaching
+  // real usó ~2.540 tokens por llamada y caracteres ÷ 3 estimaba ~2.400.
+  const worst = (Math.ceil(inputChars / 2) * Math.max(PRICE.input, PRICE.cacheWrite) + maxTokens * PRICE.output) / 1e6;
+  const reserve = worst * (1 + SDK_MAX_RETRIES);
+  if (usage.usd + reserved + reserve > MAX_USD) throw new BudgetStop(`Presupuesto: ${usage.usd.toFixed(4)} USD gastados (${reserved.toFixed(4)} reservados en curso); la siguiente llamada podría superar ${MAX_USD} USD.`);
+  reserved += reserve;
   const params = { model: MODEL, max_tokens: maxTokens, messages };
   if (system !== undefined) params.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
   const started = performance.now();
-  const res = await client.messages.create(params);
+  let res;
+  try {
+    res = await client.messages.create(params);
+  } finally {
+    reserved -= reserve;
+  }
   const ms = Math.round(performance.now() - started);
   const u = res.usage || {};
   const cost = costOf(u);
