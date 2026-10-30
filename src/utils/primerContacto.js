@@ -56,6 +56,17 @@ export const redactContactData = (v) => {
 const sanitizeList = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? [v] : [])
   .map((x) => sanitizeText(x)).filter(Boolean).slice(0, MAX_LIST_ITEMS);
 
+// Presupuestos ligados al precio en el perfil (ronda 4, Q02: «No tengo 3 mil
+// dólares de una sola vez», aunque el perfil ya no ve el precio): el
+// prospecto los usaría como si supiera cuánto cuesta. Se quita la oración.
+// Las cifras de su historia («gastó 2.000 USD con una agencia») se mantienen.
+const MONEY_FIGURE = /[$€]\s*\d|\d[\d.,]*\s*(k\b|mil\b)?\s*(usd|d[oó]lares|pesos|soles|euros)\b|\b(un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|\d+)\s+mil\b/i;
+const BUDGET_CONTEXT = /presupuesto|\bpagar\w*|de golpe|de una (sola )?vez|me alcanza|le alcanza|no (tengo|tiene|cuento|cuenta) con|puede (gastar|invertir)|puedo (gastar|invertir)|disponible|dispuest[oa] a (pagar|invertir)|m[aá]ximo/i;
+const OWN_HISTORY = /gast[oóé]|invirti[oó]|invert[ií]|pag[oó] |perdi[oó]|factur|gana |cobra /i;
+const isBudgetFigure = (s) => MONEY_FIGURE.test(s) && BUDGET_CONTEXT.test(s) && !OWN_HISTORY.test(s);
+export const dropBudgetFigures = (text) => String(text || '').split(/(?<=[.!?;])\s+/)
+  .filter((s) => !isBudgetFigure(s)).join(' ').trim();
+
 // ─── Proyecto: solo lo documentado ─────────────────────────────────────────
 const NOT_DOCUMENTED = 'no documentado';
 const field = (v) => clean(v) || NOT_DOCUMENTED;
@@ -215,24 +226,33 @@ export const NO_FIT_REASONS = Object.freeze({
 });
 
 // Tipos de apertura por temperatura. Los de texto fijo se usan tal cual.
+// «Hola, necesito información», «Quisiera saber el precio» y «Me interesa el
+// programa» los pidió Digital SET (29/10/2026); se suman a los anteriores.
 export const OPENING_TYPES = Object.freeze({
   frio: Object.freeze([
-    { tipo: 'info', texto: 'Info', peso: 0.25 }, { tipo: 'precio', texto: 'Precio', peso: 0.25 },
-    { tipo: 'como_funciona', texto: 'Hola, ¿cómo funciona?', peso: 0.15 },
+    { tipo: 'info', texto: 'Info', peso: 0.2 }, { tipo: 'precio', texto: 'Precio', peso: 0.15 },
+    { tipo: 'necesito_info', texto: 'Hola, necesito información', peso: 0.1 },
+    { tipo: 'saber_precio', texto: 'Quisiera saber el precio', peso: 0.1 },
+    { tipo: 'como_funciona', texto: 'Hola, ¿cómo funciona?', peso: 0.1 },
     { tipo: 'vi_publicacion', texto: 'Hola, vi tu publicación y quisiera información', peso: 0.15 },
     { tipo: 'pregunta_propia', texto: null, peso: 0.2 },
   ]),
   tibio: Object.freeze([
-    { tipo: 'info', texto: 'Info', peso: 0.15 }, { tipo: 'precio', texto: 'Precio', peso: 0.15 },
-    { tipo: 'como_funciona', texto: 'Hola, ¿cómo funciona?', peso: 0.15 },
-    { tipo: 'vi_publicacion', texto: 'Hola, vi tu publicación y quisiera información', peso: 0.2 },
-    { tipo: 'pregunta_propia', texto: null, peso: 0.35 },
+    { tipo: 'info', texto: 'Info', peso: 0.1 }, { tipo: 'precio', texto: 'Precio', peso: 0.1 },
+    { tipo: 'necesito_info', texto: 'Hola, necesito información', peso: 0.1 },
+    { tipo: 'me_interesa', texto: 'Me interesa el programa', peso: 0.1 },
+    { tipo: 'saber_precio', texto: 'Quisiera saber el precio', peso: 0.05 },
+    { tipo: 'como_funciona', texto: 'Hola, ¿cómo funciona?', peso: 0.1 },
+    { tipo: 'vi_publicacion', texto: 'Hola, vi tu publicación y quisiera información', peso: 0.15 },
+    { tipo: 'pregunta_propia', texto: null, peso: 0.3 },
   ]),
   caliente: Object.freeze([
-    { tipo: 'precio', texto: 'Precio', peso: 0.2 }, { tipo: 'info', texto: 'Info', peso: 0.1 },
-    { tipo: 'quiero_mas_info', texto: 'Hola, quiero más información', peso: 0.2 },
-    { tipo: 'como_empiezo', texto: 'Hola, ¿cómo hago para empezar?', peso: 0.15 },
-    { tipo: 'pregunta_propia', texto: null, peso: 0.35 },
+    { tipo: 'precio', texto: 'Precio', peso: 0.15 }, { tipo: 'info', texto: 'Info', peso: 0.05 },
+    { tipo: 'saber_precio', texto: 'Quisiera saber el precio', peso: 0.1 },
+    { tipo: 'me_interesa', texto: 'Me interesa el programa', peso: 0.15 },
+    { tipo: 'quiero_mas_info', texto: 'Hola, quiero más información', peso: 0.15 },
+    { tipo: 'como_empiezo', texto: 'Hola, ¿cómo hago para empezar?', peso: 0.1 },
+    { tipo: 'pregunta_propia', texto: null, peso: 0.3 },
   ]),
 });
 
@@ -343,6 +363,7 @@ REGLAS:
 - Cada campo de texto en máximo 16 palabras; listas de máximo 3 elementos.
 - Todo en español.
 - El prospecto todavía no conoce el precio: no escribas precios de la oferta, cuotas ni conversiones de moneda.
+- Tampoco escribas cuánto dinero puede o no puede pagar (presupuestos, montos disponibles): si el dinero le preocupa, dilo sin cifras.
 - ${opening}
 
 RESPONDE SOLO EN JSON (sin markdown):
@@ -371,9 +392,9 @@ export const ESSENTIAL_PROFILE_FIELDS = Object.freeze(['nombre', 'identidad', 's
 export const normalizePrimerContactoProfile = (raw, seeds = null) => {
   const p = raw && typeof raw === 'object' ? raw : {};
   const profile = { nombre: sanitizeText(seeds?.nombre || p.nombre, 60) || 'Prospecto' };
-  for (const k of TEXT_FIELDS) profile[k] = sanitizeText(p[k]);
-  profile.objeciones = sanitizeList(p.objeciones);
-  profile.hechos_ocultos = sanitizeList(p.hechos_ocultos);
+  for (const k of TEXT_FIELDS) profile[k] = sanitizeText(dropBudgetFigures(p[k]));
+  profile.objeciones = sanitizeList(p.objeciones).map(dropBudgetFigures).filter(Boolean);
+  profile.hechos_ocultos = sanitizeList(p.hechos_ocultos).map(dropBudgetFigures).filter(Boolean);
   const fit = clean(seeds?.encaje || p.encaje).toLowerCase();
   profile.encaje = FIT.includes(fit) ? fit : 'medio';
   profile.apertura_inicial = sanitizeText(seeds?.apertura?.texto || p.apertura_inicial, 200);
@@ -476,9 +497,20 @@ const COMMERCIAL_TERMS = Object.freeze([
 // «No hay garantía escrita» (ronda 3, R07) es una respuesta honesta, no una
 // promesa: el término no cuenta si una negación lo precede de cerca.
 const NEGATED = /\b(no|sin|ning[uú]n[ao]?|tampoco|nunca)\b[^.!?]{0,25}$/i;
-const affirms = (sentence, re) => {
+// F5 (ronda 4, C03 y C04): remitir el tema a la llamada tampoco es prometerlo
+// («Sobre garantía: eso también se detalla ahí», «los detalles de cómo
+// funciona y garantías, el equipo lo explica mejor en la llamada»). Sí lo es
+// si la oración dice que existe («tiene garantía, te la explica Marta en la
+// llamada»).
+const REMITS = /\b(llamada|reuni[oó]n|el equipo|se detalla|lo detalla|lo explica|te (lo |la |los |las )?(explica|cuenta|muestra)|lo (ve|vemos|ven|veremos)|ah[ií] te|se (ve|ven|define|explica) (en|ah[ií])|ah[ií]\.?$)/i;
+const STATES_IT_EXISTS = /\b(tiene|tienen|ten[eé]s|tenemos|hay|incluye|incluimos|ofrece|ofrecemos|damos|te damos|da|con)\s+(una |la |el |un |su |nuestra |nuestro |total )?(garant|devoluci|reembols|bono|descuento|certificad|cupos?)|garantiza\w*|asegura(mos|do|da)|te devolvemos|devolvemos/i;
+// Solo los temas por los que el prospecto pregunta; la escasez o un
+// «asegurado» nunca se remiten («quedan pocos cupos, agendemos la llamada»).
+const REMITTABLE = new Set(['garantia', 'devolucion', 'bono', 'descuento', 'certificado']);
+const affirms = (sentence, re, name) => {
   const m = re.exec(sentence);
-  return Boolean(m) && !NEGATED.test(sentence.slice(0, m.index));
+  if (!m || NEGATED.test(sentence.slice(0, m.index))) return false;
+  return !(REMITTABLE.has(name) && REMITS.test(sentence) && !STATES_IT_EXISTS.test(sentence));
 };
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 const COMMERCIAL_FIGURE = /(?:[$€]\s*\d+(?:[.,]\d+)*|\d+(?:[.,]\d+)*\s*(?:-\s*\d+\s*)?(?:%|usd|d[oó]lares|pesos|soles|euros|€|horas?|d[ií]as|semanas|meses|a[nñ]os|pacientes|clientes|leads|ventas|citas|sesiones|m[oó]dulos|clases|veces))/gi;
@@ -493,13 +525,21 @@ export const findUndocumentedClaims = (text, project, conversationText = '') => 
       if (digitsOf(fig).some((d) => !known.has(d))) claims.push(`cifra «${fig.trim()}»`);
     }
     for (const [name, re] of COMMERCIAL_TERMS) {
-      if (affirms(sentence, re) && !re.test(doc)) claims.push(name);
+      if (affirms(sentence, re, name) && !re.test(doc)) claims.push(name);
     }
   }
   return [...new Set(claims)];
 };
 
-const COACHING_TEXT_FIELDS = ['que_hizo_bien', 'que_mejorar', 'mensaje_alternativo', 'recurso_sugerido', 'alerta'];
+// Cifras comerciales que SÍ están documentadas («90 días», «12 semanas», «+40
+// pacientes nuevos en 3 meses», el precio). En la ronda 4 el coaching trató
+// «12 semanas» y «90 días» como no documentadas: se le pasan explícitamente.
+export const documentedFigures = (project) => {
+  const sources = [project?.promise, project?.price, ...(project?.testimonials || []).map((t) => (typeof t === 'string' ? t : Object.values(t || {}).join(' ')))];
+  return [...new Set(sources.filter(Boolean).flatMap((s) => String(s).match(COMMERCIAL_FIGURE) || []).map((f) => f.trim()))];
+};
+
+const COACHING_TEXT_FIELDS =['que_hizo_bien', 'que_mejorar', 'mensaje_alternativo', 'recurso_sugerido', 'alerta'];
 const percent = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : undefined);
 
 // Coaching listo para mostrar: puntuación validada (o null), etapa S/E/T,

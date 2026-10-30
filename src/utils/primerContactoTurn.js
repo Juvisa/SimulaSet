@@ -85,9 +85,15 @@ const lastProspectText = (history) => prospectTexts(history).at(-1) || '';
 // conversación ni están en su perfil (ronda 3, R09: «dieciocho mil pesos»,
 // una conversión de moneda inventada). Se pide la respuesta de nuevo una vez;
 // no se reemplaza (puede ser un dato propio mal expresado).
+// Las cifras de su propia historia no cuentan (ronda 4, C10: «gasté unos
+// 2.000 USD con la agencia», en respuesta a una pregunta del alumno, provocó
+// dos reintentos): lo que gastó, invirtió, perdió, factura o cobra él.
+const OWN_MONEY = /\b(gaste|gastamos|gastado|invert[ií]|invertimos|invertido|pague|pagamos|pagaba|perdi|perdimos|me costo|nos costo|factur\w+|gano|ganamos|ganaba|cobro|cobramos|cobraba|ingres\w+|vend[ií]\w*)\b/;
+const normPlain = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 export const unsupportedMoney = (text, conversationText, profile) => {
   const known = amountsIn(`${conversationText}\n${JSON.stringify(profile || {})}`).filter((n) => n >= 10);
-  return priceAmountsIn(text).map(({ n }) => n).filter((n) => !known.some((k) => Math.abs(n - k) / k <= 0.02));
+  const offerSentences = String(text || '').split(/(?<=[.!?\n])\s+/).filter((s) => !OWN_MONEY.test(normPlain(s))).join(' ');
+  return priceAmountsIn(offerSentences).map(({ n }) => n).filter((n) => !known.some((k) => Math.abs(n - k) / k <= 0.02));
 };
 
 const retryInstruction = (issues, profile) => {
@@ -136,7 +142,7 @@ export const runProspectTurn = async ({ call, project, profile, history, setterT
     const issues = check(r);
     if (awaited || !awaitDiscovery || !awaitsDiscovery(issues)) return issues;
     awaited = true;
-    state = applyDiscovery(state, await awaitDiscovery());
+    state = applyDiscovery(state, await awaitDiscovery(), plan.turno);
     return check(r);
   };
 

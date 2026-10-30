@@ -57,7 +57,7 @@ describe('variedad del prospecto (semillas)', () => {
       counts[s.apertura.texto || 'propia'] = (counts[s.apertura.texto || 'propia'] || 0) + 1;
     }
     expect(counts.Info).toBeGreaterThan(60);
-    expect(counts.Precio).toBeGreaterThan(60);
+    expect(counts.Precio).toBeGreaterThan(40);
   });
   it('el encaje lo decide el código e incluye casos que no califican', () => {
     expect(FIT_WEIGHTS.map(([f]) => f)).toEqual(['alto', 'medio', 'bajo']);
@@ -221,7 +221,7 @@ describe('prompt del coaching (Primer contacto)', () => {
   });
   it('precio honesto correcto en cualquier momento, con o sin precio documentado', () => {
     expect(coach).toContain('es correcto EN CUALQUIER MOMENTO');
-    expect(buildPrimerContactoCoachPrompt({ ...PROJECT, price: '' })).toContain('NO es una evasiva; inventar una cifra sí es un error');
+    expect(buildPrimerContactoCoachPrompt({ ...PROJECT, price: '' })).toContain('NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente');
   });
   it('C3: escala 1–10 anclada, nunca 0, y la puntuación al final del JSON', () => {
     expect(coach).toContain('10 excelente, sin nada relevante que mejorar. Nunca uses 0.');
@@ -338,7 +338,7 @@ describe('ronda 3 · calibración del coaching', () => {
     expect(coach).toContain('Inventar condiciones siempre es grave');
     expect(coach).toMatch(/- 9–10: [^\n]*reconocerlo con respeto, sin insistir/);
     expect(coach).toContain('sin cuotas por nivel');
-    expect(coach).toContain('"descubrimiento": { "situacion": "", "motivo": "" }');
+    expect(coach).toContain('"descubrimiento": { "situacion": "", "motivo": "", "no_encaje": "" }');
     expect(coach).toContain('Identificar bien que alguien no califica es un acierto, aunque no haya cita');
     expect(coach).toContain('No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja');
   });

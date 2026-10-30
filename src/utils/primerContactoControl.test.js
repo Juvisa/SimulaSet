@@ -306,8 +306,10 @@ describe('F4 · pregunta de precio, respuesta y exactitud (por separado)', () =>
   it('pregunta real frente a referencia al precio (ronda 3: R06 #2 y R08 #3)', () => {
     for (const t of ['¿Y qué incluye exactamente por ese precio? ¿Garantizan pacientes nuevos?', 'Entiendo. El precio es considerable para mí en este momento.', 'Ya vi el precio, me parece bien.', '¿Cuánto tiempo me exige por semana?', 'Me cuesta comprometer una llamada'])
       expect(asksPrice(t), t).toBe(false);
-    for (const t of ['Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles?', 'Mira, si no me dices el precio ahora, no sigo.', 'Ok, pero necesito saber el precio primero.', '¿Cuánto es el rango?', 'Precio', '¿Y cuánto me costaría?', 'Dale, pero quiero que en la llamada me digas el rango de precio.'])
+    for (const t of ['Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles?', 'Mira, si no me dices el precio ahora, no sigo.', 'Ok, pero necesito saber el precio primero.', '¿Cuánto es el rango?', 'Precio', '¿Y cuánto me costaría?'])
       expect(asksPrice(t), t).toBe(true);
+    // Pedir el precio PARA la llamada no es preguntarlo ahora (remitir a la llamada lo responde).
+    expect(asksPrice('Dale, pero quiero que en la llamada me digas el rango de precio.')).toBe(false);
   });
   it('precio documentado: exacto, aproximado, incorrecto o sin cifra', () => {
     const c = (t, o) => classifyPriceAnswer(t, PROJECT, o);

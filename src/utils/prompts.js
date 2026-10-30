@@ -1,4 +1,4 @@
-import { buildProjectContext, describeBehavior, isPriceDocumented } from './primerContacto.js';
+import { buildProjectContext, describeBehavior, documentedFigures, isPriceDocumented } from './primerContacto.js';
 
 const buildRecursosContext = (project) => {
   const r = project?.recursos;
@@ -219,6 +219,7 @@ export const buildPrimerContactoTurnDirective = (plan, profile) => {
       const why = [];
       if (plan.bloqueos.includes('encaje_definitivo')) why.push('la oferta no te conviene');
       if (plan.bloqueos.includes('precio_pendiente')) why.push('todavía no te respondieron el precio (si te proponen la cita, la condicionas a saberlo)');
+      if (plan.bloqueos.includes('precio_condicion')) why.push('pusiste conocer el precio como condición para agendar y sigues sin tenerlo (mantienes tu decisión con cortesía, sin cortar la conversación)');
       if (plan.bloqueos.includes('sin_descubrimiento')) why.push('el setter todavía no sabe tu situación y por qué escribiste');
       lines.push(`- En este mensaje NO aceptas una cita ("acepta_cita": "no" o "condicionada"): ${why.join('; ')}. No cuentes por tu cuenta lo que no te preguntaron.`);
     } else if (plan.requiereEvidencia) {
@@ -315,7 +316,11 @@ ${buildPrimerContactoTurnDirective(plan, prospectProfile)}`;
 export const buildPrimerContactoCoachPrompt = (project) => {
   const priceRule = isPriceDocumented(project)
     ? `El precio documentado es: ${project.price}. Responder con honestidad una pregunta de precio (el precio, un rango o una referencia de ese precio) es correcto EN CUALQUIER MOMENTO de la conversación: no se descuenta por el orden ni por "no haber descubierto antes". Dar una cifra distinta de la documentada es un error grave.`
-    : 'El proyecto NO documenta un precio. Decir con honestidad que no hay un número y que se verá en la llamada es correcto y NO es una evasiva; inventar una cifra sí es un error.';
+    : 'El proyecto NO documenta un precio. Decir con honestidad que no tiene el precio confirmado y que la experta lo explica en la llamada es correcto y NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente. Sí son evasivas las vaguedades sin respaldo ("es accesible", "depende del plan", "los planes varían") y no hacerse cargo de una pregunta nueva y concreta (un rango, "¿es más de 2.000?", "¿se paga mensual?"). Inventar una cifra es un error grave. Si el prospecto condiciona la cita a saber el precio, insistir con la cita es presión.';
+  const figures = documentedFigures(project);
+  const figuresRule = figures.length
+    ? `Datos con cifra que SÍ están documentados (si el alumno los usa, no son invenciones): ${figures.map((f) => `"${f}"`).join(', ')}.`
+    : 'El proyecto no documenta cifras de plazos ni de resultados.';
   return `
 Eres coach de appointment setting con el método S.E.T. Evalúas UN mensaje de un alumno que atiende a un prospecto que escribió primero (Inbound — Primer contacto). Tu feedback es orientativo, breve y concreto.
 
@@ -332,7 +337,8 @@ MÉTODO S.E.T.:
 CRITERIOS:
 - Premia: preguntas abiertas que construyen sobre lo que dijo el prospecto, activar el problema sin presión, respuestas honestas, proponer la cita cuando ya se entendió su situación y su motivo, y reconocer con respeto que no hay encaje (es un buen resultado: puntúalo alto).
 - ${priceRule}
-- Si el prospecto preguntó algo que el proyecto no documenta (qué incluye, tiempo, garantías), la respuesta honesta "eso lo detalla el equipo en la llamada" es correcta.
+- ${figuresRule}
+- Si el prospecto preguntó algo que el proyecto no documenta (qué incluye, tiempo, garantías), la respuesta honesta "eso lo detalla el equipo en la llamada" es correcta. Mencionar un tema para remitirlo ("sobre garantía: eso se detalla en la llamada"), preguntarlo o negarlo NO es prometerlo: no lo penalices.
 - No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja: cerrar bien también es el objetivo.
 - Penaliza: evasivas reiteradas sobre el precio, afirmar precios, garantías, plazos, horas, contenidos o resultados que no estén documentados, pitch prematuro, interrogatorio en lista, ignorar una pregunta directa del prospecto y proponer la cita sin haber descubierto nada.
 
@@ -341,7 +347,8 @@ REGLAS DEL FEEDBACK:
 - "alerta" solo para: evasiva reiterada de precio, promesa no documentada, pitch o cita sin descubrimiento, insistir en la cita después de un no. En los demás casos, "alerta" va vacía. Máximo 20 palabras, sin mayúsculas de alarma.
 - Longitud: "que_hizo_bien" y "que_mejorar" máximo 25 palabras cada uno; "mensaje_alternativo" máximo 40 palabras (o vacío si el mensaje ya era muy bueno).
 - "etapa_set": exactamente "S", "E" o "T".
-- "puntuacion_mensaje": un número entero de 1 a 10, decidido DESPUÉS de escribir el feedback y coherente con él. Escala: 1–3 dañino o contraproducente; 4–5 débil; 6–7 correcto con algo importante que mejorar; 8 muy bueno; 9–10 excelente, sin nada relevante que mejorar. Nunca uses 0. Usa toda la escala: los extremos existen.
+- "puntuacion_mensaje": un número entero de 1 a 10, decidido DESPUÉS de escribir el feedback y coherente con él. Escala: 1–3 dañino o contraproducente; 4–5 débil; 6–7 correcto con algo importante que mejorar; 8 muy bueno con un detalle importante que mejorar; 9–10 excelente, sin nada relevante que mejorar. Nunca uses 0. Usa toda la escala: los extremos existen.
+- Si lo que pondrías en "que_mejorar" es solo un matiz de estilo o una alternativa igual de buena, el mensaje es 9 o 10 (10 si además conecta con lo que contó el prospecto y avanza la conversación). No bajes la nota por inventar mejoras: en ese caso "que_mejorar" puede decir "Nada importante: mantén este enfoque". Tampoco subas notas sin motivo.
 
 EJEMPLOS DE CALIBRACIÓN (orientativos; cada mensaje recibe la nota que merece, sin cuotas por nivel):
 DEFICIENTE (1–3)
@@ -361,7 +368,8 @@ EXCELENTE (9–10)
 
 DESCUBRIMIENTO ("descubrimiento"): copia TEXTUAL, con sus palabras exactas, de un mensaje del PROSPECTO en la conversación de arriba:
 - "situacion": la frase donde cuenta su situación actual concreta (qué hace, cómo le va, algún dato).
-- "motivo": la frase donde cuenta por qué escribió o qué quiere resolver.
+- "motivo": la frase donde cuenta una NECESIDAD, una motivación o un objetivo propio: qué le pasa, qué quiere resolver o lograr ("necesito llenar la agenda para cubrir los gastos nuevos"). NO es motivo una condición para decidir o agendar ("quiero que me expliques bien antes de decidir"), una pregunta sobre la oferta ("¿cómo funciona?", "¿cuánto cuesta?") ni una duda.
+- "no_encaje": la frase donde dice por qué cree que la oferta no es para él o no le conviene (puede ser una pregunta, como "¿esto es para gente con agenda normal?").
 Si todavía no lo dijo con claridad, va vacío (""). No resumas, no deduzcas y no uses mensajes del alumno.
 
 RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
@@ -374,7 +382,7 @@ RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
   "alerta": "",
   "nivel_fomo": 20,
   "probabilidad_cita": 30,
-  "descubrimiento": { "situacion": "", "motivo": "" },
+  "descubrimiento": { "situacion": "", "motivo": "", "no_encaje": "" },
   "puntuacion_mensaje": 7
 }
 `;
