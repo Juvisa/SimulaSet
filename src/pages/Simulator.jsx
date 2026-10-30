@@ -9,12 +9,16 @@ import {
   buildInboundSystemPrompt,
   buildReactivacionSystemPrompt,
 } from '../utils/prompts';
+import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
+import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
+import { applyCoachResult, startPrimerContactoTurn } from '../utils/primerContactoTurn';
+import { OUTCOME_LABELS, createControlState, primerContactoFinalState } from '../utils/primerContactoControl';
 import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
 
-const MODE_COLORS = { outbound: '#2563EB', inbound: '#1D9E75', reactivacion: '#DC2626' };
+const PRIMER_CONTACTO = 'primer_contacto';
 
 // Chat turno a turno del prospecto: Haiku en vez de Sonnet (mismo modelo para
 // TODO se disparó a $11 USD/24h en Anthropic). La respuesta trae
@@ -57,6 +61,8 @@ const CopyButton = ({ text }) => {
 };
 
 const ScoreBadge = ({ score }) => {
+  // null = turno sin puntuación válida (solo ocurre en Primer contacto).
+  if (score === null) return null;
   const color = score >= 8 ? '#1D9E75' : score >= 5 ? '#C9920A' : '#DC2626';
   return (
     <span className="text-xs font-bold px-2 py-0.5 rounded-full animate-score" style={{ backgroundColor: color + '20', color }}>
@@ -67,10 +73,12 @@ const ScoreBadge = ({ score }) => {
 
 // Compartido entre el panel lateral/drawer y la tarjeta inline en el chat —
 // evita recalcular la misma lógica mode-dependiente en dos lugares.
-const getProbInfo = (mode, coaching) => ({
-  label: mode === 'reactivacion' ? 'Probabilidad reagendamiento' : 'Probabilidad asistencia',
-  value: mode === 'reactivacion' ? coaching?.probabilidad_reagendamiento : coaching?.probabilidad_asistencia,
-});
+// La métrica depende de la modalidad (simulatorModes.js); un modo desconocido
+// conserva la de siempre (probabilidad de asistencia).
+const getProbInfo = (mode, coaching) => {
+  const probability = getMode(mode)?.probability || { key: 'probabilidad_asistencia', label: 'Probabilidad asistencia' };
+  return { label: probability.label, value: coaching?.[probability.key] };
+};
 
 const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   if (!coaching) return null;
@@ -219,6 +227,11 @@ const Simulator = () => {
   const [lastCoaching, setLastCoaching] = useState(null);
   const [coachingVisible, setCoachingVisible] = useState(false);
   const [leadState, setLeadState] = useState('abierto');
+  // Primer contacto: estado de control de la conversación (evasivas,
+  // insistencias, lo revelado, desenlace) y si todavía falta la respuesta del
+  // prospecto en el turno en curso (el coaching puede llegar después).
+  const [control, setControl] = useState(null);
+  const [awaitingProspect, setAwaitingProspect] = useState(false);
   const [scores, setScores] = useState([]);
   const [lastFomo, setLastFomo] = useState(0);
   const [sessionId] = useState(crypto.randomUUID());
@@ -245,6 +258,17 @@ const Simulator = () => {
     try {
       const profile = await generateProspectProfile(proj, mode, config);
       setProspectProfile(profile);
+      // Primer contacto: el prospecto escribe primero con un mensaje breve
+      // («Info», «Precio»…) tomado del perfil y validado en el navegador; no
+      // hace falta una llamada extra a la IA para la apertura.
+      if (mode === PRIMER_CONTACTO) {
+        const opening = pickOpeningMessage(profile.apertura_inicial, config.temperatura);
+        setMessages([{ id: crypto.randomUUID(), role: 'prospect', content: opening.text, time: formatTime() }]);
+        setLeadState('abierto');
+        setControl(createControlState({ ...profile, ...config }));
+        setLoading(false);
+        return;
+      }
       const systemPrompt = buildSystemPrompt(mode, proj, { ...profile, ...config });
       // Get initial message
       const initMessages = [{ role: 'user', content: 'START_SIMULATION' }];
@@ -308,6 +332,52 @@ const Simulator = () => {
     return history;
   };
 
+  // Primer contacto: el prospecto se muestra apenas llega y el coaching se
+  // agrega a ese mismo turno cuando termina. Mientras tanto no se puede enviar
+  // otro mensaje ni terminar (las puntuaciones quedan en orden) y, si el turno
+  // cerró la conversación, el cierre espera al coaching para que el reporte y
+  // el guardado incluyan la última puntuación.
+  const sendPrimerContactoTurn = async (text, updatedMessages) => {
+    setAwaitingProspect(true);
+    const { prospect, coach } = startPrimerContactoTurn({
+      call: callClaude, project, profile: { ...prospectProfile, ...config }, history: messages, setterText: text, control,
+    });
+    const response = await prospect;
+    const prospectMsg = {
+      id: crypto.randomUUID(),
+      role: 'prospect',
+      content: response.respuesta_prospecto,
+      time: formatTime(),
+      coaching: null,
+      coachingPending: true,
+    };
+    setMessages(prev => [...prev, prospectMsg]);
+    setLeadState(response.estado_lead);
+    setControl(response.control);
+    setAwaitingProspect(false);
+    const terminal = isTerminalState(mode, response.estado_lead);
+    if (terminal) setEnded(true);
+
+    const coachResult = await coach;
+    const { coaching } = coachResult;
+    // El coaching trae las citas que confirman situación y motivo, y la
+    // característica inventada que haya verificado: quedan en el control para
+    // los turnos siguientes y para decidir si la cita es válida.
+    const controlAfterCoach = applyCoachResult(response.control, coachResult);
+    setControl(controlAfterCoach);
+    const finalProspectMsg = { ...prospectMsg, coaching, coachingPending: false };
+    setMessages(prev => prev.map(m => (m.id === prospectMsg.id ? finalProspectMsg : m)));
+    if (coaching) setLastCoaching(coaching);
+    // Solo se suman puntuaciones válidas (1–10): un turno sin puntuación
+    // válida no cuenta, en vez de entrar como 0.
+    if (validateScore(coaching?.puntuacion_mensaje) !== null) setScores(prev => [...prev, coaching.puntuacion_mensaje]);
+    setLastFomo(coaching?.nivel_fomo || 0);
+    // Una cita conseguida con información inventada que el alumno nunca
+    // corrigió se guarda como cita_no_valida: queda lo que pasó, pero no
+    // cuenta como éxito (ver primerContactoFinalState).
+    if (terminal) setPendingClose({ finalState: primerContactoFinalState(response.estado_lead, controlAfterCoach), finalMessages: [...updatedMessages, finalProspectMsg] });
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || sending || ended) return;
     const text = input.trim();
@@ -324,9 +394,17 @@ const Simulator = () => {
     setMessages(updatedMessages);
 
     try {
-      const systemPrompt = buildSystemPrompt(mode, project, { ...prospectProfile, ...config });
-      const apiMessages = buildAPIMessages(messages, text);
-      const response = await callClaude(systemPrompt, apiMessages, CHAT_MODEL_OPTIONS);
+      // Primer contacto: prospecto y coaching en llamadas separadas (el
+      // coaching no ve el perfil privado ni la respuesta nueva), con control
+      // de estados y respuesta progresiva. Las demás modalidades siguen con su
+      // única llamada de doble rol.
+      if (mode === PRIMER_CONTACTO) {
+        await sendPrimerContactoTurn(text, updatedMessages);
+        setSending(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+      const response = await callClaude(buildSystemPrompt(mode, project, { ...prospectProfile, ...config }), buildAPIMessages(messages, text), CHAT_MODEL_OPTIONS);
 
       const prospectMsg = {
         id: crypto.randomUUID(),
@@ -351,8 +429,8 @@ const Simulator = () => {
       // de inmediato (ver bloque "ended" más abajo); el efecto de arriba
       // (pendingClose) se encarga de navegar al reporte con un pequeño
       // margen después.
-      const terminalStates = ['pidio_llamada', 'cerrado', 'confirmado_con_entusiasmo', 'quiere_reagendar', 'cancelo'];
-      if (terminalStates.includes(response.estado_lead)) {
+      // Los estados que cierran la sesión dependen de la modalidad.
+      if (isTerminalState(mode, response.estado_lead)) {
         setEnded(true);
         setPendingClose({ finalState: response.estado_lead, finalMessages: [...updatedMessages, prospectMsg] });
       }
@@ -362,6 +440,7 @@ const Simulator = () => {
       // campo de texto para reenviarlo sin perder la conversación.
       const rejected = err instanceof AiRequestError;
       if (rejected) setInput(text);
+      setAwaitingProspect(false);
       setMessages(prev => [...(rejected ? prev.filter(m => m.id !== setterMsg.id) : prev), {
         id: crypto.randomUUID(),
         role: 'system',
@@ -407,7 +486,7 @@ const Simulator = () => {
     navigate('/simulation-report', { state: { session } });
   };
 
-  const modeColor = MODE_COLORS[mode] || '#E0605E';
+  const modeColor = getModeColor(mode);
 
   if (loading) {
     return (
@@ -430,14 +509,16 @@ const Simulator = () => {
             </div>
             <div className="min-w-0">
               <div className="font-semibold text-text-primary text-sm truncate">{prospectProfile?.nombre || 'Prospecto'}</div>
-              <div className="text-text-secondary text-xs truncate">{prospectProfile?.tipNegocio}</div>
+              {/* En Primer contacto el perfil es privado: solo nombre y canal. */}
+              <div className="text-text-secondary text-xs truncate">{mode === PRIMER_CONTACTO ? config?.canal : prospectProfile?.tipNegocio}</div>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <ModeBadge mode={mode} size="sm" />
             <button
               onClick={() => endSession()}
-              className="flex items-center gap-1 text-text-secondary hover:text-red-400 text-xs border border-border-subtle rounded-lg px-3 py-2 transition-colors"
+              disabled={mode === PRIMER_CONTACTO && sending}
+              className="flex items-center gap-1 text-text-secondary hover:text-red-400 text-xs border border-border-subtle rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
             >
               <Flag size={12} />
               Terminar
@@ -453,11 +534,15 @@ const Simulator = () => {
               ? 'bg-green-500/20 text-green-400'
               : ['cerrado', 'cancelo'].includes(leadState)
               ? 'bg-red-500/20 text-red-400'
+              : leadState === 'no_califica'
+              ? 'bg-slate-500/20 text-slate-300'
               : leadState === 'resistente'
               ? 'bg-orange-500/20 text-orange-400'
               : 'bg-blue-500/20 text-blue-400'
           }`}>
-            {leadState?.replace('_', ' ')}
+            {mode === PRIMER_CONTACTO && control?.desenlace === 'cita_condicionada'
+              ? OUTCOME_LABELS.cita_condicionada.toLowerCase()
+              : leadState?.replace('_', ' ')}
           </span>
           {scores.length > 0 && (
             <span className="text-xs text-text-secondary ml-auto">
@@ -497,10 +582,13 @@ const Simulator = () => {
                   )}
                 </div>
                 {turnCoaching && <InlineCoachingCard coaching={turnCoaching} mode={mode} />}
+                {msg.role === 'setter' && nextMsg?.coachingPending && (
+                  <div className="text-text-secondary text-xs px-1 animate-pulse">Analizando tu mensaje…</div>
+                )}
               </Fragment>
             );
           })}
-          {sending && (
+          {sending && (mode !== PRIMER_CONTACTO || awaitingProspect) && (
             <div className="flex justify-start animate-fade-in">
               <div className="bubble-received px-4 py-3 flex gap-1">
                 <span className="w-2 h-2 bg-text-secondary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -541,7 +629,7 @@ const Simulator = () => {
         {ended && (
           <div className="fixed bottom-0 left-0 right-0 md:relative bg-bg-card border-t border-border-subtle px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center" style={{ zIndex: 35 }}>
             <p className="flex items-center justify-center gap-2 text-sm font-bold text-green-400">
-              <Check size={16} /> ¡Simulación completada con éxito!
+              <Check size={16} /> {mode === PRIMER_CONTACTO && control ? `Conversación terminada: ${OUTCOME_LABELS[control.desenlace].toLowerCase()}` : '¡Simulación completada con éxito!'}
             </p>
             <p className="mt-1 text-text-secondary text-xs">Preparando tu reporte de desempeño...</p>
           </div>

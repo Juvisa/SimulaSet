@@ -3,6 +3,7 @@
 import { supabase } from '../lib/supabase';
 import { getRealLeads } from './realLeads';
 import { isValidSimulation, getPracticeLevel, getPracticeMinimumStatus, PRACTICE_LEVELS } from './practiceLevel';
+import { MODE_IDS, SUCCESS_STATES } from './simulatorModes';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -20,12 +21,8 @@ const sessionScore = (s) =>
 
 // DEUDA FUNCIONAL: "Leads convertidos" del Dashboard usa otra definición de
 // éxito (3 estados en cualquier modo). Unificar posteriormente la definición
-// de resultado exitoso por modo (outbound, inbound, reactivación).
-const SUCCESS_STATES = {
-  outbound:    ['pidio_llamada'],
-  inbound:     ['confirmado_con_entusiasmo'],
-  reactivacion: ['quiere_reagendar'],
-};
+// de resultado exitoso por modo. El éxito por modo y la lista de modos vienen
+// de simulatorModes.js (orden histórico; las modalidades nuevas van al final).
 
 const isSuccess = (session) =>
   (SUCCESS_STATES[session.mode] || []).includes(session.finalState);
@@ -50,7 +47,7 @@ function calcularMetricasSimulador(sesiones) {
   const scores = sesiones.map(sessionScore);
   const last7 = sesiones.filter(s => daysAgo(s.createdAt) <= 7).map(sessionScore);
 
-  const porModo = ['outbound', 'inbound', 'reactivacion'].reduce((acc, mode) => {
+  const porModo = MODE_IDS.reduce((acc, mode) => {
     const del = sesiones.filter(s => s.mode === mode);
     acc[mode] = {
       sesiones: del.length,
@@ -65,7 +62,7 @@ function calcularMetricasSimulador(sesiones) {
   // el reduce por "estrictamente mayor/menor" dejaría el mismo modo como best
   // y worst a la vez, mostrando ambos badges en la misma tarjeta. Por eso se
   // descartan los dos si terminan apuntando al mismo modo.
-  const modos = ['outbound', 'inbound', 'reactivacion'].filter(m => porModo[m].sesiones > 0);
+  const modos = MODE_IDS.filter(m => porModo[m].sesiones > 0);
   let modoMasFuerte = null;
   let modoMasDebil = null;
   if (modos.length >= 2) {
@@ -202,7 +199,7 @@ export const getSimulatorActivityState = (startedSessionCount, validSimulationCo
 const modoMasUsado = (allSessions) => {
   let favorito = null;
   let max = 0;
-  ['outbound', 'inbound', 'reactivacion'].forEach((mode) => {
+  MODE_IDS.forEach((mode) => {
     const count = allSessions.filter(s => s.mode === mode).length;
     if (count > max) { favorito = mode; max = count; }
   });
@@ -338,7 +335,7 @@ export function construirMetricasAdmin({ setters, sessionRows }) {
   }, {});
 
   // ACTIVIDAD: distribución de uso por modo sobre todas las sesiones iniciadas.
-  const porModoGlobal = ['outbound', 'inbound', 'reactivacion'].map((mode) => {
+  const porModoGlobal = MODE_IDS.map((mode) => {
     const count = allRows.filter(s => s.mode === mode).length;
     return { mode, sesiones: count, pct: pct(count, allRows.length) };
   });

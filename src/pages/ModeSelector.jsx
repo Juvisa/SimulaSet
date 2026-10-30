@@ -4,39 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { getProjects } from '../utils/projects';
 import Layout from '../components/Layout';
 import { Play } from 'lucide-react';
+import { DEFAULT_SELECTOR_MODE, selectorModes, temperatureLabels } from '../utils/simulatorModes';
 
-const MODES = [
-  {
-    id: 'outbound',
-    name: 'Outbound',
-    emoji: '🔵',
-    color: '#2563EB',
-    bg: '#2563EB',
-    desc: 'El lead no tiene intención declarada. Contacto en frío o tibio.',
-    objective: 'Generar la conversación desde cero y conseguir que el prospecto pida la cita.',
-    channel: ['Instagram DM', 'WhatsApp', 'Comentarios'],
-  },
-  {
-    id: 'inbound',
-    name: 'Inbound — Call Confirmer',
-    emoji: '🟢',
-    color: '#1D9E75',
-    bg: '#1D9E75',
-    desc: 'El lead ya agendó una llamada. Llega con curiosidad, no con convicción.',
-    objective: 'Garantizar que el lead llegue comprometido a la llamada. Eliminar no-shows.',
-    channel: ['WhatsApp', 'DM', 'Email'],
-  },
-  {
-    id: 'reactivacion',
-    name: 'Reactivación',
-    emoji: '🔴',
-    color: '#DC2626',
-    bg: '#DC2626',
-    desc: 'El lead canceló, no asistió o se enfrió después de una conversación previa.',
-    objective: 'Reabrir la conversación y conseguir que el lead quiera reagendar.',
-    channel: ['WhatsApp', 'DM'],
-  },
-];
+// Orden del selector: Inbound — Primer contacto primero (lo que más practican
+// los principiantes), luego las modalidades históricas.
+const MODES = selectorModes();
 
 const SELECT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary text-sm focus:border-accent-coral transition-colors";
 
@@ -46,7 +18,7 @@ const ModeSelector = () => {
   const location = useLocation();
   const [projects, setProjects] = useState([]);
   const [projectError, setProjectError] = useState('');
-  const [selectedMode, setSelectedMode] = useState('outbound');
+  const [selectedMode, setSelectedMode] = useState(DEFAULT_SELECTOR_MODE);
   const [config, setConfig] = useState({
     projectId: location.state?.projectId || '',
     temperatura: 'frio',
@@ -67,6 +39,15 @@ const ModeSelector = () => {
 
   const setConf = (k, v) => setConfig(c => ({ ...c, [k]: v }));
   const selectedModeInfo = MODES.find(m => m.id === selectedMode);
+  const tempLabels = temperatureLabels(selectedMode);
+  // Al cambiar de modalidad, si el canal elegido no existe en la nueva, se
+  // toma el primero de la lista (antes podía quedar un canal que el
+  // desplegable ya no mostraba).
+  const selectMode = (id) => {
+    setSelectedMode(id);
+    const channels = MODES.find(m => m.id === id)?.channels || [];
+    setConfig(c => (channels.includes(c.canal) ? c : { ...c, canal: channels[0] }));
+  };
 
   const handleStart = () => {
     if (!config.projectId) { alert('Selecciona un proyecto primero'); return; }
@@ -84,11 +65,11 @@ const ModeSelector = () => {
         {/* Mode selection */}
         <div className="mb-8">
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">Modo</h2>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2">
             {MODES.map(mode => (
               <button
                 key={mode.id}
-                onClick={() => setSelectedMode(mode.id)}
+                onClick={() => selectMode(mode.id)}
                 className={`text-left p-5 rounded-2xl border-2 transition-all ${
                   selectedMode === mode.id
                     ? 'border-opacity-100'
@@ -143,15 +124,13 @@ const ModeSelector = () => {
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Temperatura del prospecto</label>
               <select value={config.temperatura} onChange={e => setConf('temperatura', e.target.value)} className={SELECT}>
-                <option value="frio">❄️ Frío — no conoce al experto</option>
-                <option value="tibio">🌤️ Tibio — siguió al experto</option>
-                <option value="caliente">🔥 Caliente — interés declarado</option>
+                {['frio', 'tibio', 'caliente'].map(t => <option key={t} value={t}>{tempLabels[t]}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Canal</label>
               <select value={config.canal} onChange={e => setConf('canal', e.target.value)} className={SELECT}>
-                {selectedModeInfo.channel.map(c => <option key={c} value={c}>{c}</option>)}
+                {selectedModeInfo.channels.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>

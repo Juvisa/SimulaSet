@@ -1,5 +1,6 @@
 import { parseAndValidateSetEngineResponse, SET_ENGINE_ERROR_CODES, SetEngineError } from './setEngine.js';
 import { getAiAuthHeaders } from './aiAuth.js';
+import { generatePrimerContactoProfile } from './primerContactoTurn.js';
 
 const MAX_TOKENS = 1500;
 const SET_ENGINE_RETRY_INSTRUCTION = 'La respuesta anterior no cumplió el formato. Genera nuevamente la respuesta completa siguiendo exactamente el contrato JSON. Devuelve únicamente JSON puro, sin markdown ni texto adicional.';
@@ -169,7 +170,15 @@ export const createSetEngineCaller = request => async (systemPrompt, messages, p
 
 export const callSetEngine = createSetEngineCaller(requestClaude);
 
+const PROFILE_OPTIONS = { maxTokens: 500, model: 'haiku', operation: 'simulator_prospect' };
+
+// Inbound — Primer contacto: perfil privado propio, generado por el mismo
+// código que usa el script de validación (utils/primerContactoTurn.js). Los
+// rechazos del servidor (sesión, acceso, límite) se muestran tal cual.
 export const generateProspectProfile = async (project, mode, config) => {
+  if (mode === 'primer_contacto') {
+    return generatePrimerContactoProfile({ call: callClaude, project, config, isFatal: (err) => err instanceof AiRequestError });
+  }
   const prompt = `
 Genera un perfil realista de prospecto para una simulación de ventas.
 
@@ -200,7 +209,7 @@ RESPONDE EN JSON (sin markdown):
   // "Respuesta inválida de la IA" en el chat del simulador.
   let profile;
   try {
-    profile = await callClaude(undefined, [{ role: 'user', content: prompt }], { maxTokens: 500, model: 'haiku', operation: 'simulator_prospect' });
+    profile = await callClaude(undefined, [{ role: 'user', content: prompt }], PROFILE_OPTIONS);
   } catch {
     throw new Error('Perfil inválido');
   }
