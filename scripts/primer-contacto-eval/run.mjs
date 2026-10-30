@@ -42,7 +42,7 @@ import {
 import {
   COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS, generatePrimerContactoProfile, runPrimerContactoTurn,
 } from '../../src/utils/primerContactoTurn.js';
-import { createControlState } from '../../src/utils/primerContactoControl.js';
+import { citaValidity, createControlState, primerContactoFinalState } from '../../src/utils/primerContactoControl.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
 import { CONVERSATIONS, MAX_TURNS, POLICIES, PROFILE_ONLY, PROJECTS, ROUND } from './matrix.mjs';
 
@@ -318,6 +318,9 @@ const runConversation = async (c) => {
   }
   result.finalState = state;
   result.finalOutcome = outcome;
+  // Lo que guardaría la aplicación (decisión del 30/10: cita conseguida con
+  // información inventada y no corregida = cita_no_valida).
+  result.savedState = primerContactoFinalState(state, control);
   result.finalControl = control;
   result.observations = observe(result);
   return result;
@@ -356,6 +359,10 @@ const observe = (r) => {
     desenlace_prohibido: (r.nunca || []).includes(r.finalOutcome),
     invariantes_rotas: invariantes,
     estado_final: r.finalState,
+    estado_guardado: r.savedState,
+    cita_valida: r.finalState === 'pidio_llamada' ? citaValidity(r.finalControl).valida : null,
+    invenciones_pendientes: citaValidity(r.finalControl).pendientes,
+    aceptaciones_normalizadas: ts.flatMap((t) => (t.prospectIssues || []).filter((i) => i.startsWith('aceptacion_')).map((i) => `#${t.index}:${i}`)),
     turnos: ts.length,
     evasivas_por_turno: ts.map((t) => t.plan?.evasivas ?? null),
     presiones_por_turno: ts.map((t) => t.plan?.presiones ?? null),
@@ -482,7 +489,7 @@ const main = async () => {
       process.stdout.write(`${c.id} … `);
       const r = await runConversation(c);
       results.conversaciones.push(r);
-      console.log(`${r.finalOutcome || r.error}${r.observations ? (r.observations.desenlace_aceptable ? ' (aceptable)' : ' (NO aceptable)') : ''} · ${usage.usd.toFixed(4)} USD`);
+      console.log(`${r.finalOutcome || r.error}${r.savedState && r.savedState !== r.finalState ? ` → guarda ${r.savedState}` : ''}${r.observations ? (r.observations.desenlace_aceptable ? ' (aceptable)' : ' (NO aceptable)') : ''} · ${usage.usd.toFixed(4)} USD`);
     }
     for (const p of profilesOnly) {
       process.stdout.write(`${p.id} … `);

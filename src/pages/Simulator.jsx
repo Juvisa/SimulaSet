@@ -11,8 +11,8 @@ import {
 } from '../utils/prompts';
 import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
 import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
-import { startPrimerContactoTurn } from '../utils/primerContactoTurn';
-import { OUTCOME_LABELS, applyDiscovery, createControlState } from '../utils/primerContactoControl';
+import { applyCoachResult, startPrimerContactoTurn } from '../utils/primerContactoTurn';
+import { OUTCOME_LABELS, createControlState, primerContactoFinalState } from '../utils/primerContactoControl';
 import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
@@ -358,10 +358,13 @@ const Simulator = () => {
     const terminal = isTerminalState(mode, response.estado_lead);
     if (terminal) setEnded(true);
 
-    const { coaching, discovery } = await coach;
-    // El coaching trae las citas que confirman situación y motivo: quedan en
-    // el control para los turnos siguientes.
-    setControl(prev => applyDiscovery(prev, discovery));
+    const coachResult = await coach;
+    const { coaching } = coachResult;
+    // El coaching trae las citas que confirman situación y motivo, y la
+    // característica inventada que haya verificado: quedan en el control para
+    // los turnos siguientes y para decidir si la cita es válida.
+    const controlAfterCoach = applyCoachResult(response.control, coachResult);
+    setControl(controlAfterCoach);
     const finalProspectMsg = { ...prospectMsg, coaching, coachingPending: false };
     setMessages(prev => prev.map(m => (m.id === prospectMsg.id ? finalProspectMsg : m)));
     if (coaching) setLastCoaching(coaching);
@@ -369,7 +372,10 @@ const Simulator = () => {
     // válida no cuenta, en vez de entrar como 0.
     if (validateScore(coaching?.puntuacion_mensaje) !== null) setScores(prev => [...prev, coaching.puntuacion_mensaje]);
     setLastFomo(coaching?.nivel_fomo || 0);
-    if (terminal) setPendingClose({ finalState: response.estado_lead, finalMessages: [...updatedMessages, finalProspectMsg] });
+    // Una cita conseguida con información inventada que el alumno nunca
+    // corrigió se guarda como cita_no_valida: queda lo que pasó, pero no
+    // cuenta como éxito (ver primerContactoFinalState).
+    if (terminal) setPendingClose({ finalState: primerContactoFinalState(response.estado_lead, controlAfterCoach), finalMessages: [...updatedMessages, finalProspectMsg] });
   };
 
   const sendMessage = async () => {

@@ -344,6 +344,8 @@ CRITERIOS:
 - Si el prospecto preguntó algo que el proyecto no documenta (qué incluye, tiempo, garantías), la respuesta honesta "eso lo detalla el equipo en la llamada" es correcta. Mencionar un tema para remitirlo ("sobre garantía: eso se detalla en la llamada"), preguntarlo o negarlo NO es prometerlo: no lo penalices.
 - No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja: cerrar bien también es el objetivo.
 - Penaliza: evasivas reiteradas sobre el precio, afirmar precios, garantías, plazos, horas, contenidos o resultados que no estén documentados, pitch prematuro, interrogatorio en lista, ignorar una pregunta directa del prospecto y proponer la cita sin haber descubierto nada.
+- Una característica de la oferta que no está documentada es una invención aunque no tenga números: «el programa está diseñado para que no agregues tareas», «incluye estrategia personalizada e implementación», «tú das la estrategia, nosotros ejecutamos», «trabaja con rutinas flexibles». Puntúala como invención (1–3) y copia la frase en "afirmacion_no_documentada". Lo que dice lo documentado (promesa, nicho, cliente ideal, precio, testimonios) no es una invención.
+- Evalúa SOLO el mensaje del alumno a evaluar. Los errores de mensajes anteriores ya se puntuaron: no bajes esta nota por ellos ni los repitas en "que_mejorar", salvo que este mensaje los repita o se apoye en ellos (por ejemplo, vuelve a afirmar la garantía). Si este mensaje los corrige, es un acierto.
 
 REGLAS DEL FEEDBACK:
 - Nunca inventes ni sugieras características, precios, garantías, condiciones, plazos o resultados de la oferta. "mensaje_alternativo" solo puede usar lo documentado; si falta información, modela una respuesta honesta ("eso te lo detalla el equipo en la llamada").
@@ -371,9 +373,11 @@ EXCELENTE (9–10)
 
 DESCUBRIMIENTO ("descubrimiento"): copia TEXTUAL, con sus palabras exactas, de un mensaje del PROSPECTO en la conversación de arriba:
 - "situacion": la frase donde cuenta su situación actual concreta (qué hace, cómo le va, algún dato).
-- "motivo": la frase donde cuenta una NECESIDAD, una motivación o un objetivo propio: qué le pasa, qué quiere resolver o lograr ("necesito llenar la agenda para cubrir los gastos nuevos"). NO es motivo una condición para decidir o agendar ("quiero que me expliques bien antes de decidir"), una pregunta sobre la oferta ("¿cómo funciona?", "¿cuánto cuesta?") ni una duda.
+- "motivo": la frase donde cuenta una NECESIDAD, una motivación o un objetivo propio: qué le pasa, qué quiere resolver o lograr ("necesito llenar la agenda para cubrir los gastos nuevos"). NO es motivo una condición para decidir o agendar ("quiero que me expliques bien antes de decidir"), una pregunta sobre la oferta ("¿cómo funciona?", "¿cuánto cuesta?"), una duda ni una objeción ("no quiero otro curso más", "desconfío").
 - "no_encaje": la frase donde dice por qué cree que la oferta no es para él o no le conviene (puede ser una pregunta, como "¿esto es para gente con agenda normal?").
 Si todavía no lo dijo con claridad, va vacío (""). No resumas, no deduzcas y no uses mensajes del alumno.
+
+AFIRMACIÓN NO DOCUMENTADA ("afirmacion_no_documentada"): si el MENSAJE DEL ALUMNO A EVALUAR afirma una característica, condición o resultado de la oferta que no está documentado, copia esa frase TEXTUAL del alumno; si no, va vacío ("").
 
 RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
 {
@@ -386,6 +390,7 @@ RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
   "nivel_fomo": 20,
   "probabilidad_cita": 30,
   "descubrimiento": { "situacion": "", "motivo": "", "no_encaje": "" },
+  "afirmacion_no_documentada": "",
   "puntuacion_mensaje": 7
 }
 `;
@@ -393,7 +398,9 @@ RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
 
 // Mensaje del usuario para el coaching: la conversación previa (visible para
 // el alumno) y el mensaje que se evalúa. Nunca incluye la respuesta nueva.
-export const buildPrimerContactoCoachMessage = (visibleMessages, setterText) => {
+// priceNote: lo que el código ya decidió sobre el precio de este mensaje
+// (exacto, aproximado o incorrecto), para que el coaching no lo contradiga.
+export const buildPrimerContactoCoachMessage = (visibleMessages, setterText, priceNote = '') => {
   const lines = (visibleMessages || [])
     .filter((m) => m.role === 'prospect' || m.role === 'setter')
     .map((m) => `${m.role === 'setter' ? 'Alumno' : 'Prospecto'}: ${m.content}`);
@@ -401,7 +408,7 @@ export const buildPrimerContactoCoachMessage = (visibleMessages, setterText) => 
 ${lines.join('\n') || '(sin mensajes previos)'}
 
 MENSAJE DEL ALUMNO A EVALUAR:
-${setterText}`;
+${setterText}${priceNote ? `\n\nPRECIO EN ESTE MENSAJE (lo verificó el sistema): ${priceNote}` : ''}`;
 };
 
 // Solo para Inbound — Primer contacto (para las demás modalidades el texto del
@@ -409,7 +416,8 @@ ${setterText}`;
 const PRIMER_CONTACTO_REPORT_NOTE = `
 OBJETIVO DE ESTA MODALIDAD (Inbound — Primer contacto): el prospecto escribió primero desde un anuncio o contenido. El objetivo era descubrir si había una oportunidad real y llevarla a una cita cuando correspondía, no vender por chat.
 - "no_califica" es un resultado legítimo: identificar bien la falta de encaje y cerrar con respeto es un acierto.
-- Una respuesta honesta sobre el precio no es un error; sí lo son las evasivas reiteradas y afirmar precios, garantías o condiciones no documentadas.`;
+- Una respuesta honesta sobre el precio no es un error; sí lo son las evasivas reiteradas y afirmar precios, garantías o condiciones no documentadas.
+- "cita_no_valida": el prospecto aceptó la cita, pero el alumno la consiguió con una garantía, una promesa o una característica inventada que nunca corrigió. NO es un éxito: explícalo en "resultado_sesion" y en los errores críticos, y no lo cuentes como logro.`;
 
 export const buildFinalReportPrompt = (mode, project, history, scores, finalFomo, finalState) => `
 Eres un coach experto en appointment setting de alto ticket.

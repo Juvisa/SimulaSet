@@ -488,7 +488,8 @@ export const normalizeStage = (value) => {
 // figura en el proyecto ni se dijo en la conversación, o términos de garantía,
 // devolución, bonos o descuentos que el proyecto no menciona.
 const COMMERCIAL_TERMS = Object.freeze([
-  ['garantia', /garant/i], ['devolucion', /devoluci|reembols/i], ['asegurado', /asegurad|aseguramos/i],
+  // Ronda 5, C10: «te devolvemos todo» repetía la garantía sin la palabra «devolución».
+  ['garantia', /garant/i], ['devolucion', /devoluci|reembols|devolv\w*(?!\s+(la|tu)\s+llamada)|devuelv\w*(?!\s+(la|tu)\s+llamada)|recuper\w* (tu|el|todo el|su) dinero|sin riesgo/i], ['asegurado', /asegurad|aseguramos/i],
   ['bono', /\bbono/i], ['descuento', /descuento|oferta especial|promoci[oó]n/i], ['certificado', /certificad/i],
   ['cupos', /cupos?\b|plazas? limitad/i],
   // Escasez inventada (ronda 3, R06: «Tenemos pocos espacios disponibles»).
@@ -496,7 +497,10 @@ const COMMERCIAL_TERMS = Object.freeze([
 ]);
 // «No hay garantía escrita» (ronda 3, R07) es una respuesta honesta, no una
 // promesa: el término no cuenta si una negación lo precede de cerca.
-const NEGATED = /\b(no|sin|ning[uú]n[ao]?|tampoco|nunca)\b[^.!?]{0,25}$/i;
+// La negación tiene que gobernar el término: hasta tres palabras antes y sin
+// una coma de por medio (ronda 5, C10: en «si en 30 días no ves resultados, te
+// devolvemos todo», el «no» es de otra cláusula).
+const NEGATED = /\b(no|sin|ning[uú]n[ao]?|tampoco|nunca)\b(\s+[^\s,;:.!?]+){0,3}\s*$/i;
 // F5 (ronda 4, C03 y C04): remitir el tema a la llamada tampoco es prometerlo
 // («Sobre garantía: eso también se detalla ahí», «los detalles de cómo
 // funciona y garantías, el equipo lo explica mejor en la llamada»). Sí lo es
@@ -533,7 +537,7 @@ const testimonialNames = (project) => (project?.testimonials || [])
   .filter((w) => w.length >= 3 && !TESTIMONIAL_NAME_STOP.has(w) && !/^dra?$/.test(w));
 const CASE_NOUN = /\b(caso|cliente|clienta|alumn[oa]|colega|odontolog[oa]|doctora?|dra?\.?|testimonio|paciente que|profesional)\b/;
 const PAST_RESULT = /\b(consigui[oó]|logr[oó]|sum[oó]|obtuvo|tuvo|pas[oó] de|lleg[oó] a|gan[oó]|cerr[oó]|consiguieron|lograron|sumaron|tuvieron)\b/;
-const PROMISE = /\b(vas a|van a|vas a poder|tendr[aá]s|conseguir[aá]s|lograr[aá]s|sumar[aá]s|obtendr[aá]s|llenar[aá]s|te (da|dar[aá]|garantiza|asegura)|est[aá] dise[nñ]ad[oa] para|garantiz\w*|asegur\w*|para que (consigas|logres|tengas|sumes|llenes)|podr[aá]s|puedes (conseguir|lograr|sumar|llegar)|el (sistema|programa|m[eé]todo) (da|logra|consigue|genera|trae)|lo normal es|en promedio)\b/;
+const PROMISE = /\b(es el piso|vas a|van a|vas a poder|tendr[aá]s|conseguir[aá]s|lograr[aá]s|sumar[aá]s|obtendr[aá]s|llenar[aá]s|te (da|dar[aá]|garantiza|asegura)|est[aá] dise[nñ]ad[oa] para|garantiz\w*|asegur\w*|para que (consigas|logres|tengas|sumes|llenes)|podr[aá]s|puedes (conseguir|lograr|sumar|llegar)|el (sistema|programa|m[eé]todo) (da|logra|consigue|genera|trae)|lo normal es|en promedio)\b/;
 const citesTestimonial = (sentence, project) => {
   const s = plain(sentence);
   if (PROMISE.test(s)) return false;
@@ -541,20 +545,44 @@ const citesTestimonial = (sentence, project) => {
   return named || (CASE_NOUN.test(s) && PAST_RESULT.test(s));
 };
 
+// Una cifra se compara con su unidad (ronda 5, C06: «solo requiere 3 horas por
+// semana» pasaba porque el precio documentado dice «3 cuotas»). Las monedas
+// cuentan como una sola unidad («1.800 USD» = «1.800 dólares»).
+const unitKey = (fig) => {
+  const u = plain(fig).replace(/[\d.,\s+-]/g, '');
+  if (/^[$€]|usd|dolar|peso|sol|euro|€/.test(u) || /^\s*[$€]/.test(fig)) return 'dinero';
+  return u.replace(/s$/, '').replace(/^ano$/, 'año') || 'sin_unidad';
+};
+const figureKeys = (text) => (String(text || '').match(COMMERCIAL_FIGURE) || [])
+  .flatMap((fig) => digitsOf(fig).map((d) => `${d}|${unitKey(fig)}`));
+// Promesa de un resultado con cifras (ronda 5, C10: «15-20 en 30 es el piso»,
+// «con 2 sillones… sí es realista»), aunque los números vengan de la
+// conversación: el alumno le asegura al prospecto lo que va a lograr.
+const RESULT_PROMISE = /\b(es el piso|como m[ií]nimo (vas|vas a|tendr)|vas a (tener|sumar|conseguir|lograr|llenar|ver|llegar)|(tendr|conseguir|lograr|sumar|llenar|llegar)([aá]s|[ií]as)|ver[aá]s resultados|te garantiz\w*|garantizamos|aseguramos|te aseguro|seguro que (vas|tendr\w*|lleg\w*|lo logr\w*)|(s[ií] )?es realista)\b/;
+const RESULT_FIGURE = /\d+\s*(-|a)\s*\d+\s+en\s+\d+|\d+\s*(%|por ?ciento|pacientes|clientes|ventas|citas|leads|kilos|kg)|en\s+\d+\s*(d[ií]as|semanas|meses)/i;
+const promisesResult = (sentence) => RESULT_PROMISE.test(plain(sentence)) && RESULT_FIGURE.test(plain(sentence));
+
 export const findUndocumentedClaims = (text, project, conversationText = '') => {
   const doc = documentedOfferText(project);
-  const known = new Set([...digitsOf(nonTestimonialOfferText(project)), ...digitsOf(conversationText)]);
-  const fromTestimonials = new Set(digitsOf(testimonialText(project)));
-  const statements = String(text || '').split(/(?<=[.!?\n])\s+/).filter((s) => s && !s.includes('?'));
+  // Lo documentado se compara con su unidad; lo dicho en la conversación, solo
+  // por el número (el alumno repite «15-20» de «entre 15 y 20 pacientes»).
+  const known = new Set(figureKeys(nonTestimonialOfferText(project)));
+  for (const d of digitsOf(project?.price || '')) known.add(`${d}|dinero`);
+  const said = new Set(digitsOf(conversationText));
+  const fromTestimonials = new Set(figureKeys(testimonialText(project)));
+  const statements = String(text || '').split(/(?<=[.!?;\n])\s+/).filter((s) => s && !s.includes('?'));
   const claims = [];
   for (const sentence of statements) {
+    let promised = false;
     for (const fig of sentence.match(COMMERCIAL_FIGURE) || []) {
-      const unknown = digitsOf(fig).filter((d) => !known.has(d));
+      const unknown = digitsOf(fig).filter((d) => !said.has(d)).map((d) => `${d}|${unitKey(fig)}`).filter((k) => !known.has(k));
       if (!unknown.length) continue;
-      if (unknown.every((d) => fromTestimonials.has(d))) {
-        if (!citesTestimonial(sentence, project)) claims.push(`resultado de un testimonio presentado como promesa «${fig.trim()}»`);
+      if (unknown.every((k) => fromTestimonials.has(k))) {
+        // Un aviso por oración («+40 pacientes nuevos en 3 meses» es una sola promesa).
+        if (!promised && !citesTestimonial(sentence, project)) { claims.push(`resultado de un testimonio presentado como promesa «${fig.trim()}»`); promised = true; }
       } else claims.push(`cifra «${fig.trim()}»`);
     }
+    if (!promised && promisesResult(sentence) && !citesTestimonial(sentence, project)) claims.push(`promesa de resultado «${sentence.trim().slice(0, 80)}»`);
     for (const [name, re] of COMMERCIAL_TERMS) {
       if (affirms(sentence, re, name) && !re.test(doc)) claims.push(name);
     }

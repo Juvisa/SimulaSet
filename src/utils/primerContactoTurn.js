@@ -15,7 +15,6 @@ import {
   drawProfileSeeds,
   buildPrimerContactoProfilePrompt,
   findContactData,
-  findUndocumentedClaims,
   isEcho,
   isPriceDocumented,
   normalizePrimerContactoProfile,
@@ -24,8 +23,8 @@ import {
   sanitizeCoaching,
 } from './primerContacto.js';
 import {
-  amountsIn, applyDiscovery, checkProspectReply, classifyPriceAnswer, createControlState, fallbackFor,
-  planTurn, priceAmountsIn, resolveTurn, verifyDiscovery,
+  amountsIn, applyCoachInvention, applyDiscovery, checkProspectReply, classifyPriceAnswer, createControlState, fallbackFor,
+  normalizeAcceptance, planTurn, priceAmountsIn, resolveTurn, setterClaimsOf, verifyCoachInvention, verifyDiscovery,
 } from './primerContactoControl.js';
 
 // Mismas operaciones y modelo que hoy (lista cerrada del servidor): el
@@ -146,14 +145,34 @@ export const runProspectTurn = async ({ call, project, profile, history, setterT
     return check(r);
   };
 
-  let raw = await call(system, messages, PROSPECT_TURN_OPTIONS);
-  const firstIssues = await checkAndConfirm(raw);
+  // Aceptación con día y hora (decisión del 30/10): si el texto acepta un día
+  // y una hora sin condición previa, cuenta como «si» aunque el modelo diga
+  // «condicionada» (y al revés). El cambio pasa por las mismas reglas; si el
+  // plan no permite la cita, queda lo que respondió el modelo, sin reintento.
+  const acceptanceNotes = [];
+  const withAcceptance = async (r) => {
+    const value = normalizeAcceptance(r);
+    if (!r || value === r.acepta_cita) return { raw: r, issues: await checkAndConfirm(r) };
+    const candidate = { ...r, acepta_cita: value, estado_lead: value === 'si' ? 'pidio_llamada' : r.estado_lead === 'pidio_llamada' ? 'interesado' : r.estado_lead };
+    const candidateIssues = await checkAndConfirm(candidate);
+    if (value === 'si' && candidateIssues.some((i) => i.startsWith('aceptacion_no_permitida'))) {
+      acceptanceNotes.push(`aceptacion_con_horario_no_permitida:${r.acepta_cita}`);
+      return { raw: r, issues: check(r) };
+    }
+    acceptanceNotes.push(`aceptacion_normalizada:${r.acepta_cita}->${value}`);
+    return { raw: candidate, issues: candidateIssues };
+  };
+
+  let first = await withAcceptance(await call(system, messages, PROSPECT_TURN_OPTIONS));
+  let raw = first.raw;
+  const firstIssues = first.issues;
   let retried = false;
   let issues = firstIssues;
   if (firstIssues.length) {
     retried = true;
-    raw = await call(`${system}\n${retryInstruction(firstIssues, profile)}`, messages, PROSPECT_TURN_OPTIONS);
-    issues = await checkAndConfirm(raw);
+    first = await withAcceptance(await call(`${system}\n${retryInstruction(firstIssues, profile)}`, messages, PROSPECT_TURN_OPTIONS));
+    raw = first.raw;
+    issues = first.issues;
   }
   let text = typeof raw?.respuesta_prospecto === 'string' ? raw.respuesta_prospecto.trim() : '';
   if (!text) throw new Error('Respuesta inválida de la IA');
@@ -182,6 +201,7 @@ export const runProspectTurn = async ({ call, project, profile, history, setterT
     prospectIssues: [
       ...firstIssues.map((i) => `intento1:${i}`), ...(retried ? issues.map((i) => `intento2:${i}`) : []),
       ...resolved.issues, ...(redacted ? ['contacto_reemplazado'] : []), ...(awaited ? ['espero_coaching'] : []),
+      ...acceptanceNotes,
     ],
     fallback,
     echo: isEcho(text, setterText),
@@ -203,13 +223,23 @@ const summarizePlan = (p) => ({
 // documentadas y precios incorrectos o inventados. En todo lo demás la nota
 // la decide el coaching (no se fuerza ninguna distribución).
 export const UNDOCUMENTED_CLAIM_MAX_SCORE = 3;
-export const setterClaims = (setterText, project, priorText) => {
-  const claims = findUndocumentedClaims(setterText, project, priorText);
-  const precio = classifyPriceAnswer(setterText, project, { conversationText: priorText });
-  if (precio.exactitud === 'incorrecta') claims.push(`precio incorrecto (${precio.cifras.join(', ')}; documentado: ${project.price})`);
-  if (precio.exactitud === 'inventada') claims.push(`precio inventado (${precio.cifras.join(', ')}; el proyecto no documenta precio)`);
-  return claims;
+export const setterClaims = (setterText, project, priorText) => setterClaimsOf(setterText, project, priorText).map((c) => c.texto);
+
+// Lo que el código ya decidió sobre el precio de este mensaje, para que el
+// coaching no lo contradiga (ronda 5, C07: «ronda los 2 mil» es una
+// aproximación válida para el código y el coaching pidió «rectifica ya»).
+export const priceNoteFor = (setterText, project, priorText) => {
+  if (!isPriceDocumented(project)) return '';
+  const { exactitud } = classifyPriceAnswer(setterText, project, { conversationText: priorText });
+  if (exactitud === 'exacta') return 'El precio que da el alumno en este mensaje coincide con el documentado: es correcto.';
+  if (exactitud === 'aproximada') return 'El alumno da una aproximación honesta del precio documentado («ronda», «cerca de»…): es válida, no la penalices ni pidas rectificarla.';
+  if (exactitud === 'incorrecta') return 'El precio que da el alumno en este mensaje NO coincide con el documentado: es un error grave.';
+  return '';
 };
+
+// El coaching del mismo turno dice que el motivo todavía no se descubrió: su
+// cita de «motivo» no puede valer (ronda 5, C02). Solo frases inequívocas.
+const SAYS_NO_MOTIVE = /sin (haber )?(descubierto|conocer|saber|entender) (el |su |por que |por qu[eé] )?(motivo|escrib)|no (descubri[oó]|descubriste|conoce|conoces|sabe|sabes) (el |su )?motivo|falta (descubrir )?(el |su )?motivo/i;
 
 // Coaching: NO recibe el perfil privado ni la respuesta nueva del prospecto
 // (C2 y evaluación con lo que el alumno sabía). Si la puntuación no es un
@@ -219,8 +249,8 @@ export const setterClaims = (setterText, project, priorText) => {
 // descubrimiento, verificadas contra los mensajes del prospecto (F1).
 export const runCoachTurn = async ({ call, project, history, setterText }) => {
   const system = buildPrimerContactoCoachPrompt(project);
-  const messages = [{ role: 'user', content: buildPrimerContactoCoachMessage(visible(history), setterText) }];
   const priorText = visible(history).map((m) => m.content).join('\n');
+  const messages = [{ role: 'user', content: buildPrimerContactoCoachMessage(visible(history), setterText, priceNoteFor(setterText, project, priorText)) }];
   const conversationText = `${priorText}\n${setterText}`;
   let raw = await call(system, messages, COACH_TURN_OPTIONS);
   let result = sanitizeCoaching(raw, project, conversationText);
@@ -234,7 +264,11 @@ export const runCoachTurn = async ({ call, project, history, setterText }) => {
     if (second.coaching) { result = second; raw = rawSecond; }
   }
   const coaching = result.coaching;
-  const claims = setterClaims(setterText, project, priorText);
+  // Invenciones sin cifra (decisión del 30/10): las señala el coaching con la
+  // frase del alumno; el código solo las acepta si están en el mensaje y no
+  // son lo documentado.
+  const invencion = verifyCoachInvention(raw?.afirmacion_no_documentada, setterText, project);
+  const claims = [...setterClaims(setterText, project, priorText), ...(invencion ? [`característica no documentada «${invencion}»`] : [])];
   if (coaching && claims.length) {
     if (coaching.puntuacion_mensaje !== null && coaching.puntuacion_mensaje > UNDOCUMENTED_CLAIM_MAX_SCORE) {
       issues = [...issues, `tope_${UNDOCUMENTED_CLAIM_MAX_SCORE}:${coaching.puntuacion_mensaje}`];
@@ -243,7 +277,11 @@ export const runCoachTurn = async ({ call, project, history, setterText }) => {
     if (!coaching.alerta) coaching.alerta = `Afirmaste algo que no está documentado: ${claims.join('; ')}.`;
   }
   const discovery = verifyDiscovery(raw?.descubrimiento, prospectTexts(history));
-  return { coaching, issues, retried, claims, discovery };
+  if (discovery.motivo && SAYS_NO_MOTIVE.test(`${raw?.que_mejorar || ''} ${raw?.alerta || ''}`)) {
+    delete discovery.motivo;
+    issues = [...issues, 'motivo_descartado:el_coaching_dice_que_falta'];
+  }
+  return { coaching, issues, retried, claims, discovery, invencion };
 };
 
 // Un turno: el coaching arranca primero y el prospecto a la vez; se entregan
@@ -254,8 +292,8 @@ export const runCoachTurn = async ({ call, project, history, setterText }) => {
 // turno queda sin coaching ni puntuación (y sin descubrimiento confirmado).
 export const startPrimerContactoTurn = ({ call, project, profile, history, setterText, control }) => {
   const coach = runCoachTurn({ call, project, history, setterText })
-    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery }))
-    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {} }));
+    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery, invencion: value.invencion }))
+    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {}, invencion: null }));
   const prospect = runProspectTurn({ call, project, profile, history, setterText, control, awaitDiscovery: () => coach.then((c) => c.discovery) });
   return { prospect, coach };
 };
@@ -268,5 +306,12 @@ export const runPrimerContactoTurn = async (args) => {
   const { prospect, coach } = startPrimerContactoTurn(args);
   const [p, c] = await Promise.allSettled([prospect, coach]);
   if (p.status === 'rejected') throw p.reason;
-  return { ...p.value, ...c.value, control: applyDiscovery(p.value.control, c.value.discovery) };
+  return { ...p.value, ...c.value, control: applyCoachResult(p.value.control, c.value) };
 };
+
+// Lo que el coaching de un turno agrega al control: el descubrimiento
+// confirmado y la característica inventada que haya verificado. La pantalla
+// lo aplica cuando llega el coaching (Simulator.jsx), antes del turno siguiente.
+export const applyCoachResult = (control, coachResult, turno = control?.turno) => applyCoachInvention(
+  applyDiscovery(control, coachResult?.discovery || {}, turno), coachResult?.invencion || null, turno,
+);

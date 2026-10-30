@@ -243,6 +243,39 @@ export const classifyPriceAnswer = (setterText, project, {
 };
 export const answersPrice = (setterText, project, options) => classifyPriceAnswer(setterText, project, options).respondio;
 
+// ─── Afirmaciones no documentadas del alumno ───────────────────────────────
+// Lo que el alumno afirma sin respaldo: garantías, devoluciones, escasez,
+// cifras y promesas de resultado no documentadas, y precios incorrectos o
+// inventados. Cada una lleva su tipo para saber qué la corrige.
+export const setterClaimsOf = (setterText, project, priorText = '') => {
+  const claims = findUndocumentedClaims(setterText, project, priorText).map((texto) => ({ tipo: 'oferta', texto }));
+  const precio = classifyPriceAnswer(setterText, project, { conversationText: priorText });
+  if (precio.exactitud === 'incorrecta') claims.push({ tipo: 'precio', texto: `precio incorrecto (${precio.cifras.join(', ')}; documentado: ${project.price})` });
+  if (precio.exactitud === 'inventada') claims.push({ tipo: 'precio', texto: `precio inventado (${precio.cifras.join(', ')}; el proyecto no documenta precio)` });
+  return claims;
+};
+
+// Rectificación explícita (decisión de Digital SET, 30/10/2026): si el alumno
+// corrige la información falsa antes de que el prospecto acepte, la cita
+// puede ser válida. Corrige una afirmación sobre la oferta quien dice que se
+// equivocó o que eso no existe o no está confirmado; corrige un precio quien
+// da el precio documentado (o, sin precio documentado, dice que no lo tiene).
+const RECTIFY = /\b(me equivoqu\w*|me expres[eé] mal|me confundi|corrijo|te corrijo|correg\w*|rectific\w*|aclaro|perdon|disculp\w*|en realidad|lo que (te )?dije|no es asi|no fue asi|eso no es correcto|no esta (documentad|confirmad)\w*|no (puedo|podemos|te puedo) (prometer|garantizar|asegurar)\w*|no (hay|tenemos|ofrecemos|existe) (una |ninguna )?(garant|devoluci|bono|descuento|cupo)\w*|me apresur\w*)\b/;
+const correctsOffer = (setterText) => RECTIFY.test(norm(setterText));
+const correctsPrice = (setterText, project) => {
+  const c = classifyPriceAnswer(setterText, project);
+  return ['exacta', 'aproximada'].includes(c.exactitud) || Boolean(c.explicita);
+};
+// Pendientes después de este mensaje: las anteriores que no corrigió, más las nuevas.
+export const pendingClaimsAfter = (pending, setterText, project, newClaims) => {
+  const offerFixed = !newClaims.some((c) => c.tipo === 'oferta') && correctsOffer(setterText);
+  const priceFixed = !newClaims.some((c) => c.tipo === 'precio') && correctsPrice(setterText, project);
+  return [
+    ...(pending || []).filter((c) => !((c.tipo === 'oferta' && offerFixed) || (c.tipo === 'precio' && priceFixed))),
+    ...newClaims,
+  ];
+};
+
 // ─── Otras señales ─────────────────────────────────────────────────────────
 // El alumno propone una cita: una invitación explícita, o un día u horario
 // en una pregunta. Mencionar la llamada («eso lo detalla el equipo en la
@@ -329,6 +362,7 @@ export const createControlState = (profile = {}) => {
     setterTextos: [],       // últimos mensajes del alumno, con su turno
     noEncajeDesde: null,    // turno desde el que se conoce el motivo del no encaje
     citaPendiente: false,   // hubo un «sí, pero antes…» que no se resolvió
+    invenciones: [],        // afirmaciones no documentadas del alumno que todavía no corrigió
     cambioEncaje: null,     // explicación verificada del cambio de encaje
     desenlace: 'abierta',
   };
@@ -347,14 +381,27 @@ const missing = (list) => DISCOVERY_REQUIRED.filter((k) => !list.includes(k));
 const CONDITION = /\bantes de (decidir|agendar|aceptar|comprometer\w*|seguir|avanzar|pagar|inscrib\w*|la llamada|hablar)\b|\bque me (expli\w*|cuent\w*|dig\w*|muestr\w*|aclar\w*)\b|\bme (expliques|explique|expliquen|cuentes|digas|muestres)\b|\bprimero (quiero|necesito)\b|\b(necesito|quiero) (saber|entender|ver) (bien )?(como|que|cuanto|el precio|de que)\b|\bsiempre (que|y cuando)\b|\bsolo si\b|\bcon tal de que\b|\bsi no me\b|\bsi me (explic|dec|da|mand)\w*\b|\bpara decidir\b/;
 const OFFER_INQUIRY = /\b(como funciona|que incluye|cuanto cuesta|de que se trata|el precio|cuanto sale|que ofrecen|es para mi|es diferente)\b/;
 const MOTIVE_MIN_WORDS = 3;
+// Ronda 5, C02: la cita se registró con el «motivo» «No quiero otro curso
+// más», una OBJECCIÓN (decisión de Digital SET, 30/10: una objeción no es por
+// sí sola una necesidad, motivación u objetivo). Se descartan las oraciones
+// que solo rechazan o desconfían de la oferta…
+const OBJECTION = /\bno quiero (otro|otra|algo|que sea|perder|gastar|que me)\b|\b(otro|otra) (curso|programa|promesa|agencia|estafa) (mas|igual)\b|\bdesconf\w*\b|\bno (me )?(creo|convence|interesa|sirve|funciona)\b|\bes (otro|otra|caro|mucho)\b|\bno (tengo|me queda) tiempo\b|\bya (probe|intente|gaste|pague)\b/;
+// …y lo que queda tiene que expresar una necesidad, una motivación o un
+// objetivo propio: algo que le falta, le preocupa o quiere lograr.
+const NEED = /\b(necesit\w*|quier[oe]\b|queremos|quisiera|busc[oa]\w*|me gustar[ií]a|mi (meta|objetivo|idea|sueno)|objetivo|meta|sueno con|me preocup\w*|preocup\w*|me cuesta|no logro|no llego|me falta|me asust\w*|asust\w*|estres\w*|agotad\w*|cansad\w*|ansiedad|frustr\w*|me afecta|presion\w*|urgen\w*|cuanto antes|cubr\w*|respir\w*|estabiliz\w*|crecer|recuperar|dejar de|para (poder|cubrir|llenar|crecer|abrir|tener|recuperar|dejar|justificar)|por eso (te )?(escrib|consult|pregunt)\w*|escrib\w* (porque|para)|(me|lo que me) (motiv|impuls|anim|decid)\w*|me decid\w*)\b/;
+const NEGATED_NEED = /\bno (necesit|quier|busc)\w*/;
 // Lo que queda de la cita como motivo: sus oraciones sin preguntas,
-// condiciones ni pedidos de información sobre la oferta.
+// condiciones, pedidos de información ni objeciones.
 export const motiveCore = (quote) => sentencesOf(quote)
   .flatMap((s) => s.split(/,\s*(?=pero\b)|\bpero\b|;/i))
   .map((s) => s.trim())
-  .filter((s) => s && !s.includes('?') && !CONDITION.test(norm(s)) && !OFFER_INQUIRY.test(norm(s)))
+  .filter((s) => s && !s.includes('?') && !CONDITION.test(norm(s)) && !OFFER_INQUIRY.test(norm(s)) && !OBJECTION.test(norm(s)))
   .join('. ');
-export const isMotiveQuote = (quote) => contentWords(motiveCore(quote)).length >= MOTIVE_MIN_WORDS;
+export const isMotiveQuote = (quote) => {
+  const core = motiveCore(quote);
+  const n = norm(core);
+  return contentWords(core).length >= MOTIVE_MIN_WORDS && NEED.test(n.replace(NEGATED_NEED, ''));
+};
 
 // Descubrimiento que propone el coaching: { situacion, motivo, no_encaje }
 // (citas textuales). Solo se confirma lo que aparece en los mensajes del
@@ -404,6 +451,11 @@ const fitPool = (state, plan) => {
 
 // ─── Antes de la llamada al prospecto ──────────────────────────────────────
 export const planTurn = (state, { project, profile = {}, lastProspectText, setterText, conversationText = '' }) => {
+  // Invenciones (decisión del 30/10): las de este mensaje se suman a las que
+  // siguen sin corregir; no cambian lo que el prospecto puede hacer, pero una
+  // cita conseguida con ellas no cuenta como éxito (ver citaValidity).
+  const afirmaciones = setterClaimsOf(setterText, project, conversationText);
+  const invenciones = pendingClaimsAfter(state.invenciones, setterText, project, afirmaciones);
   const priceAsked = asksPrice(lastProspectText);
   // F4 (ronda 4, C09): la insistencia cuenta las preguntas de precio que
   // siguen sin respuesta; ya no vuelve a cero cuando el prospecto pregunta
@@ -461,6 +513,7 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
     preguntasPrecio: priceAnswered ? 0 : preguntasPrecio,
     precioExactitud: precio.exactitud,
     precioHonesto, precioCondicion, remisionesConcretas,
+    afirmaciones, invenciones,
     propone, pitch, presion, presiones,
     despedida,
     faltaDescubrimiento,
@@ -610,6 +663,7 @@ export const resolveTurn = (state, plan, raw, profile = {}, project = null) => {
     precioHonesto: plan.precioHonesto,
     precioCondicion: plan.precioCondicion,
     remisionesConcretas: plan.remisionesConcretas,
+    invenciones: plan.invenciones || state.invenciones || [],
     presiones: plan.presiones,
     revelado,
     setterTextos: [...(state.setterTextos || []), { turno: plan.turno, text: plan.setterText }].slice(-8),
@@ -620,3 +674,69 @@ export const resolveTurn = (state, plan, raw, profile = {}, project = null) => {
   };
   return { estado_lead: estado, acepta_cita: accept, desenlace, issues, control: next };
 };
+
+// ─── Aceptación con día y hora (decisión de Digital SET, 30/10/2026) ───────
+// Ronda 5: Haiku marcó como «condicionada» «Dale, el jueves a las 18:30 me va
+// bien. Pero quiero que Ana me explique bien ese tema de la garantía» (C08).
+// Una aceptación explícita con día y hora, seguida de una pregunta o un pedido
+// para la llamada, es una cita aceptada; si pone una condición PREVIA para
+// aceptar («pero antes dime el precio»), sigue condicionada. El código solo
+// propone el cambio: quien llama vuelve a revisar la respuesta con el plan
+// (sin descubrimiento confirmado, con el precio pendiente, etc., no se acepta).
+const ACCEPT_WORD = /^(dale|si|sí|perfecto|listo|ok|okay|de acuerdo|genial|buenisimo|me va bien|me viene bien|me sirve|agendemos|confirmo|va|vale|bueno)\b|\b(me va bien|me viene bien|me queda bien|me sirve|agendemos|confirmo|nos vemos|quedamos)\b/;
+const WHEN = /\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana|pasado manana|pasado|hoy)\b.*\b(a las \d|\d{1,2}(:\d{2})? ?(am|pm|hs)?\b|en la (manana|tarde|noche)|por la (manana|tarde|noche)|tarde|manana)|\ba las \d{1,2}(:\d{2})?\b|\b\d{1,2}:\d{2}\b|\b\d{1,2} ?(am|pm|hs)\b/;
+const PRIOR_CONDITION = /\bantes (de (agendar|confirmar|aceptar|decidir|la llamada)|necesito|quiero|tengo que|dime|decime|me (dices|decis|explicas|confirmas|pasas))\b|\b(necesito|quiero|tengo que) saber\b[^.?!]*\bantes\b|\bprimero (necesito|quiero|dime|decime)\b|\bsiempre (que|y cuando)\b|\bsolo si\b|\bcon la condicion\b|\bsi (antes )?me (dices|decis|das|confirmas|explicas|mandas)\b|\bsi no\b|\bdepende de\b/;
+export const explicitScheduledAcceptance = (prospectText) => {
+  const t = norm(prospectText);
+  const first = t.split(/[.!?]/)[0] || '';
+  return ACCEPT_WORD.test(first) && WHEN.test(t) && !/^\s*(no|mañana no|manana no)\b/.test(t);
+};
+export const hasPriorCondition = (prospectText) => PRIOR_CONDITION.test(norm(prospectText));
+// Devuelve el valor de "acepta_cita" que corresponde según el texto, o el del modelo.
+export const normalizeAcceptance = (raw) => {
+  const accept = ACCEPTANCE.includes(raw?.acepta_cita) ? raw.acepta_cita : 'no';
+  const text = raw?.respuesta_prospecto || '';
+  if (accept === 'condicionada' && explicitScheduledAcceptance(text) && !hasPriorCondition(text)) return 'si';
+  if (accept === 'si' && hasPriorCondition(text)) return 'condicionada';
+  return accept;
+};
+
+// ─── Invenciones que detecta el coaching ───────────────────────────────────
+// Las características de la oferta inventadas sin cifras («el programa está
+// diseñado para que no agregues tareas», «Tú das la estrategia, nosotros
+// ejecutamos») no tienen una forma fija: las señala el coaching con la frase
+// exacta del alumno, y el código solo la acepta si está en el mensaje y no es
+// lo documentado. Solo sirve para restar (nota y validez de la cita), nunca
+// para habilitar nada.
+const offerVocabulary = (project) => new Set(contentWords([
+  documentedOfferText(project), project?.avatarBusiness, project?.avatarDescription, project?.avatarCurrentSituation,
+  project?.avatarDesire, project?.avatarPain, project?.niche, project?.promise,
+].filter(Boolean).join(' ')));
+export const verifyCoachInvention = (quote, setterText, project) => {
+  const q = typeof quote === 'string' ? quote.trim() : '';
+  if (!q || !quoteInMessages(q, [setterText])) return null;
+  const words = [...new Set(contentWords(q))];
+  const documented = words.filter((w) => offerVocabulary(project).has(w)).length;
+  return documented / words.length >= 0.6 ? null : q;
+};
+export const applyCoachInvention = (state, invention, turno = state?.turno) => {
+  if (!state || !invention) return state;
+  return { ...state, invenciones: [...(state.invenciones || []), { tipo: 'oferta', texto: `característica no documentada «${invention}»`, turno }] };
+};
+
+// ─── Cita aceptada frente a cita pedagógicamente válida ────────────────────
+// Decisión del 30/10/2026: una cita conseguida con una garantía, una promesa
+// o una característica inventada que el alumno nunca corrigió queda
+// registrada como lo que pasó (el prospecto aceptó), pero NO cuenta como
+// éxito comercial. Se guarda con su propio estado final, que no está en los
+// estados de éxito de la modalidad (simulatorModes.js) y por eso no suma a la
+// tasa de éxito ni a los logros. El SET Score es el promedio de las notas y
+// ya refleja el tope de 3 del turno de la invención.
+export const INVALID_APPOINTMENT_STATE = 'cita_no_valida';
+export const citaValidity = (control) => {
+  const pendientes = (control?.invenciones || []).map((c) => c.texto);
+  return { valida: pendientes.length === 0, pendientes };
+};
+export const primerContactoFinalState = (estado, control) => (
+  estado === 'pidio_llamada' && !citaValidity(control).valida ? INVALID_APPOINTMENT_STATE : estado
+);
