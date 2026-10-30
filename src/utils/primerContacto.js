@@ -515,14 +515,45 @@ const affirms = (sentence, re, name) => {
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 const COMMERCIAL_FIGURE = /(?:[$€]\s*\d+(?:[.,]\d+)*|\d+(?:[.,]\d+)*\s*(?:-\s*\d+\s*)?(?:%|usd|d[oó]lares|pesos|soles|euros|€|horas?|d[ií]as|semanas|meses|a[nñ]os|pacientes|clientes|leads|ventas|citas|sesiones|m[oó]dulos|clases|veces))/gi;
 const digitsOf = (s) => (String(s).match(NUMBER) || []).map((n) => n.replace(/[.,]/g, ''));
+// Testimonios (decisión de Digital SET, 30/10/2026): un resultado documentado
+// de un caso se puede CITAR como lo que le pasó a ese caso («el Dr. Luis sumó
+// +40 pacientes nuevos en 3 meses»), pero no convertirlo en una promesa
+// general («el sistema está diseñado para +40 pacientes nuevos en 3 meses»,
+// ronda 4, C03 #7) ni en lo que va a lograr el prospecto.
+const testimonialText = (project) => (project?.testimonials || [])
+  .map((t) => (typeof t === 'string' ? t : Object.values(t || {}).join(' '))).join(' ');
+const nonTestimonialOfferText = (project) => [
+  project?.expertName, project?.niche, project?.promise, project?.price, JSON.stringify(project?.recursos || {}),
+].filter(Boolean).join(' ').toLowerCase();
+const plain = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Nombres propios del testimonio («Luis» en «Caso ficticio: Dr. Luis»).
+const TESTIMONIAL_NAME_STOP = new Set(['caso', 'ficticio', 'ficticia', 'cliente', 'clienta', 'resultado', 'nombre']);
+const testimonialNames = (project) => (project?.testimonials || [])
+  .flatMap((t) => plain(typeof t === 'string' ? '' : t?.nombre).split(/[^a-zñ]+/))
+  .filter((w) => w.length >= 3 && !TESTIMONIAL_NAME_STOP.has(w) && !/^dra?$/.test(w));
+const CASE_NOUN = /\b(caso|cliente|clienta|alumn[oa]|colega|odontolog[oa]|doctora?|dra?\.?|testimonio|paciente que|profesional)\b/;
+const PAST_RESULT = /\b(consigui[oó]|logr[oó]|sum[oó]|obtuvo|tuvo|pas[oó] de|lleg[oó] a|gan[oó]|cerr[oó]|consiguieron|lograron|sumaron|tuvieron)\b/;
+const PROMISE = /\b(vas a|van a|vas a poder|tendr[aá]s|conseguir[aá]s|lograr[aá]s|sumar[aá]s|obtendr[aá]s|llenar[aá]s|te (da|dar[aá]|garantiza|asegura)|est[aá] dise[nñ]ad[oa] para|garantiz\w*|asegur\w*|para que (consigas|logres|tengas|sumes|llenes)|podr[aá]s|puedes (conseguir|lograr|sumar|llegar)|el (sistema|programa|m[eé]todo) (da|logra|consigue|genera|trae)|lo normal es|en promedio)\b/;
+const citesTestimonial = (sentence, project) => {
+  const s = plain(sentence);
+  if (PROMISE.test(s)) return false;
+  const named = testimonialNames(project).some((n) => new RegExp(`\\b${n}\\b`).test(s));
+  return named || (CASE_NOUN.test(s) && PAST_RESULT.test(s));
+};
+
 export const findUndocumentedClaims = (text, project, conversationText = '') => {
   const doc = documentedOfferText(project);
-  const known = new Set([...digitsOf(doc), ...digitsOf(conversationText)]);
+  const known = new Set([...digitsOf(nonTestimonialOfferText(project)), ...digitsOf(conversationText)]);
+  const fromTestimonials = new Set(digitsOf(testimonialText(project)));
   const statements = String(text || '').split(/(?<=[.!?\n])\s+/).filter((s) => s && !s.includes('?'));
   const claims = [];
   for (const sentence of statements) {
     for (const fig of sentence.match(COMMERCIAL_FIGURE) || []) {
-      if (digitsOf(fig).some((d) => !known.has(d))) claims.push(`cifra «${fig.trim()}»`);
+      const unknown = digitsOf(fig).filter((d) => !known.has(d));
+      if (!unknown.length) continue;
+      if (unknown.every((d) => fromTestimonials.has(d))) {
+        if (!citesTestimonial(sentence, project)) claims.push(`resultado de un testimonio presentado como promesa «${fig.trim()}»`);
+      } else claims.push(`cifra «${fig.trim()}»`);
     }
     for (const [name, re] of COMMERCIAL_TERMS) {
       if (affirms(sentence, re, name) && !re.test(doc)) claims.push(name);
@@ -534,10 +565,15 @@ export const findUndocumentedClaims = (text, project, conversationText = '') => 
 // Cifras comerciales que SÍ están documentadas («90 días», «12 semanas», «+40
 // pacientes nuevos en 3 meses», el precio). En la ronda 4 el coaching trató
 // «12 semanas» y «90 días» como no documentadas: se le pasan explícitamente.
+// Los resultados de los testimonios van aparte (testimonialResults): son de
+// ese caso, no una promesa de la oferta.
 export const documentedFigures = (project) => {
-  const sources = [project?.promise, project?.price, ...(project?.testimonials || []).map((t) => (typeof t === 'string' ? t : Object.values(t || {}).join(' ')))];
+  const sources = [project?.promise, project?.price];
   return [...new Set(sources.filter(Boolean).flatMap((s) => String(s).match(COMMERCIAL_FIGURE) || []).map((f) => f.trim()))];
 };
+export const testimonialResults = (project) => (project?.testimonials || [])
+  .map((t) => (typeof t === 'string' ? t : [t?.nombre, t?.resultado].filter(Boolean).join(': ')))
+  .filter(Boolean);
 
 const COACHING_TEXT_FIELDS =['que_hizo_bien', 'que_mejorar', 'mensaje_alternativo', 'recurso_sugerido', 'alerta'];
 const percent = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : undefined);

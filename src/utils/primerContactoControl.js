@@ -156,29 +156,48 @@ const APPROX = /\b(ronda|rondan|aprox\w*|alrededor|cerca de|unos|unas|menos de|p
 //   sin_cifra   precio documentado y el alumno no dio ningún monto (evasiva)
 //   honesta     precio no documentado y respuesta honesta sin cifra
 //   evasiva     precio no documentado y no se hizo cargo
-// Sin precio documentado (decisión de Digital SET, 29/10/2026):
-//   - Decir que no tiene el precio («No tengo el precio confirmado; la
-//     experta te lo explica en la llamada») es honesto, siempre.
-//   - Remitir a la llamada sin decirlo es honesto ante la primera pregunta, o
-//     si ya lo dijo antes en la conversación (no hace falta repetirlo
-//     literalmente cada vez)…
-//   - …salvo ante una pregunta nueva y concreta (un rango, una cota, la forma
-//     de pago): ahí tiene que hacerse cargo de que no sabe ese dato.
-//   - Las vaguedades sin respaldo («es accesible», «depende del plan», «los
-//     planes varían») no son una respuesta, aunque remitan a la llamada
-//     (ronda 3, R12 y ronda 4, C09).
-const HONEST_NO_NUMBER = /\bno (tengo|hay|tenemos|manejo|puedo|te puedo|se|sabria|lo se|conozco|quiero inventar\w*|te quiero (dar|inventar))\b|\bno (esta|viene) (definido|documentado|fijo|publicado|confirmado)|\bsin un (numero|precio)\b|\btodavia no (hay|tengo)\b|\bno lo tengo\b|\bno tengo (ese|el) dato\b|\bno (te )?(lo )?(puedo|podria) (confirmar|asegurar|decir)\b/;
-const DEFERS = /llamada|equipo|experta?|\bcoach\b|te lo (explica|detalla|cuenta)|lo (ve|veran|vemos|detalla|explica) (en|con)|se (detalla|define|explica|ve) (en|con)/;
-// Vaguedades sobre el precio que no informan nada y que el proyecto no respalda.
-const VAGUE_PRICE = /\baccesible\b|\beconomic\w*\b|\bno es (tan |muy )?caro\b|\bvale la pena\b|\bdepende del plan\b|\bdepende de (lo que|que|tu|cada)\b|\b(los )?planes (varian|cambian)\b|\bvaria (segun|de acuerdo)\b|\bhay (varias )?opciones (para|de)\b|\bse ajusta a (tu|cada)\b|\bopciones de pago\b/;
+// Sin precio documentado (decisiones de Digital SET, 29 y 30/10/2026):
+//   - Decir con honestidad que no tiene el precio es válido siempre. No hace
+//     falta la frase literal: valen las formulaciones equivalentes («ese
+//     dato no lo tengo», «no te quiero dar un número equivocado»).
+//   - Remitir a la llamada sin decirlo también vale si es honesto y se
+//     refiere al precio: ante la primera pregunta, o si ya dijo antes que no
+//     lo tiene (no hace falta repetirlo literalmente cada vez)…
+//   - …pero usarlo para esquivar REPETIDAMENTE una pregunta concreta (un
+//     rango, una cota, la forma de pago) es evasiva: la segunda remisión
+//     seguida ante una pregunta concreta ya no cuenta como respuesta.
+//   - Las vaguedades («es accesible», «vale la pena») no son una respuesta,
+//     aunque remitan a la llamada (ronda 3, R12 y ronda 4, C09).
+//   - Inventar razones que el proyecto no documenta (planes, paquetes,
+//     financiación, cuotas, opciones de pago) nunca es honesto, aunque el
+//     mismo mensaje diga que no tiene el precio.
+const HONEST_NO_NUMBER = /\bno (tengo|hay|tenemos|manejo|puedo|te puedo|se|sabria|lo se|conozco|cuento con|lo manejo|quiero inventar\w*|te quiero (dar|inventar))\b|\bno (esta|viene) (definido|documentado|fijo|publicado|confirmado|disponible)|\bsin un (numero|precio)\b|\btodavia no (hay|tengo|esta|se (definio|confirmo))\b|\bno lo tengo\b|\bno (lo )?tengo (ese|el) dato\b|\b(ese|el) dato no lo tengo\b|\bno (te )?(lo )?(puedo|podria) (confirmar|asegurar|decir)\b|\bprefiero no (darte|inventarte|decirte) un (numero|precio|monto)\b|\bno (te )?quiero (darte|dar|decirte) un (numero|precio|monto) (equivocado|inventado|que no)\b|\bno me corresponde (darte|decirte)\b|\bno lo tengo (confirmado|a mano)\b/;
+const DEFERS = /llamada|equipo|experta?|\bcoach\b|te lo (explica|detalla|cuenta|confirma)|lo (ve|veran|vemos|detalla|explica|confirma) (en|con)|se (detalla|define|explica|ve|confirma) (en|con)/;
+// Vaguedades sobre el precio que no informan nada.
+const VAGUE_PRICE = /\baccesible\b|\beconomic\w*\b|\bno es (tan |muy )?caro\b|\bvale la pena\b|\bdepende de (lo que|que|tu|cada)\b|\bvaria (segun|de acuerdo)\b|\bse ajusta a (tu|cada)\b/;
+// Razones comerciales que el alumno inventaría si el proyecto no las documenta.
+// Solo en afirmaciones («¿cuál es tu plan para este año?» no inventa nada).
+const INVENTED_REASON = /\b(depende del plan|segun el plan|el plan que eli\w+|(hay|tenemos|tiene|con) (varios |distintos |diferentes |algunos )?(planes|paquetes)|(los )?planes (varian|cambian|van|son)|paquetes?|modalidad(es)? de pago|opciones de pago|formas? de pago|financ\w+|en cuotas|cuotas (mensuales|sin)|becas?|descuentos?|promocion\w*)\b/g;
+// La negación tiene que estar pegada a la razón («ni sé si hay cuotas»), no al
+// principio de la frase («No tengo el número exacto: depende del plan»).
+const NEGATION_BEFORE = /\b(no|sin|ni)\b(\s+[^\s.,]+){0,3}\s*$/;
+const REASON_KEY = /plan|paquete|pago|financ|cuota|beca|descuento|promocion/;
+const inventsReason = (setterText, project) => {
+  const doc = norm(documentedOfferText(project));
+  return sentencesOf(setterText).map(norm).filter((s) => !s.includes('?')).some((s) => [...s.matchAll(INVENTED_REASON)]
+    .some((m) => !doc.includes((m[0].match(REASON_KEY) || [''])[0]) && !NEGATION_BEFORE.test(s.slice(0, m.index))));
+};
 // Las cifras que el alumno repite de la conversación («gastaste 2.500 USD con
 // la agencia») no son afirmaciones sobre el precio, salvo que coincidan con
 // el precio documentado.
 const near = (a, b, tol) => Math.abs(a - b) / b <= tol;
 // Opciones: insistencia (preguntas de precio sin responder, contando esta),
-// especifica (la pregunta pide un rango, una cota o la forma de pago) y
-// honestaAntes (ya dijo antes que no tiene el precio).
-export const classifyPriceAnswer = (setterText, project, { insistencia = 1, conversationText = '', especifica = false, honestaAntes = false } = {}) => {
+// especifica (la pregunta pide un rango, una cota o la forma de pago),
+// honestaAntes (ya dijo antes que no tiene el precio) y remisionesConcretas
+// (preguntas concretas seguidas que ya respondió solo remitiendo a la llamada).
+export const classifyPriceAnswer = (setterText, project, {
+  insistencia = 1, conversationText = '', especifica = false, honestaAntes = false, remisionesConcretas = 0,
+} = {}) => {
   const t = norm(setterText);
   const documented = isPriceDocumented(project) ? amountsIn(project.price).filter((n) => n >= MONEY_MIN) : [];
   // Cifras de la oferta documentada que no son el precio («90 días», «+40 pacientes»).
@@ -207,15 +226,20 @@ export const classifyPriceAnswer = (setterText, project, { insistencia = 1, conv
   if (amounts.length) return { respondio: true, exactitud: 'inventada', cifras: amounts.map(({ n }) => n) };
   // «No tengo el precio confirmado», «no sé si es más o menos de 2.000»: la
   // negación tiene que hablar del precio o del dato («No hay problema» no cuenta).
-  const explicit = sentencesOf(setterText).map(norm)
+  const invented = inventsReason(setterText, project);
+  const explicit = !invented && sentencesOf(setterText).map(norm)
     .some((s) => HONEST_NO_NUMBER.test(s) && /precio|numero|cifra|monto|costo|dato|valor|rango|\beso\b|\bese\b|\d/.test(s) && !VAGUE_PRICE.test(s));
   // Remitir a la llamada responde solo si se refiere al precio (por su nombre
   // o con «eso»): «Marta trabaja eso… ¿te gustaría una llamada?» no lo es.
   const refersToPrice = /precio|costo|cuesta|inversion|valor|numero|cifra|rango|cuanto|monto|pago/.test(t) || /^(y )?eso\b|\beso (te|lo|se)\b|\bese (tema|dato)\b/.test(t);
-  const deferral = !explicit && DEFERS.test(t) && refersToPrice && !VAGUE_PRICE.test(t)
-    && !especifica && (insistencia < 2 || honestaAntes);
+  const deferral = !explicit && !invented && DEFERS.test(t) && refersToPrice && !VAGUE_PRICE.test(t)
+    && (insistencia < 2 || honestaAntes) && !(especifica && remisionesConcretas > 0);
   const honest = explicit || deferral;
-  return { respondio: honest, exactitud: honest ? 'honesta' : 'evasiva', cifras: [], explicita: explicit };
+  return {
+    respondio: honest, exactitud: honest ? 'honesta' : 'evasiva', cifras: [], explicita: explicit,
+    // Remitió a la llamada una pregunta concreta: la próxima vez ya no basta.
+    remisionConcreta: deferral && especifica, razonInventada: invented,
+  };
 };
 export const answersPrice = (setterText, project, options) => classifyPriceAnswer(setterText, project, options).respondio;
 
@@ -297,6 +321,7 @@ export const createControlState = (profile = {}) => {
     preguntasPrecio: 0,     // preguntas de precio sin responder desde la última respuesta
     precioHonesto: false,   // sin precio documentado: ya dijo que no tiene el precio
     precioCondicion: false, // sin precio documentado: el prospecto condiciona la cita al precio
+    remisionesConcretas: 0, // preguntas concretas seguidas respondidas solo remitiendo a la llamada
     presiones: 0,           // citas propuestas sin descubrimiento + pitch con enlace
     revelado: [],           // lo que el prospecto DICE haber contado (pista)
     confirmado: [],         // lo confirmado con citas de sus mensajes
@@ -387,7 +412,12 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
   const precio = classifyPriceAnswer(setterText, project, {
     insistencia: preguntasPrecio, conversationText,
     especifica: priceAsked && asksSpecificPrice(lastProspectText), honestaAntes: Boolean(state.precioHonesto),
+    remisionesConcretas: state.remisionesConcretas || 0,
   });
+  // Se cuentan las remisiones seguidas ante preguntas concretas; decir que no
+  // tiene el precio, o dar una cifra, vuelve a empezar la cuenta.
+  const remisionesConcretas = precio.explicita || (precio.cifras || []).length ? 0
+    : (state.remisionesConcretas || 0) + (precio.remisionConcreta ? 1 : 0);
   // Sin una pregunta de precio en el último mensaje, solo cuenta como
   // respuesta dar una cifra o decir que no tiene el precio (ronda 4, C04:
   // «¿te gustaría una llamada con ella?» ponía a cero una evasiva anterior).
@@ -430,7 +460,7 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
     // Respondida la pregunta, la insistencia vuelve a empezar.
     preguntasPrecio: priceAnswered ? 0 : preguntasPrecio,
     precioExactitud: precio.exactitud,
-    precioHonesto, precioCondicion,
+    precioHonesto, precioCondicion, remisionesConcretas,
     propone, pitch, presion, presiones,
     despedida,
     faltaDescubrimiento,
@@ -579,6 +609,7 @@ export const resolveTurn = (state, plan, raw, profile = {}, project = null) => {
     preguntasPrecio: plan.preguntasPrecio,
     precioHonesto: plan.precioHonesto,
     precioCondicion: plan.precioCondicion,
+    remisionesConcretas: plan.remisionesConcretas,
     presiones: plan.presiones,
     revelado,
     setterTextos: [...(state.setterTextos || []), { turno: plan.turno, text: plan.setterText }].slice(-8),

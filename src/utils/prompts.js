@@ -1,4 +1,4 @@
-import { buildProjectContext, describeBehavior, documentedFigures, isPriceDocumented } from './primerContacto.js';
+import { buildProjectContext, describeBehavior, documentedFigures, isPriceDocumented, testimonialResults } from './primerContacto.js';
 
 const buildRecursosContext = (project) => {
   const r = project?.recursos;
@@ -316,11 +316,14 @@ ${buildPrimerContactoTurnDirective(plan, prospectProfile)}`;
 export const buildPrimerContactoCoachPrompt = (project) => {
   const priceRule = isPriceDocumented(project)
     ? `El precio documentado es: ${project.price}. Responder con honestidad una pregunta de precio (el precio, un rango o una referencia de ese precio) es correcto EN CUALQUIER MOMENTO de la conversación: no se descuenta por el orden ni por "no haber descubierto antes". Dar una cifra distinta de la documentada es un error grave.`
-    : 'El proyecto NO documenta un precio. Decir con honestidad que no tiene el precio confirmado y que la experta lo explica en la llamada es correcto y NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente. Sí son evasivas las vaguedades sin respaldo ("es accesible", "depende del plan", "los planes varían") y no hacerse cargo de una pregunta nueva y concreta (un rango, "¿es más de 2.000?", "¿se paga mensual?"). Inventar una cifra es un error grave. Si el prospecto condiciona la cita a saber el precio, insistir con la cita es presión.';
+    : 'El proyecto NO documenta un precio. Decir con honestidad que no tiene el precio confirmado (con esas u otras palabras equivalentes) y que la experta lo explica en la llamada es correcto y NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente. Sí son evasivas las vaguedades ("es accesible", "vale la pena"), inventar razones no documentadas ("depende del plan", "hay financiación", "opciones de pago") y remitir a la llamada una y otra vez una pregunta concreta (un rango, "¿es más de 2.000?", "¿se paga mensual?"). Inventar una cifra es un error grave. Si el prospecto condiciona la cita a saber el precio, insistir con la cita es presión.';
   const figures = documentedFigures(project);
-  const figuresRule = figures.length
-    ? `Datos con cifra que SÍ están documentados (si el alumno los usa, no son invenciones): ${figures.map((f) => `"${f}"`).join(', ')}.`
-    : 'El proyecto no documenta cifras de plazos ni de resultados.';
+  const cases = testimonialResults(project);
+  const figuresRule = `${figures.length
+    ? `Datos con cifra de la oferta que SÍ están documentados (si el alumno los usa, no son invenciones): ${figures.map((f) => `"${f}"`).join(', ')}.`
+    : 'La oferta no documenta cifras de plazos ni de resultados.'}${cases.length
+    ? ` Resultados de casos documentados: ${cases.map((c) => `"${c}"`).join('; ')}. Citarlos como lo que logró ESE caso es correcto; presentarlos como lo que el programa da o lo que el prospecto va a lograr ("está diseñado para +40 pacientes", "vas a sumar 40 pacientes") es prometer resultados y es un error grave.`
+    : ''}`;
   return `
 Eres coach de appointment setting con el método S.E.T. Evalúas UN mensaje de un alumno que atiende a un prospecto que escribió primero (Inbound — Primer contacto). Tu feedback es orientativo, breve y concreto.
 

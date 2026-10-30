@@ -234,14 +234,42 @@ describe('F4 · precio no documentado (decisión del 29/10 y C09 real)', () => {
     const honest = [HONEST, 'No sé si es más o menos de 2.000: no tengo el precio confirmado y no quiero inventarte un número. Te lo explica Marta en la llamada.', 'Ese dato no lo tengo; Marta te lo detalla en la llamada.'];
     for (const t of honest) for (const o of [{}, { insistencia: 3 }, { insistencia: 2, especifica: true }]) expect(classifyPriceAnswer(t, BIENESTAR, { ...o, conversationText: C09.p8 }), t).toMatchObject({ respondio: true, exactitud: 'honesta' });
   });
-  it('remitir a la llamada sin decirlo: vale la primera vez o si ya lo dijo antes; no ante una pregunta nueva y concreta', () => {
+  it('remitir a la llamada (30/10): vale si es honesto y se refiere al precio; repetido ante una pregunta concreta es evasiva', () => {
     const defer = 'Eso te lo explica Marta en la llamada.';
     const c = (o) => classifyPriceAnswer(defer, BIENESTAR, o).respondio;
     expect(c({ insistencia: 1 })).toBe(true);
     expect(c({ insistencia: 2 })).toBe(false);
     expect(c({ insistencia: 2, honestaAntes: true })).toBe(true);
-    expect(c({ insistencia: 1, especifica: true, honestaAntes: true })).toBe(false);
-    expect(classifyPriceAnswer(C09.s6, BIENESTAR, { insistencia: 1, especifica: true, honestaAntes: true }).respondio).toBe(false);
+    // Primera pregunta concreta: remitir contextualizado vale.
+    expect(c({ insistencia: 1, especifica: true, honestaAntes: true })).toBe(true);
+    expect(classifyPriceAnswer(C09.s6, BIENESTAR, { insistencia: 1, especifica: true, honestaAntes: true }).respondio).toBe(true);
+    // Segunda remisión seguida ante una pregunta concreta: esquiva.
+    expect(c({ insistencia: 1, especifica: true, honestaAntes: true, remisionesConcretas: 1 })).toBe(false);
+    // Una pregunta genérica después de haberlo dicho sigue sin exigir la frase literal.
+    expect(c({ insistencia: 2, honestaAntes: true, remisionesConcretas: 1 })).toBe(true);
+  });
+  it('formulaciones honestas equivalentes (30/10): no hace falta la frase literal', () => {
+    for (const t of [
+      'Ese dato no lo tengo; te lo confirma Marta en la llamada.',
+      'Prefiero no darte un número que no tengo: Marta te lo explica en la llamada.',
+      'No te quiero dar un número equivocado. Lo vemos con Marta en la llamada.',
+      'Todavía no está definido el precio para tu caso; Marta te lo detalla en la llamada.',
+      'No cuento con ese dato ahora, pero Marta te lo explica en la llamada.',
+    ]) expect(classifyPriceAnswer(t, BIENESTAR, { insistencia: 3, especifica: true, remisionesConcretas: 2 }), t).toMatchObject({ respondio: true, explicita: true });
+  });
+  it('razones no documentadas (planes, financiación, cuotas, opciones de pago) nunca son honestas, aunque diga que no tiene el precio', () => {
+    for (const t of [
+      'No tengo el precio confirmado, pero hay financiación.',
+      'No tengo el número exacto: depende del plan que elijas.',
+      'Hay varios planes; Marta te los explica en la llamada.',
+      'El precio te lo explica Marta; tenemos opciones de pago.',
+      'No sé el precio, pero se puede pagar en cuotas sin interés.',
+    ]) expect(classifyPriceAnswer(t, BIENESTAR, {}), t).toMatchObject({ respondio: false, exactitud: 'evasiva', razonInventada: true });
+    // Negarlas o preguntar no es inventar.
+    for (const t of ['No tengo el precio ni sé si hay cuotas; Marta te lo explica en la llamada.', 'No tengo el precio confirmado. ¿Cuál es tu plan para este año?'])
+      expect(classifyPriceAnswer(t, BIENESTAR, {}), t).toMatchObject({ respondio: true, razonInventada: false });
+    // Con el precio documentado en cuotas, mencionarlas no es inventar.
+    expect(classifyPriceAnswer('Son 1.800 USD o 3 cuotas de 650 USD.', DENTAL)).toMatchObject({ exactitud: 'exacta' });
   });
   it('C09 real: las evasivas se cuentan, la insistencia no vuelve a cero y a la tercera el prospecto se despide', () => {
     const turns = playControl(BIENESTAR, C09_PROFILE, [
@@ -256,16 +284,19 @@ describe('F4 · precio no documentado (decisión del 29/10 y C09 real)', () => {
   it('C09 con respuestas honestas: no hay evasiva; una pregunta concreta sí exige hacerse cargo; la condición del prospecto se respeta', () => {
     const turns = playControl(BIENESTAR, C09_PROFILE, [
       [C09.p1, `${HONEST} Antes, ¿cuál es tu principal desafío con la energía y los hábitos?`, say(C09.p2)],
-      // Concreta («¿más o menos cuánto?»): remitir sin hacerse cargo es evasiva.
-      [C09.p2, 'Eso te lo explica Marta en la llamada. ¿Ya intentaste cambiar esto antes?', say('¿Y entonces cuánto es?')],
+      // Concreta («¿más o menos cuánto?»): la primera remisión contextualizada vale.
+      [C09.p2, 'Eso te lo explica Marta en la llamada. ¿Ya intentaste cambiar esto antes?', say(C09.p6)],
+      // Otra pregunta concreta y otra vez solo remite: esquiva repetidamente.
+      [C09.p6, 'Eso lo ves con Marta en la llamada. ¿Qué te frenó la última vez?', say('¿Y entonces cuánto es?')],
       // Genérica y ya lo dijo antes: no hace falta repetirlo literalmente.
-      ['¿Y entonces cuánto es?', 'Como te dije, eso te lo explica Marta en la llamada. ¿Qué te frenó la última vez?', say(C09.p8)],
+      ['¿Y entonces cuánto es?', 'Como te dije, eso te lo explica Marta en la llamada. ¿Qué te gustaría lograr?', say(C09.p8)],
       [C09.p8, 'Te entiendo y respeto tu decisión: no tengo ese dato confirmado y no quiero inventarte un número. ¿Prefieres que Marta te escriba primero con el precio?', say('Dale, agendemos el jueves.', { acepta_cita: 'si', estado_lead: 'pidio_llamada' })],
     ]);
-    expect(turns.map((t) => t.plan.evasion)).toEqual([false, true, false, false]);
-    expect(turns[3].plan.precioCondicion).toBe(true);
-    expect(turns[3].plan.bloqueos).toContain('precio_condicion');
-    expect(turns[3].issues.join(' ')).toMatch(/aceptacion_no_permitida:.*precio_condicion/);
+    expect(turns.map((t) => t.plan.evasion)).toEqual([false, false, true, false, false]);
+    expect(turns.map((t) => t.plan.remisionesConcretas)).toEqual([0, 1, 1, 1, 0]);
+    expect(turns[4].plan.precioCondicion).toBe(true);
+    expect(turns[4].plan.bloqueos).toContain('precio_condicion');
+    expect(turns[4].issues.join(' ')).toMatch(/aceptacion_no_permitida:.*precio_condicion/);
   });
   it('la condición de precio se levanta si el prospecto mismo pide avanzar', () => {
     let control = createControlState(C09_PROFILE);
@@ -288,7 +319,8 @@ describe('F4 · precio no documentado (decisión del 29/10 y C09 real)', () => {
 describe('F5 · topes de nota (frases reales de la ronda 4)', () => {
   it('no son invenciones: remitir, preguntar o negar una garantía, ni los datos documentados', () => {
     const fair = [
-      [DENTAL, 'Buena pregunta. El sistema está diseñado para +40 pacientes nuevos en 3 meses, pero los detalles de cómo funciona y garantías, el equipo lo explica mejor en la llamada. ¿Te parece?'], // C03 #7
+      // C03 #7 sin la frase del testimonio: la remisión de la garantía no es una invención.
+      [DENTAL, 'Buena pregunta. Los detalles de cómo funciona y garantías, el equipo lo explica mejor en la llamada. ¿Te parece?'],
       [BIENESTAR, 'Excelente pregunta. Los testimonios específicos los tiene el equipo para mostrar en la llamada. Sobre garantía: eso también se detalla ahí. Lo que sí te puedo decir es que está diseñado para freelancers con agendas variables. ¿Qué día te vendría bien hablar con Marta?'], // C04 #6
       [BIENESTAR, 'Eso es común y válido tu frustración. La diferencia acá es que no es solo dieta: son hábitos sostenibles en 12 semanas adaptados a tu ritmo. ¿Qué crees que falló en esos intentos anteriores?'], // C04 #4
       [DENTAL, 'Eso es frustrante, gastaste sin claridad 😞 Con nosotros es diferente: vos entendés cada paso y ves resultados en 90 días. ¿Estarías abierto a una llamada de 15 min?'],
@@ -319,12 +351,16 @@ describe('F5 · topes de nota (frases reales de la ronda 4)', () => {
   });
   it('el coaching recibe las cifras documentadas, las reglas de remisión y la calibración de 9–10', () => {
     expect(documentedFigures(BIENESTAR)).toContain('12 semanas');
-    expect(documentedFigures(DENTAL)).toEqual(expect.arrayContaining(['90 días', '1.800 USD', '650 USD', '3 meses']));
+    expect(documentedFigures(DENTAL)).toEqual(expect.arrayContaining(['90 días', '1.800 USD', '650 USD']));
+    expect(documentedFigures(DENTAL)).not.toContain('40 pacientes');
     const prompt = buildPrimerContactoCoachPrompt(BIENESTAR);
     expect(prompt).toContain('"12 semanas"');
     expect(prompt).toContain('NO es prometerlo');
     expect(prompt).toContain('el mensaje es 9 o 10');
-    expect(prompt).toContain('"es accesible", "depende del plan"');
+    expect(prompt).toContain('inventar razones no documentadas ("depende del plan", "hay financiación", "opciones de pago")');
+    const dental = buildPrimerContactoCoachPrompt(DENTAL);
+    expect(dental).toContain('Resultados de casos documentados: "Caso ficticio: Dr. Luis: +40 pacientes nuevos en 3 meses"');
+    expect(dental).toContain('es prometer resultados');
     expect(prompt).toContain('NO es motivo una condición para decidir o agendar');
   });
 });
@@ -385,5 +421,38 @@ describe('respaldos del código', () => {
     expect(conditionsOnPrice(text)).toBe(false);
     // precio_condicion solo se usa cuando la condición ya está en pie: repetirla es correcto.
     for (const [k, r] of Object.entries(FALLBACK_REPLIES)) if (k !== 'precio_condicion') expect(conditionsOnPrice(r.respuesta_prospecto), k).toBe(false);
+  });
+});
+
+describe('testimonios (30/10): citar el caso documentado frente a prometer resultados', () => {
+  it('C03 #7 real: «el sistema está diseñado para +40 pacientes nuevos en 3 meses» es una promesa y recibe tope', async () => {
+    const text = 'Buena pregunta. El sistema está diseñado para +40 pacientes nuevos en 3 meses, pero los detalles de cómo funciona y garantías, el equipo lo explica mejor en la llamada. ¿Te parece?';
+    expect(setterClaims(text, DENTAL, '')).toEqual([expect.stringMatching(/testimonio presentado como promesa/)]);
+    const r = await runCoachTurn({ call: vi.fn(async () => coachSays(7)), project: DENTAL, history: [{ role: 'prospect', content: 'Info' }], setterText: text });
+    expect(r.coaching.puntuacion_mensaje).toBe(3);
+  });
+  it('prometer el resultado al prospecto o atribuirlo al programa, aunque la cifra sea del testimonio', () => {
+    for (const t of [
+      'Vas a sumar +40 pacientes nuevos en 3 meses.',
+      'Con el programa tendrás 40 pacientes nuevos en 3 meses.',
+      'El método da +40 pacientes nuevos en 3 meses.',
+      'Lo normal es sumar 40 pacientes nuevos en 3 meses.',
+      'El Dr. Luis sumó +40 pacientes nuevos en 3 meses, y vos vas a lograr lo mismo.',
+    ]) expect(setterClaims(t, DENTAL, '').join(' '), t).toMatch(/testimonio presentado como promesa/);
+  });
+  it('citar el caso documentado como lo que le pasó a ese caso no se penaliza', async () => {
+    const legit = [
+      'Un caso documentado: el Dr. Luis sumó +40 pacientes nuevos en 3 meses.',
+      'El Dr. Luis, por ejemplo, consiguió 40 pacientes nuevos en 3 meses.',
+      'Te cuento un caso: un odontólogo como vos logró +40 pacientes nuevos en 3 meses. ¿Cómo está tu agenda hoy?',
+      'A Luis le funcionó: sumó 40 pacientes nuevos en 3 meses. Cada consultorio es distinto, eso lo ves con la Dra. en la llamada.',
+    ];
+    for (const t of legit) expect(setterClaims(t, DENTAL, ''), t).toEqual([]);
+    const r = await runCoachTurn({ call: vi.fn(async () => coachSays(9)), project: DENTAL, history: [{ role: 'prospect', content: 'Info' }], setterText: legit[0] });
+    expect(r.coaching.puntuacion_mensaje).toBe(9);
+  });
+  it('las cifras de la promesa documentada siguen libres («en 90 días»); una cifra que no está en ningún lado sigue siendo una invención', () => {
+    expect(setterClaims('La Dra. Ana ayuda a llenar la agenda en 90 días.', DENTAL, '')).toEqual([]);
+    expect(setterClaims('El Dr. Luis sumó 60 pacientes nuevos en 2 meses.', DENTAL, '').join(' ')).toMatch(/cifra/);
   });
 });
