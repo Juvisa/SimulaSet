@@ -162,8 +162,17 @@ const APPROX = /\b(ronda|rondan|aprox\w*|alrededor|cerca de|unos|unas|menos de|p
 //               pasaba por correcto.
 //   incorrecta  cualquier otro monto de precio (incluye «desde 1.500»)
 //   inventada   el proyecto no documenta precio y el alumno dio una cifra
-//   sin_cifra   precio documentado y el alumno no dio ningún monto (evasiva)
-//   honesta     precio no documentado y respuesta honesta sin cifra
+//   sin_cifra   precio documentado y el alumno no dio ningún monto ni explicó su rol (evasiva)
+//   honesta     respuesta honesta sin cifra: sin precio documentado, que no lo
+//               tiene; con precio documentado, que la propuesta comercial la
+//               presenta el especialista (rol: true)
+// Con precio documentado (decisión de Digital SET, 02/11/2026, metodología
+// SET): el setter NO revela precios, rangos, descuentos ni condiciones por
+// chat. Explicar con transparencia que la propuesta comercial la presenta el
+// especialista responde la pregunta; ignorarla, responder con vaguedades,
+// inventar razones o repetir la misma frase sigue siendo evasiva. Dar el
+// precio (exacta o aproximada) sigue contando como respuesta para el
+// prospecto, pero el coaching lo marca (ver primerContactoTurn.js).
 //   evasiva     precio no documentado y no se hizo cargo
 // Sin precio documentado (decisiones de Digital SET, 29 y 30/10/2026):
 //   - Decir con honestidad que no tiene el precio es válido siempre. No hace
@@ -200,6 +209,17 @@ const inventsReason = (setterText, project) => {
 // la agencia») no son afirmaciones sobre el precio, salvo que coincidan con
 // el precio documentado.
 const near = (a, b, tol) => Math.abs(a - b) / b <= tol;
+// El alumno explica su rol: el precio o la propuesta comercial los presenta otra persona.
+const ROLE_EXPLAINS = /\bno me corresponde\b|\bmi (rol|parte|funcion|trabajo) (es|aqui es|no es)\b|\byo no (manejo|doy|defino|presento) (el |los |la )?(precio|precios|valor|valores|propuesta|monto|montos|inversion)\b|\b(precio|precios|valor|valores|inversion|propuesta|monto|montos|condiciones)\b[^.]{0,40}\b(presenta|presentan|ve|ven|define|definen|explica|explican|detalla|detallan|arma|revisa)\b[^.]{0,30}\b(especialista|closer|asesor|asesora|experta|experto|dra|doctora|equipo|coach|llamada)\b/;
+// Confirmar o descartar un rango que dijo el prospecto también revela el precio («los rangos que mencionas están en la zona»).
+const CONFIRMS_RANGE = /\b(rangos?|numeros?|cifras?|montos?) que (mencionas|dices|dijiste|mencionaste)\b|\b(esta|estan|anda|andan|va|van) (en|por) (la zona|ese rango|esos numeros|ese numero|ese monto)\b|\b(mas|menos) (o menos )?de (eso|lo que (dices|pensas|piensas))\b/;
+// La misma frase sobre el precio ya dicha antes: repetición mecánica, no respuesta.
+const PRICE_TALK = /precio|valor|inversion|costo|propuesta|especialista|llamada/;
+const repeatsItself = (setterText, conversationText) => {
+  const prior = norm(conversationText);
+  return Boolean(prior) && sentencesOf(setterText).map(norm)
+    .filter((s) => s.split(' ').length >= 5 && PRICE_TALK.test(s)).some((s) => prior.includes(s));
+};
 // Opciones: insistencia (preguntas de precio sin responder, contando esta),
 // especifica (la pregunta pide un rango, una cota o la forma de pago),
 // honestaAntes (ya dijo antes que no tiene el precio) y remisionesConcretas
@@ -222,7 +242,20 @@ export const classifyPriceAnswer = (setterText, project, {
   const amounts = [...inContext, ...anywhere.filter((a) => !inContext.some((b) => b.n === a.n))]
     .filter(({ n }) => documented.some((d) => near(n, d, 0.15)) || !echoed.some((e) => near(n, e, 0.02)));
   if (isPriceDocumented(project)) {
-    if (!amounts.length) return { respondio: false, exactitud: 'sin_cifra', cifras: [] };
+    if (!amounts.length) {
+      const invented = inventsReason(setterText, project) || CONFIRMS_RANGE.test(t);
+      const explicit = !invented && !VAGUE_PRICE.test(t) && !repeatsItself(setterText, conversationText) && (ROLE_EXPLAINS.test(t)
+        || sentencesOf(setterText).map(norm).some((s) => HONEST_NO_NUMBER.test(s) && /precio|numero|cifra|monto|costo|valor|rango|\beso\b/.test(s)));
+      const refersToPrice = /precio|costo|cuesta|inversion|valor|numero|cifra|rango|cuanto|monto|pago|propuesta/.test(t) || /^(y )?eso\b|\beso (te|lo|se)\b|\bese (tema|dato)\b/.test(t);
+      const deferral = !explicit && !invented && DEFERS.test(t) && refersToPrice && !VAGUE_PRICE.test(t)
+        && !repeatsItself(setterText, conversationText)
+        && (insistencia < 2 || honestaAntes) && !(especifica && remisionesConcretas > 0);
+      const honest = explicit || deferral;
+      return {
+        respondio: honest, exactitud: honest ? 'honesta' : 'sin_cifra', cifras: [], explicita: explicit, rol: honest,
+        remisionConcreta: deferral && especifica, razonInventada: invented,
+      };
+    }
     const rate = ({ n, approx }) => {
       if (documented.some((d) => Math.abs(n - d) / d <= 0.02)) return 'exacta';
       if (approx && documented.some((d) => Math.abs(n - d) / d <= 0.15)) return 'aproximada';
@@ -251,6 +284,27 @@ export const classifyPriceAnswer = (setterText, project, {
   };
 };
 export const answersPrice = (setterText, project, options) => classifyPriceAnswer(setterText, project, options).respondio;
+
+// Cifras de precio o condiciones comerciales en un texto (decisión del
+// 02/11/2026: lo copiable del coaching nunca las incluye, aunque estén
+// documentadas).
+// Una condición comercial cuenta si se AFIRMA («hay cuotas», «ofrecemos
+// financiación», «puedes pagar en mensualidades») o si aparece suelta; no si
+// solo se remite al especialista («el especialista te explicará las
+// condiciones comerciales», «las cuotas te las detalla la Dra. en la llamada»).
+const CURRENCY = /\b(usd|dolares?|pesos|euros?)\b/;
+const COMMERCIAL_CONDITION = String.raw`(cuotas?|mensualidad(es)?|financ\w*|descuentos?|promocion\w*|becas?|planes de pago|pagos? (a|en) plazos|meses sin intereses)`;
+const CONDITION_TERM = new RegExp(String.raw`\b${COMMERCIAL_CONDITION}\b`);
+const AFFIRMS_CONDITION = new RegExp(String.raw`\b(hay|tenemos|tiene|ofrecemos|ofrece|incluye|incluimos|se puede|se pueden|puedes|podes|podras|permite|aceptamos|damos|manejamos|existe|existen|cuenta con|contamos con)\b(\s+\S+){0,3}\s+${COMMERCIAL_CONDITION}\b|\b${COMMERCIAL_CONDITION}\s+(disponibles?|incluid[oa]s?)\b`);
+const REFERS_TO_SPECIALIST = /\b(especialista|closer|asesora?|equipo|experta?|dra|doctora|llamada)\b/;
+const affirmsCondition = (sentence) => CONDITION_TERM.test(sentence)
+  && (AFFIRMS_CONDITION.test(sentence) || !REFERS_TO_SPECIALIST.test(sentence));
+export const mentionsCommercialTerms = (text, project) => {
+  const t = norm(text);
+  if (!t) return false;
+  return /\$/.test(String(text)) || CURRENCY.test(t) || sentencesOf(text).map(norm).some(affirmsCondition)
+    || priceAmountsIn(text).length > 0 || classifyPriceAnswer(text, project).cifras.length > 0;
+};
 
 // ─── Afirmaciones no documentadas del alumno ───────────────────────────────
 // Lo que el alumno afirma sin respaldo: garantías, devoluciones, escasez,
@@ -495,7 +549,10 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
   const evasion = priceAsked && !priceAnswered;
   const evasivas = priceAnswered ? 0 : state.evasivas + (evasion ? 1 : 0);
   const sinPrecio = !isPriceDocumented(project);
-  const precioHonesto = Boolean(state.precioHonesto) || (sinPrecio && Boolean(precio.explicita));
+  const precioHonesto = Boolean(state.precioHonesto) || Boolean(precio.explicita);
+  // Con precio documentado, explicar el rol responde la pregunta: el prospecto
+  // decide con naturalidad (no se bloquea la cita ni se garantiza).
+  const precioRol = !sinPrecio && priceAnswered && Boolean(precio.rol);
   // El prospecto puso el precio como condición para agendar y el precio no
   // está documentado: su decisión se respeta hasta que él mismo pida avanzar.
   const precioCondicion = sinPrecio
@@ -530,7 +587,7 @@ export const planTurn = (state, { project, profile = {}, lastProspectText, sette
     // Respondida la pregunta, la insistencia vuelve a empezar.
     preguntasPrecio: priceAnswered ? 0 : preguntasPrecio,
     precioExactitud: precio.exactitud,
-    precioHonesto, precioCondicion, remisionesConcretas, priceFollowUp,
+    precioHonesto, precioCondicion, remisionesConcretas, priceFollowUp, precioRol,
     precioDado: Boolean(state.precioDado) || ['exacta', 'aproximada'].includes(precio.exactitud),
     afirmaciones, invenciones,
     propone, pitch, presion, presiones,

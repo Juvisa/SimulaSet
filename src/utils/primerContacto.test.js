@@ -217,10 +217,12 @@ describe('prompt del coaching (Primer contacto)', () => {
   });
   it('C1: prohíbe inventar la oferta en el feedback y en lo copiable', () => {
     expect(coach).toContain('Nunca inventes ni sugieras características, precios, garantías, condiciones, plazos o resultados');
-    expect(coach).toContain('"mensaje_alternativo" solo puede usar lo documentado');
+    expect(coach).toContain('"mensaje_alternativo" nunca incluye cifras, rangos ni condiciones comerciales, aunque estén documentados, y solo puede usar lo documentado');
   });
-  it('precio honesto correcto en cualquier momento, con o sin precio documentado', () => {
-    expect(coach).toContain('es correcto EN CUALQUIER MOMENTO');
+  it('con precio documentado el setter no lo revela (02/11/2026); sin precio documentado, decir que no lo tiene sigue siendo correcto', () => {
+    expect(coach).toContain('el setter NO revela precios, rangos, descuentos ni condiciones comerciales por chat');
+    expect(coach).toContain('NO lo penalices por no dar la cifra');
+    expect(coach).not.toContain('es correcto EN CUALQUIER MOMENTO');
     expect(buildPrimerContactoCoachPrompt({ ...PROJECT, price: '' })).toContain('NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente');
   });
   it('C3: escala 1–10 anclada, nunca 0, y la puntuación al final del JSON', () => {

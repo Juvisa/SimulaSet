@@ -245,9 +245,9 @@ describe('4 · promesas repetidas e invenciones sin cifras', () => {
 
 // ─── 5 · Coherencia de notas ─────────────────────────────────────────────
 describe('5 · coherencia de las notas', () => {
-  it('C07: el coaching recibe que el precio aproximado es válido (y que uno incorrecto no lo es)', () => {
-    expect(priceNoteFor('Hola 👋 El programa ronda los 2 mil dólares y se puede pagar en 3 cuotas. ¿Cómo está tu agenda?', DENTAL, 'Precio')).toMatch(/aproximación honesta.*no la penalices/);
-    expect(priceNoteFor('Son 1.800 USD o 3 cuotas de 650 USD.', DENTAL, 'Precio')).toMatch(/coincide/);
+  it('C07 (regla del 02/11/2026): revelar el precio, exacto o aproximado, se señala con tope de 5; uno incorrecto sigue siendo grave', () => {
+    expect(priceNoteFor('Hola 👋 El programa ronda los 2 mil dólares y se puede pagar en 3 cuotas. ¿Cómo está tu agenda?', DENTAL, 'Precio')).toMatch(/revela el precio.*máximo 5/);
+    expect(priceNoteFor('Son 1.800 USD o 3 cuotas de 650 USD.', DENTAL, 'Precio')).toMatch(/revela el precio.*máximo 5/);
     expect(priceNoteFor('La inversión son 1.500 USD.', DENTAL, 'Precio')).toMatch(/NO coincide/);
     expect(priceNoteFor('¿Cómo está tu agenda?', DENTAL, '')).toBe('');
     expect(priceNoteFor('Es accesible.', { ...DENTAL, price: '' }, '')).toBe('');
