@@ -130,6 +130,11 @@ export const uploadProjectResourceFile = async ({ userId, projectId, file }) => 
   return { url: data?.publicUrl || null, error: data?.publicUrl ? undefined : 'No pudimos generar el enlace del archivo.' };
 };
 
+// Editar y eliminar: solo la propietaria (created_by) o un admin, igual que las
+// políticas RLS de projects. Una setter asignada ve el proyecto en su lista
+// para trabajar con él, pero no lo administra.
+export const canManageProject = (project, user) => Boolean(user?.id) && (project?.userId === user.id || user.role === 'admin');
+
 export const deleteProject = async (id) => {
   if (!supabase) return { deletedId: null, error: 'Supabase no está configurado.' };
   const { data, error } = await supabase

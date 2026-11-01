@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProjects, deleteProject } from '../utils/projects';
+import { canManageProject, getProjects, deleteProject } from '../utils/projects';
 import Layout from '../components/Layout';
 import { Plus, Trash2, Edit3, Play, BarChart2, Loader2 } from 'lucide-react';
 
@@ -78,6 +78,7 @@ const Projects = () => {
                   </h3>
                   <p className="text-text-secondary text-sm mt-0.5">{project.expertName} · {project.niche}</p>
                 </div>
+                {canManageProject(project, user) && (
                 <div className="flex items-center gap-1 ml-3">
                   <button
                     onClick={() => navigate(`/projects/${project.id}/edit`)}
@@ -93,6 +94,7 @@ const Projects = () => {
                     {deletingId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                   </button>
                 </div>
+                )}
               </div>
 
               <p className="text-text-secondary text-xs line-clamp-2 mb-4">{project.promise}</p>
