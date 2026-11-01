@@ -44,18 +44,46 @@ const CASES = [
     setter: 'El programa cuesta USD 1997. ¿Cómo está hoy tu agenda?' },
 ];
 
-// ¿El coaching (lo que escribió Haiku, antes del filtro) recomienda revelar cifras o condiciones?
-const RECOMMENDS_REVEAL = /\b(da|dale|dar|comparte|compartir|menciona|mencionar|dile|decirle|indica|indicar|informa|informar|revela|revelar|transparenta)\w*\b[^.]{0,30}\b(el |la )?(precio|costo|valor|inversion|cifra|monto|rango)\b/i;
+// ¿El coaching (lo que escribió Haiku, antes del filtro) recomienda revelar
+// cifras o condiciones? Solo cuenta una RECOMENDACIÓN (consejo o imperativo
+// inequívoco), no la crítica «Revela el precio por chat» (falso positivo de
+// la microvalidación precio1, P4), ni una frase negada («no reveles el precio»).
+const RECOMMENDS_REVEAL = /\b(deberias|deberia|podrias|podria|conviene|convendria|te recomiendo|recomiendo|hay que|tendrias que|seria (bueno|mejor)|mejor|intenta|procura)\b[^.]{0,25}\b(dar|darle|compartir|mencionar|decir|decirle|indicar|informar|revelar|transparentar)\b[^.]{0,25}\b(precio|costo|valor|inversion|cifra|monto|rango)\b|\b(dale|comparte|compartile|mencionale|dile|decile|indicale|informale)\b[^.]{0,25}\b(precio|costo|valor|inversion|cifra|monto|rango)\b/;
+const NEGATED = /\b(no|nunca|jamas|sin)\b[^.]{0,12}$/;
 const normText = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+export const recommendsReveal = (text) => normText(text).split(/[.!?;\n]+/).some((s) => {
+  const m = s.match(RECOMMENDS_REVEAL);
+  return Boolean(m) && !NEGATED.test(s.slice(0, m.index));
+});
+// Dos lecturas por separado: la regla de precio (lo que se valida) y el
+// criterio original de la microvalidación (que además exigía nota ≥ 7).
 const judge = (c, raw, result) => {
-  const text = ['que_mejorar', 'mensaje_alternativo', 'alerta'].map((k) => raw?.[k] || '').join(' ');
-  const recomienda = RECOMMENDS_REVEAL.test(normText(raw?.que_mejorar)) || mentionsCommercialTerms(raw?.mensaje_alternativo || '', PROJECT) || /1\.?997/.test(text);
+  const altConCifras = mentionsCommercialTerms(raw?.mensaje_alternativo || '', PROJECT);
+  const recomienda = recommendsReveal(raw?.que_mejorar) || recommendsReveal(raw?.alerta) || altConCifras;
   const nota = result.coaching?.puntuacion_mensaje ?? null;
-  const ok = c.tipo === 'revela'
-    ? nota !== null && nota <= PRICE_REVEAL_MAX_SCORE && Boolean(result.coaching?.alerta) && !mentionsCommercialTerms(raw?.mensaje_alternativo || '', PROJECT)
-    : nota !== null && nota >= 7 && !result.issues.some((i) => i.startsWith('tope_')) && !recomienda;
-  return { ok, nota, nota_ia: raw?.puntuacion_mensaje ?? null, recomienda_revelar: recomienda, alerta: result.coaching?.alerta || '', que_mejorar: raw?.que_mejorar || '', alternativa_ia: raw?.mensaje_alternativo || '', issues: result.issues };
+  const tope = result.issues.some((i) => i.startsWith('tope_'));
+  const reglaPrecio = c.tipo === 'revela'
+    ? nota !== null && nota <= PRICE_REVEAL_MAX_SCORE && Boolean(result.coaching?.alerta) && !altConCifras
+    : !recomienda && !tope;
+  const ok = c.tipo === 'revela' ? reglaPrecio : reglaPrecio && nota !== null && nota >= 7;
+  return { ok, regla_precio: reglaPrecio, nota, nota_ia: raw?.puntuacion_mensaje ?? null, recomienda_revelar: recomienda, alerta: result.coaching?.alerta || '', que_mejorar: raw?.que_mejorar || '', alternativa_ia: raw?.mensaje_alternativo || '', issues: result.issues };
 };
+
+// --reevaluar <resultados.json>: vuelve a juzgar resultados guardados, sin llamadas.
+const SAVED = arg('--reevaluar', '');
+if (SAVED) {
+  const { readFileSync } = await import('node:fs');
+  const saved = JSON.parse(readFileSync(resolve(SAVED), 'utf8'));
+  const rows = saved.results.map((r) => {
+    const c = CASES.find((x) => x.id === r.id);
+    const raw = { que_mejorar: r.que_mejorar, mensaje_alternativo: r.alternativa_ia, puntuacion_mensaje: r.nota_ia };
+    const v = judge(c, raw, { coaching: { puntuacion_mensaje: r.nota, alerta: r.alerta }, issues: r.issues });
+    return { id: r.id, rep: r.rep, situacion: r.situacion, nota: v.nota, nota_ia: v.nota_ia, regla_precio: v.regla_precio, criterio_original: v.ok, recomienda_revelar: v.recomienda_revelar };
+  });
+  for (const r of rows) console.log(`${r.id} #${r.rep} ${r.situacion.padEnd(36)} nota ${r.nota} (IA ${r.nota_ia}) · regla de precio ${r.regla_precio ? 'OK' : 'FALLA'} · criterio original ${r.criterio_original ? 'OK' : 'FALLA'} · recomienda revelar: ${r.recomienda_revelar ? 'sí' : 'no'}`);
+  console.log(JSON.stringify({ regla_precio: `${rows.filter((r) => r.regla_precio).length}/${rows.length}`, criterio_original: `${rows.filter((r) => r.criterio_original).length}/${rows.length}` }));
+  process.exit(0);
+}
 
 const usage = { calls: 0, usd: 0 };
 let reserved = 0;
