@@ -28,7 +28,7 @@ import {
   sanitizeCoaching,
 } from './primerContacto.js';
 import {
-  amountsIn, applyCoachInvention, applyDiscovery, checkProspectReply, classifyPriceAnswer, createControlState, fallbackFor,
+  amountsIn, applyCoachInvention, applyDiscovery, checkProspectReply, classifyPriceAnswer, createControlState, fallbackFor, mentionsCommercialTerms,
   normalizeAcceptance, planTurn, priceAmountsIn, resolveTurn, setterClaimsOf, verifyCoachInvention, verifyDiscovery,
 } from './primerContactoControl.js';
 
@@ -232,6 +232,12 @@ const summarizePlan = (p) => ({
 // documentadas y precios incorrectos o inventados. En todo lo demás la nota
 // la decide el coaching (no se fuerza ninguna distribución).
 export const UNDOCUMENTED_CLAIM_MAX_SCORE = 3;
+// Metodología SET (02/11/2026): revelar el precio documentado por chat tiene
+// como máximo 5 en ese turno (la nota global no se limita).
+export const PRICE_REVEAL_MAX_SCORE = 5;
+const PRICE_REVEAL_ALERT = 'El precio y la propuesta comercial los presenta el especialista: no los reveles por chat.';
+const revealsPrice = (setterText, project, priorText) => isPriceDocumented(project)
+  && ['exacta', 'aproximada'].includes(classifyPriceAnswer(setterText, project, { conversationText: priorText }).exactitud);
 export const setterClaims = (setterText, project, priorText) => setterClaimsOf(setterText, project, priorText).map((c) => c.texto);
 
 // Lo que el código ya decidió sobre el precio de este mensaje, para que el
@@ -240,8 +246,7 @@ export const setterClaims = (setterText, project, priorText) => setterClaimsOf(s
 export const priceNoteFor = (setterText, project, priorText) => {
   if (!isPriceDocumented(project)) return '';
   const { exactitud } = classifyPriceAnswer(setterText, project, { conversationText: priorText });
-  if (exactitud === 'exacta') return 'El precio que da el alumno en este mensaje coincide con el documentado: es correcto.';
-  if (exactitud === 'aproximada') return 'El alumno da una aproximación honesta del precio documentado («ronda», «cerca de»…): es válida, no la penalices ni pidas rectificarla.';
+  if (exactitud === 'exacta' || exactitud === 'aproximada') return 'El alumno revela el precio (o un rango) por chat: en Primer contacto la propuesta comercial la presenta el especialista. Señálalo y puntúa como máximo 5.';
   if (exactitud === 'incorrecta') return 'El precio que da el alumno en este mensaje NO coincide con el documentado: es un error grave.';
   return '';
 };
@@ -339,6 +344,18 @@ export const runCoachTurn = async ({ call, project, history, setterText, control
       coaching.puntuacion_mensaje = UNDOCUMENTED_CLAIM_MAX_SCORE;
     }
     if (!coaching.alerta) coaching.alerta = `Afirmaste algo que no está documentado: ${claims.join('; ')}.`;
+  }
+  if (coaching && !claims.length && revealsPrice(setterText, project, priorText)) {
+    if (coaching.puntuacion_mensaje !== null && coaching.puntuacion_mensaje > PRICE_REVEAL_MAX_SCORE) {
+      issues = [...issues, `tope_${PRICE_REVEAL_MAX_SCORE}:${coaching.puntuacion_mensaje}`];
+      coaching.puntuacion_mensaje = PRICE_REVEAL_MAX_SCORE;
+    }
+    if (!coaching.alerta) coaching.alerta = PRICE_REVEAL_ALERT;
+  }
+  // Lo copiable nunca trae cifras ni condiciones comerciales, aunque estén documentadas.
+  if (coaching?.mensaje_alternativo && mentionsCommercialTerms(coaching.mensaje_alternativo, project)) {
+    issues = [...issues, 'mensaje_alternativo_descartado:precio'];
+    coaching.mensaje_alternativo = '';
   }
   const discovery = verifyDiscovery(raw?.descubrimiento, prospectTexts(history));
   if (discovery.motivo && SAYS_NO_MOTIVE.test(`${raw?.que_mejorar || ''} ${raw?.alerta || ''}`)) {

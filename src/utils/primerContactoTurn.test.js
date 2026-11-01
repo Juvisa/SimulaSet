@@ -346,12 +346,13 @@ describe('F5 · tope por afirmaciones no documentadas', () => {
     expect(r.coaching.puntuacion_mensaje).toBe(3);
     expect(r.claims.some((c) => /precio incorrecto \(1500/.test(c))).toBe(true);
   });
-  it('lo honesto no se penaliza: «No hay garantía escrita» y el precio documentado (ronda 3, R07 #2)', async () => {
+  it('lo honesto no se penaliza («No hay garantía escrita»); revelar el precio documentado tiene tope de 5 (02/11/2026)', async () => {
     const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 8 }, { ...COACH_OK, puntuacion_mensaje: 9 }] });
     const a = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: 'Entiendo la preocupación. No hay garantía escrita, pero el Dr. Luis logró +40 pacientes nuevos en 3 meses.' });
     expect(a.coaching.puntuacion_mensaje).toBe(8);
     const b = await runCoachTurn({ call, project: PROJECT, history: HISTORY, setterText: 'Son 1.800 USD o 3 cuotas de 650 USD. ¿Cuál te acomoda más?' });
-    expect(b.coaching.puntuacion_mensaje).toBe(9);
+    expect(b.coaching.puntuacion_mensaje).toBe(5);
+    expect(b.issues).toContain('tope_5:9');
   });
   it('un mensaje sin afirmaciones conserva la nota del coaching, alta o baja (no se fuerza una distribución)', async () => {
     const call = fakeCall({ coach: [{ ...COACH_OK, puntuacion_mensaje: 10 }, { ...COACH_OK, puntuacion_mensaje: 2 }] });

@@ -212,6 +212,7 @@ export const buildPrimerContactoTurnDirective = (plan, profile) => {
     lines.push(`- El setter te presionó ${plan.presiones} veces (cita sin conocerte o enlace para comprar). En este mensaje te despides con cortesía y cierras la conversación ("acepta_cita": "no", "estado_lead": "cerrado").`);
   } else {
     if (plan.evasion) lines.push(`- El setter no respondió tu pregunta de precio (evasiva ${plan.evasivas} de ${plan.limiteEvasivas}). Insistes con naturalidad.`);
+    else if (plan.priceAsked && plan.priceAnswered && plan.precioRol) lines.push('- El setter te explicó con transparencia que el precio y la propuesta comercial los presenta el especialista: no es una evasiva. Decides con naturalidad según tu perfil: puedes aceptar una llamada para conocerla, mantener tu duda o retirarte con cortesía.');
     else if (plan.priceAsked && plan.priceAnswered) lines.push('- El setter respondió tu pregunta de precio: lo tomas en cuenta (puede generarte una objeción real, no un rechazo automático).');
     if (plan.pitch) lines.push('- El setter te mandó la oferta o un enlace sin entenderte: respondes más corto y con menos interés.');
     else if (plan.presion) lines.push(`- El setter te propone una cita sin conocer todavía tu situación y tu motivo (insistencia ${plan.presiones} de ${plan.limitePaciencia}): respondes con menos interés.`);
@@ -339,7 +340,7 @@ const URGENCY_RULES = `- Es la urgencia auténtica que el PROSPECTO expresa con 
 // conversación hasta el mensaje del alumno: nada del perfil privado.
 export const buildPrimerContactoCoachPrompt = (project) => {
   const priceRule = isPriceDocumented(project)
-    ? `El precio documentado es: ${project.price}. Responder con honestidad una pregunta de precio (el precio, un rango o una referencia de ese precio) es correcto EN CUALQUIER MOMENTO de la conversación: no se descuenta por el orden ni por "no haber descubierto antes". Dar una cifra distinta de la documentada es un error grave.`
+    ? `El precio documentado es: ${project.price}; lo sabes solo para detectar cifras incorrectas. Metodología SET: el setter NO revela precios, rangos, descuentos ni condiciones comerciales por chat; la propuesta comercial la presenta el especialista en la llamada. Ante una pregunta de precio, lo correcto es reconocer la inquietud con empatía, explicar con transparencia que la propuesta comercial corresponde al especialista y seguir con la cualificación o proponer la llamada: NO lo penalices por no dar la cifra. Sí son errores: mentir, inventar razones, responder con vaguedades, ignorar la pregunta o repetir mecánicamente la misma frase. Revelar el precio documentado (o un rango) tiene como máximo 5. Dar una cifra distinta de la documentada es un error grave (1–3).`
     : 'El proyecto NO documenta un precio. Decir con honestidad que no tiene el precio confirmado (con esas u otras palabras equivalentes) y que la experta lo explica en la llamada es correcto y NO es una evasiva; una vez dicho, no hace falta repetirlo literalmente. Sí son evasivas las vaguedades ("es accesible", "vale la pena"), inventar razones no documentadas ("depende del plan", "hay financiación", "opciones de pago") y remitir a la llamada una y otra vez una pregunta concreta (un rango, "¿es más de 2.000?", "¿se paga mensual?"). Inventar una cifra es un error grave. Si el prospecto condiciona la cita a saber el precio, insistir con la cita es presión.';
   const figures = documentedFigures(project);
   const cases = testimonialResults(project);
@@ -367,13 +368,13 @@ CRITERIOS:
 - ${figuresRule}
 - Si el prospecto preguntó algo que el proyecto no documenta (qué incluye, tiempo, garantías), la respuesta honesta "eso lo detalla el equipo en la llamada" es correcta. Mencionar un tema para remitirlo ("sobre garantía: eso se detalla en la llamada"), preguntarlo o negarlo NO es prometerlo: no lo penalices.
 - No penalices que el alumno no proponga una cita cuando el prospecto mostró que no encaja: cerrar bien también es el objetivo.
-- Penaliza: evasivas reiteradas sobre el precio, afirmar precios, garantías, plazos, horas, contenidos o resultados que no estén documentados, pitch prematuro, interrogatorio en lista, ignorar una pregunta directa del prospecto y proponer la cita sin haber descubierto nada.
+- Penaliza: evasivas reiteradas sobre el precio (ignorarlo, vaguedades, razones inventadas), afirmar precios, garantías, plazos, horas, contenidos o resultados que no estén documentados, pitch prematuro, interrogatorio en lista, ignorar una pregunta directa del prospecto y proponer la cita sin haber descubierto nada.
 - Una característica de la oferta que no está documentada es una invención aunque no tenga números: «el programa está diseñado para que no agregues tareas», «incluye estrategia personalizada e implementación», «tú das la estrategia, nosotros ejecutamos», «trabaja con rutinas flexibles». Puntúala como invención (1–3) y copia la frase en "afirmacion_no_documentada". Lo que dice lo documentado (promesa, nicho, cliente ideal, precio, testimonios) no es una invención, y la promesa documentada dicha con otras palabras («la Dra. trabaja en 90 días para llenar tu agenda») tampoco. La logística de la llamada (día, hora, canal, enlace, recordatorio, quién puede asistir) no es la oferta: no la marques ni la penalices.
 - Evalúa SOLO el mensaje del alumno a evaluar. Los errores de mensajes anteriores ya se puntuaron: no bajes esta nota por ellos ni los repitas en "que_mejorar", salvo que este mensaje los repita o se apoye en ellos (por ejemplo, vuelve a afirmar la garantía). Si este mensaje los corrige, es un acierto.
 
 REGLAS DEL FEEDBACK:
-- Nunca inventes ni sugieras características, precios, garantías, condiciones, plazos o resultados de la oferta. "mensaje_alternativo" solo puede usar lo documentado; si falta información, modela una respuesta honesta ("eso te lo detalla el equipo en la llamada").
-- "alerta" solo para: evasiva reiterada de precio, promesa no documentada, pitch o cita sin descubrimiento, insistir en la cita después de un no. En los demás casos, "alerta" va vacía. Máximo 20 palabras, sin mayúsculas de alarma.
+- Nunca inventes ni sugieras características, precios, garantías, condiciones, plazos o resultados de la oferta. "mensaje_alternativo" nunca incluye cifras, rangos ni condiciones comerciales, aunque estén documentados, y solo puede usar lo documentado; si falta información, modela una respuesta honesta ("eso te lo detalla el equipo en la llamada").
+- "alerta" solo para: evasiva reiterada de precio, revelar el precio por chat, promesa no documentada, pitch o cita sin descubrimiento, insistir en la cita después de un no. En los demás casos, "alerta" va vacía. Máximo 20 palabras, sin mayúsculas de alarma.
 - Longitud: "que_hizo_bien" y "que_mejorar" máximo 25 palabras cada uno; "mensaje_alternativo" máximo 40 palabras (o vacío si el mensaje ya era muy bueno).
 - "etapa_set": exactamente "S", "E" o "T".
 - "puntuacion_mensaje": un número entero de 1 a 10, decidido DESPUÉS de escribir el feedback y coherente con él. Escala: 1–3 dañino o contraproducente; 4–5 débil; 6–7 correcto con algo importante que mejorar; 8 muy bueno con un detalle importante que mejorar; 9–10 excelente, sin nada relevante que mejorar. Nunca uses 0. Usa toda la escala: los extremos existen.
@@ -383,15 +384,15 @@ EJEMPLOS DE CALIBRACIÓN (orientativos; cada mensaje recibe la nota que merece, 
 DEFICIENTE (1–3)
 - 1–2: «¡El programa es increíble! Inscríbete aquí: [enlace]» sin haber preguntado nada.
 - 1–2: afirmar algo comercial que no está documentado, aunque el resto del mensaje sea bueno: «tiene garantía de resultados», «solo te pide 5 horas», «incluye gestión de anuncios», «quedan pocos cupos», o un precio distinto del documentado. Inventar condiciones siempre es grave.
-- 2–3: «Eso lo vemos más adelante» por tercera vez ante una pregunta de precio documentado.
+- 2–3: ignorar por tercera vez una pregunta de precio, o repetir la misma frase sin reconocer la inquietud.
 - 3: «¿Agendamos mañana a las 10?» como primer mensaje, sin saber nada del prospecto; insistir con la cita después de que dijo que no es para él.
 ACEPTABLE (5–7)
 - 6: una pregunta abierta correcta pero genérica («¿Cómo está tu agenda?»), que no retoma lo que dijo.
-- 6–7: responder el precio con honestidad pero seguir con una pregunta cerrada o no seguir la conversación.
+- 6–7: explicar con transparencia que el precio lo presenta el especialista, pero sin empatía o sin seguir la conversación.
 - 5: proponer la cita cuando solo se conoce una parte (su situación, pero no su motivo).
 EXCELENTE (9–10)
 - 9: «Dijiste que este mes vino flojo: ¿qué pasó y cómo te afecta?» (retoma sus palabras y abre el motivo).
-- 9: dar el precio documentado completo y claro, y seguir con una pregunta pertinente a lo que contó.
+- 9: ante una pregunta de precio, reconocer la inquietud, explicar que la propuesta comercial la presenta el especialista y seguir con una pregunta de cualificación pertinente a lo que contó.
 - 10: proponer la cita conectándola con la situación y el motivo que el prospecto ya contó.
 - 9–10: cuando el prospecto ya contó por qué la oferta no le conviene, reconocerlo con respeto, sin insistir y dejando la puerta abierta. Identificar bien que alguien no califica es un acierto, aunque no haya cita.
 
