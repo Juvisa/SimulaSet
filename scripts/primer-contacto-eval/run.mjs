@@ -1,7 +1,7 @@
 // Validación de Inbound — Primer contacto con la IA real (Haiku), en local.
-// La ronda la define matrix.mjs (ROUND). Ronda 5: validación final, con los
-// casos de la ronda 4 más C13 (testimonio como promesa) y C14 (remisión
-// repetida del precio).
+// La ronda la define matrix.mjs (ROUND). Ronda 7: «Urgencia del prospecto»
+// (frases propuestas, aceptadas y descartadas por turno, valor mostrado y la
+// análisis de la última respuesta pendiente al cerrar, igual que el informe).
 //
 // El prospecto y el coaching se ejecutan con el MISMO código de la aplicación
 // (utils/primerContactoTurn.js y primerContactoControl.js: perfil, plan del
@@ -34,13 +34,15 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_OPERATIONS, MODELS } from '../../api/_anthropic/operations.js';
 import {
-  buildPrimerContactoCoachMessage, buildPrimerContactoCoachPrompt, buildPrimerContactoSystemPrompt,
+  PRIMER_CONTACTO_URGENCY_SYSTEM, buildPrimerContactoCoachMessage, buildPrimerContactoCoachPrompt, buildPrimerContactoSystemPrompt,
+  buildPrimerContactoUrgencyMessage,
 } from '../../src/utils/prompts.js';
 import {
   RESISTANCE_RULES, buildPrimerContactoProfilePrompt, buildProjectContext, drawProfileSeeds, isPriceDocumented, pickOpeningMessage,
 } from '../../src/utils/primerContacto.js';
 import {
-  COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS, generatePrimerContactoProfile, runPrimerContactoTurn,
+  COACH_TURN_OPTIONS, PROFILE_OPTIONS, PROSPECT_TURN_OPTIONS, URGENCY_EXTRACTION_OPTIONS, generatePrimerContactoProfile, runPrimerContactoTurn,
+  runPendingUrgency, urgencyOf,
 } from '../../src/utils/primerContactoTurn.js';
 import { citaValidity, createControlState, primerContactoFinalState } from '../../src/utils/primerContactoControl.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
@@ -146,7 +148,9 @@ const mockResponse = async (init) => {
   const system = (body.system || []).map((b) => b.text).join('\n');
   const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content || '';
   let out;
-  if (!system && /perfil PRIVADO/.test(lastUser)) {
+  if (system.startsWith(PRIMER_CONTACTO_URGENCY_SYSTEM)) {
+    out = { urgencia: [] };
+  } else if (!system && /perfil PRIVADO/.test(lastUser)) {
     out = { nombre: 'X', origen: 'Un reel', identidad: 'Profesional ficticio', situacion: 'Situación ficticia', emocion: 'Duda', motivacion: 'Mejorar', objeciones: ['Tiempo'], hechos_ocultos: ['Hecho ficticio oculto'], encaje: 'alto', apertura_inicial: 'Info' };
   } else if (system.includes('Eres un ALUMNO')) {
     out = { mensaje: `Mensaje de prueba ${body.messages.length}. ¿Me cuentas un poco más de tu situación?` };
@@ -229,7 +233,9 @@ const tryExtractJson = (text) => {
 // Adaptador con el contrato de callClaude (lo que la app inyecta en
 // primerContactoTurn): valida operación, modelo y tope igual que el servidor,
 // y reintenta una vez si el JSON no es válido.
-const roleOf = (options, system) => (options.operation === 'simulator_prospect' ? 'perfil' : String(system).includes('Eres coach') ? 'coaching' : 'prospecto');
+const roleOf = (options, system) => (options.operation === 'simulator_prospect' ? 'perfil'
+  : String(system).startsWith(PRIMER_CONTACTO_URGENCY_SYSTEM) ? 'urgencia'
+    : String(system).includes('Eres coach') ? 'coaching' : 'prospecto');
 const appCall = (log, turnLog = []) => async (system, messages, options) => {
   const op = AI_OPERATIONS[options.operation];
   if (!op || !op.models.includes(options.model) || options.maxTokens > op.maxTokens) throw new Error(`Llamada fuera de la lista del servidor: ${JSON.stringify(options)}`);
@@ -237,15 +243,17 @@ const appCall = (log, turnLog = []) => async (system, messages, options) => {
   const first = await callModel(role, options.maxTokens, system, messages);
   log.push({ role, stopReason: first.stopReason, outputTokens: first.usage.output_tokens, ms: first.ms, retry: false });
   turnLog.push({ role, ms: first.ms });
+  // Ronda 7: lo que la IA propuso como urgencia (el código decide qué se acepta).
+  const keep = (value) => { if (role === 'coaching' || role === 'urgencia') turnLog.push({ role, ms: 0, urgenciaPropuesta: value?.urgencia ?? null }); return value; };
   const parsed = tryExtractJson(first.text);
-  if (parsed) return parsed;
+  if (parsed) return keep(parsed);
   const retrySystem = system !== undefined ? `${system}\n${JSON_RETRY_INSTRUCTION}` : JSON_RETRY_INSTRUCTION;
   const second = await callModel(role, options.maxTokens, retrySystem, messages);
   log.push({ role, stopReason: second.stopReason, outputTokens: second.usage.output_tokens, ms: second.ms, retry: true });
   turnLog.push({ role, ms: second.ms });
   const retried = tryExtractJson(second.text);
   if (!retried) throw new Error('Respuesta inválida de la IA');
-  return retried;
+  return keep(retried);
 };
 
 // ─── Alumno simulado (solo para la prueba; no es código de la app) ─────────
@@ -293,7 +301,13 @@ const runConversation = async (c) => {
   let control = createControlState(fullProfile);
   let outcome = 'abierta';
   for (let i = 1; i <= MAX_TURNS; i += 1) {
-    const setterText = await studentTurn(c, result.transcript, log);
+    let setterText;
+    try {
+      setterText = await studentTurn(c, result.transcript, log);
+    } catch (err) {
+      if (isStopError(err)) { result.stopError = err; break; }
+      throw err;
+    }
     const history = [...result.transcript];
     let turn;
     const turnStarted = performance.now();
@@ -303,7 +317,7 @@ const runConversation = async (c) => {
     try {
       turn = await runPrimerContactoTurn({ call: appCall(log, turnLog), project, profile: fullProfile, history, setterText, control });
     } catch (err) {
-      if (isStopError(err)) throw err;
+      if (isStopError(err)) { result.stopError = err; break; }
       result.turns.push({ index: i, setter: setterText, error: err.message });
       break;
     }
@@ -311,10 +325,32 @@ const runConversation = async (c) => {
     control = turn.control;
     const { control: _c, ...shown } = turn;
     result.transcript.push({ role: 'setter', content: setterText }, { role: 'prospect', content: turn.respuesta_prospecto });
-    result.turns.push({ index: i, setter: setterText, ...shown, turnMs: Math.round(performance.now() - turnStarted), prospectMs, prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
+    // Urgencia de este turno: lo que propuso el coaching, lo que aceptó el código y lo que muestra la pantalla.
+    const u = urgencyOf(turn.control);
+    const urgencia = {
+      propuestas: turnLog.filter((l) => l.role === 'coaching' && 'urgenciaPropuesta' in l).at(-1)?.urgenciaPropuesta ?? null,
+      aceptadas: turn.urgencyEvents || [],
+      descartadas: (turn.coachingIssues || []).filter((x) => x.startsWith('urgencia_descartada')),
+      valor: u.valor, maximo: u.maximo, vigente: u.vigente,
+    };
+    result.turns.push({ index: i, setter: setterText, ...shown, urgencia, turnMs: Math.round(performance.now() - turnStarted), prospectMs, prospectWords: words(turn.respuesta_prospecto), askedPrice: ASKS_PRICE.test(history.at(-1)?.content || '') });
     state = turn.estado_lead;
     outcome = turn.desenlace;
     if (isTerminalState('primer_contacto', state)) break;
+  }
+  if (!result.stopError) {
+    const extLog = [];
+    const proposed = () => extLog.filter((l) => 'urgenciaPropuesta' in l).at(-1)?.urgenciaPropuesta ?? null;
+    try {
+      // Cierre (como SimulationReport): el estado de la sesión más la última respuesta pendiente.
+      const full = await runPendingUrgency({ call: appCall(log, extLog), project, history: result.transcript, urgency: urgencyOf(control), invenciones: control.invenciones || [] });
+      result.urgenciaCierre = { ...full, completa: true, propuestas: proposed() };
+    } catch (err) {
+      if (isStopError(err)) result.stopError = err;
+      result.urgenciaCierre = { ...urgencyOf(control), completa: false, error: err.message, propuestas: proposed() };
+    }
+  } else {
+    result.urgenciaCierre = { ...urgencyOf(control), completa: false, error: 'detenido antes de la extracción' };
   }
   result.finalState = state;
   result.finalOutcome = outcome;
@@ -395,6 +431,10 @@ const observe = (r) => {
     ecos_finales: ts.filter((t) => t.echo).length,
     reintentos_por_eco: ts.filter((t) => t.echoRetried).length,
     puntuaciones: scores,
+    probabilidades_cita: ts.map((t) => t.coaching?.probabilidad_cita ?? null),
+    urgencia_por_turno: ts.map((t) => t.urgencia?.valor ?? null),
+    urgencia_cierre: r.urgenciaCierre ? { final: r.urgenciaCierre.valor, maxima: r.urgenciaCierre.maximo, completa: r.urgenciaCierre.completa } : null,
+    urgencia_descartadas: ts.flatMap((t) => (t.urgencia?.descartadas || []).map((d) => `#${t.index}:${d}`)),
     turnos_sin_puntuacion: scores.filter((s) => s === null).length,
     reintentos_por_puntuacion: ts.filter((t) => t.coachingRetried).length,
     mensajes_sugeridos_descartados: ts.filter((t) => (t.coachingIssues || []).some((i) => i.includes('mensaje_alternativo_descartado'))).length,
@@ -439,6 +479,7 @@ const dryRun = () => {
       add(coachSystem.length + buildPrimerContactoCoachMessage([], '').length + transcript, COACH_TURN_OPTIONS.maxTokens, 220, 4);
       transcript += 120;
     }
+    add(PRIMER_CONTACTO_URGENCY_SYSTEM.length + buildPrimerContactoUrgencyMessage([]).length + transcript, URGENCY_EXTRACTION_OPTIONS.maxTokens, 250, 2);
     rows.push({ id: c.id, tipo: c.tipo, combinacion: `${c.temperatura}/${c.resistencia}`, proyecto: c.project, alumno: c.policy, encaje: seeds.encaje + (seeds.incompatibilidad ? ` (${seeds.incompatibilidad})` : ''), apertura: seeds.apertura.texto || '(propia)', aceptables: c.aceptables.join('|') });
   }
   for (const p of profilesOnly) {
@@ -472,8 +513,11 @@ const md = (r) => {
     const p = t.plan || {};
     lines.push(`**Prospecto:** ${t.respuesta_prospecto}  _(desenlace: ${t.desenlace} · estado: ${t.estado_lead} · acepta_cita: ${t.acepta_cita} (modelo: ${t.acepta_cita_modelo}) · revela: ${JSON.stringify(t.revela || [])}${t.cambio_encaje ? ` · cambio_encaje: «${t.cambio_encaje}»` : ''})_`, '');
     if ((t.setterClaims || []).length) lines.push(`> Afirmaciones no documentadas del alumno: ${t.setterClaims.join('; ')}`, '');
+    if (t.urgencia) lines.push(`> Urgencia (pantalla): ${t.urgencia.valor} (máx. ${t.urgencia.maximo}) · aceptadas: ${t.urgencia.aceptadas.map((e) => (e) => '`${e.senal}/${e.postura}${e.ajuste ? ` (${e.ajuste})` : \'\'} «${e.cita}»`').join('; ') || '—'} · descartadas: ${t.urgencia.descartadas.join('; ') || '—'} · propuestas: ${JSON.stringify(t.urgencia.propuestas)}`, '');
     lines.push(`> Plan: precio ${p.precioExactitud ?? '—'} · evasivas ${p.evasivas} · presiones ${p.presiones} · puede aceptar: ${p.puedeAceptar ? 'sí' : `no (${(p.bloqueos || []).join(', ')})`}${p.despedida ? ` · DESPEDIDA por ${p.despedida}` : ''}${t.retried ? ` · reintento [${(t.prospectIssues || []).join('; ')}]` : ''}${t.fallback ? ` · RESPALDO ${t.fallback}` : ''}`, '');
   }
+  const uc = r.urgenciaCierre;
+  if (uc) lines.push(`**Urgencia al cierre** (${uc.completa ? 'extracción completa' : `incompleta: ${uc.error}`}): final ${uc.valor} · máxima ${uc.maximo} · eventos: ${(uc.eventos || []).map((e) => `#${e.mensaje} ${e.senal}/${e.postura}${e.ajuste ? ` (${e.ajuste})` : ''} «${e.cita}»`).join('; ') || '—'} · propuestas: ${JSON.stringify(uc.propuestas ?? null)}`, '');
   lines.push('Observaciones automáticas:', '```json', JSON.stringify(r.observations, null, 2), '```', '');
   return lines.join('\n');
 };
@@ -488,7 +532,9 @@ const main = async () => {
     for (const c of conversations) {
       process.stdout.write(`${c.id} … `);
       const r = await runConversation(c);
-      results.conversaciones.push(r);
+      const { stopError, ...kept } = r;
+      results.conversaciones.push(kept);
+      if (stopError) throw stopError;
       console.log(`${r.finalOutcome || r.error}${r.savedState && r.savedState !== r.finalState ? ` → guarda ${r.savedState}` : ''}${r.observations ? (r.observations.desenlace_aceptable ? ' (aceptable)' : ' (NO aceptable)') : ''} · ${usage.usd.toFixed(4)} USD`);
     }
     for (const p of profilesOnly) {
