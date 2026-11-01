@@ -29,9 +29,11 @@ Editor, uno por uno.
 
 `02_apply.sql` es un único bloque `do $$ … $$`: se aplica entero o nada.
 **Solo se aplica sobre el estado auditado**: si las políticas de `projects` y
-`project_setters` no son exactamente las 9 de la auditoría, aborta sin tocar
+`project_setters` no son exactamente las 9 de la auditoría (nombre, comando,
+tipo, roles, `USING` y `WITH CHECK`, comparados sin espacios), aborta sin tocar
 nada. Bloquea un instante las escrituras sobre las dos tablas, toma una huella
-de los datos, cambia las políticas y comprueba el conjunto resultante, que no
+de los datos, cambia las políticas y comprueba que las 8 resultantes tienen
+exactamente las condiciones esperadas, que no
 quede ninguna política siempre verdadera, que la RLS siga activa y que los
 datos no cambiaron.
 

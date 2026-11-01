@@ -61,4 +61,30 @@ begin
   to authenticated
   using (true)
   with check (true);
+
+  -- Verificación: exactamente las 9 políticas auditadas, con sus condiciones.
+  if exists (
+    with actual(tabla, nombre, comando, tipo, roles, using_expr, check_expr) as (
+      select tablename::text, policyname::text, cmd, permissive, roles::text,
+             regexp_replace(coalesce(qual, ''), '[[:space:]]+', '', 'g'),
+             regexp_replace(coalesce(with_check, ''), '[[:space:]]+', '', 'g')
+      from pg_policies where schemaname = 'public' and tablename in ('projects', 'project_setters')
+    ),
+    auditado(tabla, nombre, comando, tipo, roles, using_expr, check_expr) as (values
+      ('project_setters', 'project_setters_delete_admin', 'DELETE', 'PERMISSIVE', '{authenticated}', 'is_admin()', ''),
+      ('project_setters', 'project_setters_insert_admin', 'INSERT', 'PERMISSIVE', '{authenticated}', '', 'is_admin()'),
+      ('project_setters', 'project_setters_policy', 'ALL', 'PERMISSIVE', '{authenticated}', 'true', 'true'),
+      ('project_setters', 'project_setters_select_own_or_admin', 'SELECT', 'PERMISSIVE', '{authenticated}', '((user_id=auth.uid())ORis_admin())', ''),
+      ('project_setters', 'project_setters_update_admin', 'UPDATE', 'PERMISSIVE', '{authenticated}', 'is_admin()', 'is_admin()'),
+      ('projects', 'projects_delete_assigned_or_admin', 'DELETE', 'PERMISSIVE', '{authenticated}',
+       '(is_admin()OR(EXISTS(SELECT1FROMproject_setterspsWHERE((ps.project_id=projects.id)AND(ps.user_id=auth.uid())AND(ps.active=true)))))', ''),
+      ('projects', 'projects_insert_authenticated', 'INSERT', 'PERMISSIVE', '{authenticated}', '', 'true'),
+      ('projects', 'projects_select_authenticated', 'SELECT', 'PERMISSIVE', '{authenticated}',
+       '((created_by=auth.uid())OR(EXISTS(SELECT1FROMproject_setterspsWHERE((ps.project_id=projects.id)AND(ps.user_id=auth.uid()))))ORtrue)', ''),
+      ('projects', 'projects_update_authenticated', 'UPDATE', 'PERMISSIVE', '{authenticated}', '(created_by=auth.uid())', '(created_by=auth.uid())')
+    )
+    (select * from actual except select * from auditado) union all (select * from auditado except select * from actual)
+  ) then
+    raise exception 'ABORTADO: las políticas restauradas no coinciden con las auditadas';
+  end if;
 end $$;

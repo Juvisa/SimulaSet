@@ -1,36 +1,37 @@
 -- POST · solo lectura. Justo después de 02_apply.sql.
 -- todo_ok debe ser true y huella_datos igual a la de 01_pre.sql.
+-- Compara las condiciones REALES (roles, USING y WITH CHECK, sin espacios),
+-- no solo los nombres. diferencias lista lo que sobre o falte.
 with
-pol as (
-  select tablename, policyname, cmd, qual, with_check
-  from pg_policies
-  where schemaname = 'public' and tablename in ('projects', 'project_setters')
+actual(tabla, nombre, comando, tipo, roles, using_expr, check_expr) as (
+  select tablename::text, policyname::text, cmd, permissive, roles::text,
+         regexp_replace(coalesce(qual, ''), '[[:space:]]+', '', 'g'),
+         regexp_replace(coalesce(with_check, ''), '[[:space:]]+', '', 'g')
+  from pg_policies where schemaname = 'public' and tablename in ('projects', 'project_setters')
 ),
-esperado(tablename, policyname, cmd) as (
-  values ('projects', 'projects_delete_owner_or_admin', 'DELETE'),
-         ('projects', 'projects_insert_owner_or_admin', 'INSERT'),
-         ('projects', 'projects_select_owner_assigned_or_admin', 'SELECT'),
-         ('projects', 'projects_update_owner_or_admin', 'UPDATE'),
-         ('project_setters', 'project_setters_delete_admin', 'DELETE'),
-         ('project_setters', 'project_setters_insert_admin', 'INSERT'),
-         ('project_setters', 'project_setters_select_own_or_admin', 'SELECT'),
-         ('project_setters', 'project_setters_update_admin', 'UPDATE')
+esperado(tabla, nombre, comando, tipo, roles, using_expr, check_expr) as (values
+  ('project_setters', 'project_setters_delete_admin', 'DELETE', 'PERMISSIVE', '{authenticated}', 'is_admin()', ''),
+  ('project_setters', 'project_setters_insert_admin', 'INSERT', 'PERMISSIVE', '{authenticated}', '', 'is_admin()'),
+  ('project_setters', 'project_setters_select_own_or_admin', 'SELECT', 'PERMISSIVE', '{authenticated}', '((user_id=auth.uid())ORis_admin())', ''),
+  ('project_setters', 'project_setters_update_admin', 'UPDATE', 'PERMISSIVE', '{authenticated}', 'is_admin()', 'is_admin()'),
+  ('projects', 'projects_delete_owner_or_admin', 'DELETE', 'PERMISSIVE', '{authenticated}', '((created_by=auth.uid())ORis_admin())', ''),
+  ('projects', 'projects_insert_owner_or_admin', 'INSERT', 'PERMISSIVE', '{authenticated}', '', '((created_by=auth.uid())ORis_admin())'),
+  ('projects', 'projects_select_owner_assigned_or_admin', 'SELECT', 'PERMISSIVE', '{authenticated}',
+   '((created_by=auth.uid())ORis_admin()OR(EXISTS(SELECT1FROMproject_setterspsWHERE((ps.project_id=projects.id)AND(ps.user_id=auth.uid())AND(ps.active=true)))))', ''),
+  ('projects', 'projects_update_owner_or_admin', 'UPDATE', 'PERMISSIVE', '{authenticated}', '((created_by=auth.uid())ORis_admin())', '((created_by=auth.uid())ORis_admin())')
 ),
+dif as ((select 'sobra' as diferencia, * from actual except select 'sobra', * from esperado)
+        union all (select 'falta', * from esperado except select 'falta', * from actual)),
 c as (
   select
-    not exists (select tablename, policyname, cmd from pol except select * from esperado)
-      and not exists (select * from esperado except select tablename, policyname, cmd from pol) as politicas_ok,
-    not exists (select 1 from pol where coalesce(btrim(qual), '') in ('true', '(true)')
-                                     or coalesce(btrim(with_check), '') in ('true', '(true)')
-                                     or rtrim(btrim(coalesce(qual, '')), ')') ~* ' or true$') as sin_siempre_verdaderas,
+    not exists (select 1 from dif) as politicas_exactas,
     (select bool_and(relrowsecurity) from pg_class where oid in ('public.projects'::regclass, 'public.project_setters'::regclass)) as rls_ok
 )
 select json_build_object(
-  'politicas_ok', politicas_ok,
-  'sin_siempre_verdaderas', sin_siempre_verdaderas,
+  'politicas_exactas', politicas_exactas,
   'rls_ok', rls_ok,
-  'todo_ok', politicas_ok and sin_siempre_verdaderas and rls_ok,
-  'politicas', (select json_agg(json_build_object('tabla', tablename, 'nombre', policyname, 'comando', cmd, 'using', qual, 'with_check', with_check) order by tablename, policyname) from pol),
+  'todo_ok', politicas_exactas and rls_ok,
+  'diferencias', (select json_agg(json_build_object('diferencia', diferencia, 'tabla', tabla, 'nombre', nombre, 'using', using_expr, 'with_check', check_expr)) from dif),
   'proyectos', (select count(*) from public.projects),
   'asignaciones', (select count(*) from public.project_setters),
   'huella_datos', md5(

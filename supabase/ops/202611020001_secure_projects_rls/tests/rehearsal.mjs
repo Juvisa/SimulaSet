@@ -285,6 +285,26 @@ for (const editor of [false, true]) {
       const repo = await setup({ defaults, prod: false });
       const e2 = await attempt(() => run(repo.db, ops('02_apply.sql'), editor));
       check(combo, 'estado del repositorio (no el de producción): también ABORTA', /ABORTADO/.test(e2), e2);
+
+      // Mismos nombres y comandos, condiciones distintas: también se detecta.
+      const t = await setup({ defaults });
+      await t.db.exec(`alter policy "projects_update_authenticated" on public.projects using (true)`);
+      const preT = (await t.one(ops('01_pre.sql'))).pre;
+      check(combo, 'condición cambiada (mismo nombre): 01_pre da estado_auditado = false y la señala',
+        preT.estado_auditado === false && JSON.stringify(preT.diferencias).includes('projects_update_authenticated'), JSON.stringify(preT.diferencias));
+      const sigT = (await t.one(POLICIES)).s;
+      const eT = await attempt(() => run(t.db, ops('02_apply.sql'), editor));
+      check(combo, 'condición cambiada (mismo nombre): 02_apply ABORTA sin cambiar nada', /ABORTADO: las políticas actuales no son las auditadas/.test(eT) && (await t.one(POLICIES)).s === sigT, eT);
+      const r2 = await setup({ defaults });
+      await r2.db.exec(`alter policy "project_setters_select_own_or_admin" on public.project_setters to public`);
+      const eR = await attempt(() => run(r2.db, ops('02_apply.sql'), editor));
+      check(combo, 'roles cambiados (mismo nombre y condición): 02_apply ABORTA', /ABORTADO/.test(eR), eR);
+      const after = await setup({ defaults });
+      await run(after.db, ops('02_apply.sql'), editor);
+      await after.db.exec(`alter policy "projects_update_owner_or_admin" on public.projects using (true)`);
+      const postT = (await after.one(ops('03_post.sql'))).post;
+      check(combo, 'condición alterada después de aplicar: 03_post da todo_ok = false y la señala',
+        postT.todo_ok === false && JSON.stringify(postT.diferencias).includes('projects_update_owner_or_admin'), JSON.stringify(postT));
     }
 
     // ── Emergencia nivel 2: reabrir solo la lectura ──
