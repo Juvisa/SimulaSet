@@ -146,6 +146,28 @@ describe('4 · lo copiable nunca trae cifras ni condiciones comerciales', () => 
     expect(mentionsCommercialTerms('', PROJECT)).toBe(false);
   });
 
+  it('condiciones comerciales afirmadas sin cifras se rechazan', () => {
+    for (const t of [
+      'Hay cuotas, así que no te preocupes.',
+      'Ofrecemos financiación para que empieces ya.',
+      'Tenemos descuentos este mes.',
+      'Puedes pagar en mensualidades.',
+      'Se puede pagar en cuotas, ¿te interesa?',
+      'Pago en cuotas disponible.',
+      'Hay cuotas y la especialista te las explica en la llamada.',
+    ]) expect(mentionsCommercialTerms(t, PROJECT), t).toBe(true);
+  });
+
+  it('referencias neutrales al proceso no se bloquean', () => {
+    for (const t of [
+      'El especialista te explicará las condiciones comerciales en la llamada.',
+      'Las opciones de financiación te las detalla la Dra. Ana en la llamada.',
+      'Puedes preguntarle a la especialista por las cuotas cuando hablen.',
+      'La propuesta comercial y la inversión las presenta la especialista. ¿Cómo está tu agenda?',
+      '¿Qué te gustaría resolver primero en tu consultorio?',
+    ]) expect(mentionsCommercialTerms(t, PROJECT), t).toBe(false);
+  });
+
   it('el prompt lo prohíbe aunque esté documentado', () => {
     expect(buildPrimerContactoCoachPrompt(PROJECT)).toContain('"mensaje_alternativo" nunca incluye cifras, rangos ni condiciones comerciales, aunque estén documentados');
   });

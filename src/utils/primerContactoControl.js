@@ -288,11 +288,22 @@ export const answersPrice = (setterText, project, options) => classifyPriceAnswe
 // Cifras de precio o condiciones comerciales en un texto (decisión del
 // 02/11/2026: lo copiable del coaching nunca las incluye, aunque estén
 // documentadas).
-const COMMERCIAL_TERMS = /\b(cuotas?|descuentos?|financ\w+|promocion\w*|becas?|usd|dolares?|pesos|euros?)\b|\$/;
+// Una condición comercial cuenta si se AFIRMA («hay cuotas», «ofrecemos
+// financiación», «puedes pagar en mensualidades») o si aparece suelta; no si
+// solo se remite al especialista («el especialista te explicará las
+// condiciones comerciales», «las cuotas te las detalla la Dra. en la llamada»).
+const CURRENCY = /\b(usd|dolares?|pesos|euros?)\b/;
+const COMMERCIAL_CONDITION = String.raw`(cuotas?|mensualidad(es)?|financ\w*|descuentos?|promocion\w*|becas?|planes de pago|pagos? (a|en) plazos|meses sin intereses)`;
+const CONDITION_TERM = new RegExp(String.raw`\b${COMMERCIAL_CONDITION}\b`);
+const AFFIRMS_CONDITION = new RegExp(String.raw`\b(hay|tenemos|tiene|ofrecemos|ofrece|incluye|incluimos|se puede|se pueden|puedes|podes|podras|permite|aceptamos|damos|manejamos|existe|existen|cuenta con|contamos con)\b(\s+\S+){0,3}\s+${COMMERCIAL_CONDITION}\b|\b${COMMERCIAL_CONDITION}\s+(disponibles?|incluid[oa]s?)\b`);
+const REFERS_TO_SPECIALIST = /\b(especialista|closer|asesora?|equipo|experta?|dra|doctora|llamada)\b/;
+const affirmsCondition = (sentence) => CONDITION_TERM.test(sentence)
+  && (AFFIRMS_CONDITION.test(sentence) || !REFERS_TO_SPECIALIST.test(sentence));
 export const mentionsCommercialTerms = (text, project) => {
   const t = norm(text);
   if (!t) return false;
-  return COMMERCIAL_TERMS.test(t) || priceAmountsIn(text).length > 0 || classifyPriceAnswer(text, project).cifras.length > 0;
+  return /\$/.test(String(text)) || CURRENCY.test(t) || sentencesOf(text).map(norm).some(affirmsCondition)
+    || priceAmountsIn(text).length > 0 || classifyPriceAnswer(text, project).cifras.length > 0;
 };
 
 // ─── Afirmaciones no documentadas del alumno ───────────────────────────────
