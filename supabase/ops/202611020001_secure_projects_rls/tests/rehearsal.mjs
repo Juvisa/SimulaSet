@@ -91,7 +91,11 @@ async function setup({ defaults, prod = true }) {
     insert into public.project_setters (project_id, user_id, role, active) values ('${P1}', '${SETTER}', 'setter', true);
     insert into public.project_value_assets (project_id, user_id, title) values ('${P1}', '${OWNER}', 'Activo de la dueña'), ('${P2}', '${OWNER}', 'Activo del proyecto viejo');
     insert into public.real_leads (setter_id, project_id, project_name, nombre, origen, canal, dolor_principal, nivel_consciencia, temperatura)
-      values ('${OWNER}', '${P1}', 'Agenda Llena', 'Lead de la dueña', 'Inbound', 'WhatsApp', 'Agenda vacía', 'Sabe que tiene el problema', 'Tibio');`);
+      values ('${OWNER}', '${P1}', 'Agenda Llena', 'Lead de la dueña', 'Inbound', 'WhatsApp', 'Agenda vacía', 'Sabe que tiene el problema', 'Tibio'),
+             ('${OTHER}', '${P1}', 'Agenda Llena', 'Lead de la ajena en un proyecto ajeno', 'Outbound', 'Email', 'Ninguno', 'Sabe que tiene el problema', 'Frío');
+    insert into public.simulator_sessions (user_id, project_id, project_name, mode, average_score, scores) values
+      ('${OTHER}', '${P1}', 'Agenda Llena', 'outbound', 70, '[7]'::jsonb),
+      ('${SETTER}', '${P1}', 'Agenda Llena', 'outbound', 60, '[6]'::jsonb);`);
   const as = async (uid, sql, params = []) => {
     try {
       await db.exec('begin');
@@ -116,7 +120,20 @@ const POLICIES = `select string_agg(format('%s|%s|%s|%s|%s', tablename, policyna
   from pg_policies where schemaname = 'public' and tablename in ('projects', 'project_setters')`;
 const counts = async (one) => one(`select (select count(*)::int from public.projects where id = '${P1}') as p1,
   (select count(*)::int from public.project_value_assets where project_id = '${P1}') as activos_p1,
-  (select count(*)::int from public.real_leads where project_id = '${P1}') as leads_p1`);
+  (select count(*)::int from public.real_leads where project_id = '${P1}' and setter_id = '${OWNER}') as leads_p1`);
+
+// Las consultas del frontend DESPLEGADO (src/utils/projects.js de main), con la forma de PostgREST.
+const FRONT = {
+  // getProjects: select … project_setters!inner(user_id, active) con filtros sobre la relación.
+  list: `select p.id from public.projects p
+         join lateral (select ps.user_id, ps.active from public.project_setters ps
+                       where ps.project_id = p.id and ps.user_id = auth.uid() and ps.active = true) s on true
+         order by p.id`,
+  // updateProject: .update(...).eq('id').select(...).single()
+  update: `with s as (update public.projects set promise = 'desde el frontend' where id = $1 returning *) select id from s`,
+  // deleteProject: .delete().eq('id').select('id').maybeSingle() → sin fila = «No tienes permiso…»
+  delete: `with s as (delete from public.projects where id = $1 returning id) select id from s`,
+};
 
 for (const editor of [false, true]) {
   for (const defaults of [false, true]) {
@@ -142,6 +159,32 @@ for (const editor of [false, true]) {
     const { db, as, one } = await setup({ defaults });
     const pre = (await one(ops('01_pre.sql'))).pre;
     check(combo, 'PRE: estado_auditado', pre.estado_auditado === true, JSON.stringify(pre.politicas));
+    check(combo, 'PRE: conteos de impacto (1 setter no propietaria, 0 inactivas, 1 lead y 1 sesión sin acceso)',
+      pre.impacto_setters_no_propietarias === 1 && pre.impacto_asignaciones_inactivas === 0
+      && pre.impacto_leads_sin_acceso_al_proyecto === 1 && pre.impacto_sesiones_sin_acceso_al_proyecto === 1, JSON.stringify(pre));
+
+    // ── COMPATIBILIDAD: aplicar la base ANTES de desplegar el frontend nuevo ──
+    {
+      const roles = { duena: OWNER, setter: SETTER, ajena: OTHER, admin: ADMIN };
+      const before = await setup({ defaults });
+      const listsBefore = {};
+      for (const [k, uid] of Object.entries(roles)) listsBefore[k] = (await before.as(uid, FRONT.list)).rows.map((x) => x.id);
+      const after = await setup({ defaults });
+      await run(after.db, ops('02_apply.sql'), editor);
+      const listsAfter = {};
+      for (const [k, uid] of Object.entries(roles)) listsAfter[k] = (await after.as(uid, FRONT.list)).rows.map((x) => x.id);
+      check(combo, 'frontend desplegado · «Mis Proyectos» muestra lo mismo a cada rol antes y después', JSON.stringify(listsBefore) === JSON.stringify(listsAfter), `${JSON.stringify(listsBefore)} ≠ ${JSON.stringify(listsAfter)}`);
+      let x = await after.as(OWNER, FRONT.update, [P1]);
+      check(combo, 'frontend desplegado · guardar el proyecto (dueña) devuelve la fila', x.rows.length === 1, JSON.stringify(x));
+      x = await after.as(ADMIN, FRONT.update, [P3]);
+      check(combo, 'frontend desplegado · el admin ahora sí puede guardar un proyecto ajeno', x.rows.length === 1, JSON.stringify(x));
+      x = await after.as(SETTER, FRONT.delete, [P1]);
+      check(combo, 'frontend desplegado · «Eliminar» de una setter: sin fila → muestra «No tienes permiso» y no borra nada', x.rows.length === 0 && !x.error && (await counts(after.one)).p1 === 1, JSON.stringify(x));
+      x = await after.as(OWNER, FRONT.delete, [P2]);
+      check(combo, 'frontend desplegado · «Eliminar» de la dueña funciona', x.rows.length === 1, JSON.stringify(x));
+      x = await after.as(OTHER, PGRST_INSERT, [JSON.stringify({ id: '40000000-0000-0000-0000-000000000001', name: 'Nuevo' })]);
+      check(combo, 'frontend desplegado · crear un proyecto (con .select()) funciona', !x.error && x.rows[0]?.n === 1, x.error);
+    }
     const err = await attempt(() => run(db, ops('02_apply.sql'), editor));
     check(combo, '02_apply sin errores', !err, err);
     const post = (await one(ops('03_post.sql'))).post;
@@ -244,6 +287,28 @@ for (const editor of [false, true]) {
       check(combo, 'estado del repositorio (no el de producción): también ABORTA', /ABORTADO/.test(e2), e2);
     }
 
+    // ── Emergencia nivel 2: reabrir solo la lectura ──
+    {
+      const em = await setup({ defaults });
+      const sinCorreccion = await attempt(() => run(em.db, ops('05_emergencia_lectura.sql'), editor));
+      check(combo, 'emergencia · sin la corrección aplicada: ABORTADO', /ABORTADO: la corrección/.test(sinCorreccion), sinCorreccion);
+      await run(em.db, ops('02_apply.sql'), editor);
+      const e5 = await attempt(() => run(em.db, ops('05_emergencia_lectura.sql'), editor));
+      check(combo, 'emergencia · 05 sin errores', !e5, e5);
+      check(combo, 'emergencia · la ajena vuelve a LEER el proyecto de la dueña', (await em.as(OTHER, `select id from public.projects where id = $1`, [P1])).rows.length === 1);
+      const c0 = await counts(em.one);
+      const asg = await em.as(OTHER, `insert into public.project_setters (project_id, user_id) values ($1, $2)`, [P1, OTHER]);
+      const del = await em.as(OTHER, `delete from public.projects where id = $1`, [P1]);
+      const upd = await em.as(OTHER, `update public.projects set name = 'x' where id = $1`, [P1]);
+      const sup = await em.as(OTHER, PGRST_INSERT, [JSON.stringify({ id: '50000000-0000-0000-0000-000000000001', name: 'Suplantado', created_by: OWNER })]);
+      check(combo, 'emergencia · el ataque encadenado sigue bloqueado (asignarse, borrar, editar, suplantar)',
+        /row-level security/.test(asg.error || '') && del.n === 0 && upd.n === 0 && /row-level security/.test(sup.error || '')
+        && JSON.stringify(await counts(em.one)) === JSON.stringify(c0), JSON.stringify({ asg, del, upd, sup }));
+      const e6 = await attempt(() => run(em.db, ops('06_quitar_emergencia.sql'), editor));
+      check(combo, 'emergencia · 06 vuelve al estado seguro (03_post todo_ok, la ajena ya no lee)', !e6 && (await em.one(ops('03_post.sql'))).post.todo_ok === true
+        && (await em.as(OTHER, `select id from public.projects where id = $1`, [P1])).rows.length === 0, e6);
+    }
+
     // ── Rollback ──
     {
       const rb = await setup({ defaults });
@@ -264,7 +329,9 @@ for (const editor of [false, true]) {
 }
 
 check('archivos', '02_apply.sql es una sola sentencia', splitSql(ops('02_apply.sql')).length === 1, splitSql(ops('02_apply.sql')).length);
-check('archivos', '04_rollback.sql es una sola sentencia', splitSql(ops('04_rollback.sql')).length === 1, splitSql(ops('04_rollback.sql')).length);
+for (const f of ['04_rollback.sql', '05_emergencia_lectura.sql', '06_quitar_emergencia.sql']) {
+  check('archivos', `${f} es una sola sentencia`, splitSql(ops(f)).length === 1, splitSql(ops(f)).length);
+}
 // Solo lectura: Postgres rechazaría cualquier escritura dentro de una transacción READ ONLY.
 {
   const ro = await setup({ defaults: false });
