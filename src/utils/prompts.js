@@ -311,6 +311,30 @@ RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
 ${buildPrimerContactoTurnDirective(plan, prospectProfile)}`;
 };
 
+// Urgencia del prospecto: definiciones comunes al coaching de cada turno y al
+// análisis de la última respuesta al cerrar. Los contraejemplos salen de la
+// ronda 7 (01/11/2026), donde Haiku clasificaba como urgencia preguntas,
+// objeciones de precio, preferencias, fracasos pasados y datos del negocio.
+const URGENCY_RULES = `- Es la urgencia auténtica que el PROSPECTO expresa con sus palabras, no la presión del alumno. No influye en la nota ni en la probabilidad de cita.
+- Señales ("senal"). Cada frase cuenta para UNA sola señal (la más específica); no uses la misma frase, ni una parte de ella, para dos señales:
+  · "reconoce_problema": dice que HOY tiene un problema que le afecta («la agenda anda floja este mes», «los meses flojos me preocupan»).
+  · "consecuencias": un efecto que el problema YA le produce, personal, profesional o económico («no llego a cubrir los gastos fijos», «estoy agotada»).
+  · "costo_de_no_actuar": una pérdida o un daño FUTURO que el propio prospecto dice que tendrá si nada cambia o si posterga («si sigo así voy a tener que cerrar un sillón», «cada mes que pasa pierdo pacientes»). Tiene que decirlo él, de forma explícita o inequívoca: no lo deduzcas.
+  · "prioridad_temporal": el plazo o la prioridad que el propio prospecto le da a resolver el problema («necesito resolverlo este mes», «antes de fin de año»); también cuando lo posterga («lo veo en enero», «puede esperar»).
+  · "motivacion": la meta propia por la que quiere resolverlo («quiero abrir un segundo consultorio», «quiero recuperar lo que invertí en equipos»).
+- NO son señales (no las incluyas):
+  · preguntas: «¿cuánto cuesta esto?», «¿qué ofrece exactamente?», «¿esto es diferente?»;
+  · objeciones o dudas sobre el precio o la oferta: «ese precio es alto para mí», «es caro», «¿garantizan resultados?», «no quiero otro curso que no funcione», «depende del precio»;
+  · preferencias o requisitos sobre la solución: «algo que genere pacientes, no solo clicks», «prefiero algo más directo», «máximo 3 horas por semana»;
+  · fracasos o dudas del pasado: «ya probé publicidad y fue dinero perdido», «ya lo intenté con dietas y apps», «no sabía si era culpa mía o de ellos»;
+  · datos o límites del negocio y de su agenda: «tengo consultorio en Lima con 2 sillones», «trabajo 10 horas diarias», «no puedo estar en marketing»;
+  · el proceso de decisión: «lo consulto con mi socio», «déjame pensarlo», «mándame los detalles» (no afirma ni niega urgencia);
+  · aceptar o pedir la llamada, dar días u horarios;
+  · lo que dice o propone el alumno.
+- Postura ("postura"): "afirma" (la expresa), "matiza" (la expresa con reservas o se contradice en el mismo mensaje: «es prioritario, pero pensaba empezar en enero»), "niega" (dice que no es urgente, que puede esperar, que lo posterga o que ya no es prioridad). Nunca marques "afirma" en una frase que niega urgencia.
+- "cita": copia TEXTUAL del mensaje que analizas, el fragmento más corto que expresa la señal; puede ser corta («me urge», «puedo esperar») si el contexto la hace clara. Nunca uses palabras del alumno ni resumas.
+- Si el prospecto relativiza algo pero no se puede saber a qué señal se refiere, o dudas de si es una señal, no lo incluyas. Si el mensaje no expresa ninguna señal, "urgencia" va vacío ([]): es lo normal en muchos mensajes.`;
+
 // Coaching de Primer contacto. Recibe solo lo documentado del proyecto y la
 // conversación hasta el mensaje del alumno: nada del perfil privado.
 export const buildPrimerContactoCoachPrompt = (project) => {
@@ -379,13 +403,8 @@ Si todavía no lo dijo con claridad, va vacío (""). No resumas, no deduzcas y n
 
 AFIRMACIÓN NO DOCUMENTADA ("afirmacion_no_documentada"): si el MENSAJE DEL ALUMNO A EVALUAR afirma una característica, condición o resultado de la oferta que no está documentado, copia esa frase TEXTUAL del alumno; si no, va vacío ("").
 
-URGENCIA DEL PROSPECTO ("urgencia"): analiza SOLO el ÚLTIMO MENSAJE DEL PROSPECTO (te lo indico abajo). Es la urgencia auténtica que el prospecto expresa con sus palabras, no la presión del alumno. No influye en la nota ni en la probabilidad de cita.
-- Señales ("senal"): "reconoce_problema" (reconoce que tiene un problema), "consecuencias" (consecuencias personales, profesionales o económicas), "costo_de_no_actuar" (lo que pierde si sigue igual o posterga), "prioridad_temporal" (plazo o prioridad que él mismo expresa: «esta semana», «antes de fin de mes»), "motivacion" (por qué quiere resolverlo).
-- Postura ("postura"): "afirma" (la expresa), "matiza" (la expresa con reservas o se contradice en el mismo mensaje), "niega" (la niega, la relativiza, cambia de prioridad o dice que puede esperar).
-- "cita": copia TEXTUAL de ese mensaje del prospecto; puede ser corta («me urge», «puedo esperar») si el contexto la hace clara. Nunca uses palabras del alumno ni resumas.
-- Interpreta negaciones y cambios de postura: «no es urgente», «puede esperar a marzo», «ya no es prioridad» niegan; nunca marques "afirma" en una frase que niega urgencia.
-- Si el prospecto relativiza algo pero no se puede saber a qué señal se refiere, no lo incluyas.
-- Que el alumno proponga una cita o hable de urgencia no es una señal. Si el mensaje no expresa ninguna señal, "urgencia" va vacío ([]).
+URGENCIA DEL PROSPECTO ("urgencia"): analiza SOLO el ÚLTIMO MENSAJE DEL PROSPECTO (te lo indico abajo). Los mensajes anteriores ya se analizaron: no copies frases de ellos.
+${URGENCY_RULES}
 
 RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown, en este orden):
 {
@@ -421,22 +440,28 @@ MENSAJE DEL ALUMNO A EVALUAR:
 ${setterText}${priceNote ? `\n\nPRECIO EN ESTE MENSAJE (lo verificó el sistema): ${priceNote}` : ''}`;
 };
 
-// Extracción de la urgencia al cerrar (una llamada por sesión): incluye la
-// última respuesta del prospecto, que ningún coaching de turno llegó a ver.
-// El código verifica cada frase y calcula el valor (prospectUrgency.js).
-export const PRIMER_CONTACTO_URGENCY_SYSTEM = `Analizas una conversación de práctica de appointment setting. No evalúas al alumno: solo identificas la urgencia auténtica que el PROSPECTO expresa con sus palabras.
-- Señales ("senal"): "reconoce_problema" (reconoce que tiene un problema), "consecuencias" (consecuencias personales, profesionales o económicas), "costo_de_no_actuar" (lo que pierde si sigue igual o posterga), "prioridad_temporal" (plazo o prioridad que él mismo expresa), "motivacion" (por qué quiere resolverlo).
-- Postura ("postura"): "afirma" (la expresa), "matiza" (la expresa con reservas o se contradice en el mismo mensaje), "niega" (la niega, la relativiza, cambia de prioridad o dice que puede esperar).
-- "mensaje": el número de un mensaje del PROSPECTO. "cita": copia TEXTUAL de ese mensaje; puede ser corta si el contexto la hace clara. Nunca uses mensajes del alumno ni resumas.
-- Interpreta negaciones y cambios de postura a lo largo de la conversación; nunca marques "afirma" en una frase que niega urgencia.
-- Si el prospecto relativiza algo pero no se puede saber a qué señal se refiere, no lo incluyas.
-- Que el alumno proponga una cita o hable de urgencia no es una señal.
-RESPONDE SOLO EN JSON (sin markdown): {"urgencia": [{"mensaje": 3, "senal": "una de las cinco señales", "postura": "afirma | matiza | niega", "cita": "frase textual"}]}. Si no hay señales: {"urgencia": []}.`;
-export const buildPrimerContactoUrgencyMessage = (visibleMessages) => {
-  const lines = (visibleMessages || [])
-    .filter((m) => m.role === 'prospect' || m.role === 'setter')
-    .map((m, i) => `${i + 1}. ${m.role === 'setter' ? 'Alumno' : 'Prospecto'}: ${m.content}`);
-  return `CONVERSACIÓN COMPLETA (numerada):\n${lines.join('\n') || '(sin mensajes)'}`;
+// Urgencia al cerrar (una llamada por sesión, solo si hace falta): analiza
+// ÚNICAMENTE la última respuesta del prospecto, que ningún coaching de turno
+// llegó a ver. No reinterpreta la conversación: recibe el estado verificado
+// durante la sesión como contexto, y el código suma lo nuevo a ese estado.
+export const PRIMER_CONTACTO_URGENCY_SYSTEM = `Analizas la ÚLTIMA respuesta del prospecto en una conversación de práctica de appointment setting. No evalúas al alumno.
+Los mensajes anteriores ya se analizaron: te los muestro solo como contexto, junto con la urgencia que ya está verificada. No los vuelvas a clasificar. Señala solo lo que ESTA respuesta expresa: una señal nueva o un cambio real de una señal ya registrada (por ejemplo, que posterga algo que antes era urgente).
+${URGENCY_RULES}
+RESPONDE SOLO EN JSON (sin markdown): {"urgencia": [{"senal": "una de las cinco señales", "postura": "afirma | matiza | niega", "cita": "frase textual de la última respuesta"}]}. Si no hay señales: {"urgencia": []}.`;
+// visibleMessages: la conversación visible; index: la respuesta a analizar;
+// vigente: la postura verificada de cada señal hasta ahora.
+export const buildPrimerContactoUrgencyMessage = (visibleMessages, index, vigente = {}) => {
+  const visible = (visibleMessages || []).filter((m) => m.role === 'prospect' || m.role === 'setter');
+  const lines = visible.slice(0, index).map((m) => `${m.role === 'setter' ? 'Alumno' : 'Prospecto'}: ${m.content}`);
+  const state = Object.entries(vigente || {}).map(([senal, e]) => `- ${senal}: ${e.postura} («${e.cita}»)`);
+  return `CONVERSACIÓN ANTERIOR (solo contexto, ya analizada):
+${lines.join('\n') || '(sin mensajes previos)'}
+
+URGENCIA YA VERIFICADA:
+${state.join('\n') || '(ninguna señal todavía)'}
+
+ÚLTIMA RESPUESTA DEL PROSPECTO (analiza solo esta):
+${visible[index]?.content || ''}`;
 };
 
 // Solo para Inbound — Primer contacto (para las demás modalidades el texto del

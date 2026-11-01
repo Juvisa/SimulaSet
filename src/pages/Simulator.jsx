@@ -466,8 +466,9 @@ const Simulator = () => {
       scores,
       finalState: finalState || leadState,
       finalFomo: lastFomo,
-      // Primer contacto: estado de la urgencia de los turnos; el informe lo
-      // completa con la extracción del cierre (o lo usa tal cual si falla).
+      // Primer contacto: estado de la urgencia verificado en los turnos (lo
+      // que mostraba la barra); el informe solo le agrega la última respuesta
+      // del prospecto, que ningún coaching vio (o lo usa tal cual si falla).
       urgency: mode === PRIMER_CONTACTO ? (control?.urgencia || null) : null,
       urgencyControl: mode === PRIMER_CONTACTO ? { invenciones: control?.invenciones || [] } : null,
       messages: finalMessages || messages,

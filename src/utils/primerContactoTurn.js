@@ -14,7 +14,7 @@ import {
   PRIMER_CONTACTO_URGENCY_SYSTEM,
 } from './prompts.js';
 import {
-  applyUrgencyEvents, createUrgencyState, rebuildUrgency, sanitizeUrgencyEvents, verifyUrgencyEvents,
+  applyUrgencyEvents, createUrgencyState, markProcessed, sanitizeUrgencyEvents, verifyUrgencyEvents,
 } from './prospectUrgency.js';
 import {
   drawProfileSeeds,
@@ -41,8 +41,9 @@ export const PROFILE_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 500, o
 export const PROSPECT_TURN_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 300, operation: 'simulator_turn' });
 // 650: el coaching ahora también devuelve las frases de urgencia (antes 550).
 export const COACH_TURN_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 650, operation: 'simulator_turn' });
-// Extracción de la urgencia al cerrar: una sola llamada por sesión.
-export const URGENCY_EXTRACTION_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 600, operation: 'simulator_turn' });
+// Urgencia al cerrar: como mucho una llamada por sesión, solo con la última
+// respuesta del prospecto (en la ronda 7, la conversación entera usó ~276 tokens).
+export const URGENCY_EXTRACTION_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 300, operation: 'simulator_turn' });
 
 const ECHO_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior repetía el mensaje del setter. No lo repitas: responde con tus propias palabras a lo que te dijo.';
 const ACCEPT_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior aceptaba la cita, pero en este turno NO puedes aceptarla (mira la SITUACIÓN DE ESTE TURNO). Responde de nuevo, con naturalidad, sin aceptarla.';
@@ -265,31 +266,39 @@ const pressureBefore = (shown, index, project, control) => {
 
 // Eventos de urgencia del ÚLTIMO mensaje del prospecto que ve el coaching
 // (la respuesta al mensaje anterior del alumno: no rompe la regla C2).
+// `index` es el mensaje analizado: queda marcado como procesado aunque no
+// tenga señales (applyCoachResult), para que el cierre no lo vuelva a mirar.
 const urgencyFromCoach = (raw, history, project, control) => {
   const shown = visible(history);
   const index = shown.map((m) => m.role).lastIndexOf('prospect');
-  if (index < 0) return { accepted: [], rejected: [] };
-  return verifyUrgencyEvents(sanitizeUrgencyEvents(raw?.urgencia), {
-    message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, control),
-  });
+  if (index < 0) return { accepted: [], rejected: [], index: null };
+  return {
+    ...verifyUrgencyEvents(sanitizeUrgencyEvents(raw?.urgencia), {
+      message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, control),
+    }),
+    index,
+  };
 };
 
-// Extracción al cerrar: revisa todos los mensajes del prospecto (incluida la
-// última respuesta) y reconstruye el estado. Lanza si la IA no responde algo
-// utilizable; quien la llama conserva entonces el estado de los turnos.
-export const runUrgencyExtraction = async ({ call, project, history, control }) => {
+// Urgencia al cerrar (decisión del 01/11/2026 tras la ronda 7): el informe
+// conserva el estado verificado durante la sesión y analiza ÚNICAMENTE la
+// última respuesta del prospecto, si ningún coaching la analizó. No
+// reinterpreta la conversación. Si no hay nada pendiente, no llama a la IA.
+// Devuelve el estado de la sesión con lo nuevo agregado y `cierre` (qué
+// mensaje se analizó y qué frases se aceptaron o descartaron, como evidencia).
+// Lanza si la IA no responde algo utilizable; quien la llama conserva el estado.
+export const runPendingUrgency = async ({ call, project, history, urgency, invenciones = [] }) => {
   const shown = visible(history);
-  const raw = await call(PRIMER_CONTACTO_URGENCY_SYSTEM, [{ role: 'user', content: buildPrimerContactoUrgencyMessage(shown) }], URGENCY_EXTRACTION_OPTIONS);
-  if (!raw || !Array.isArray(raw.urgencia)) throw new Error('Extracción de urgencia inválida');
-  const accepted = [];
-  for (const e of sanitizeUrgencyEvents(raw.urgencia)) {
-    const index = (e.mensaje ?? 0) - 1;
-    if (shown[index]?.role !== 'prospect') continue;
-    accepted.push(...verifyUrgencyEvents([e], {
-      message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, control), origen: 'cierre',
-    }).accepted);
-  }
-  return rebuildUrgency(accepted);
+  const state = urgency && Array.isArray(urgency.eventos) ? urgency : createUrgencyState();
+  const index = shown.map((m) => m.role).lastIndexOf('prospect');
+  if (index < 0 || (state.procesados || []).includes(index)) return { ...state, cierre: null };
+  const raw = await call(PRIMER_CONTACTO_URGENCY_SYSTEM, [{ role: 'user', content: buildPrimerContactoUrgencyMessage(shown, index, state.vigente) }], URGENCY_EXTRACTION_OPTIONS);
+  if (!raw || !Array.isArray(raw.urgencia)) throw new Error('Análisis de urgencia inválido');
+  const { accepted, rejected } = verifyUrgencyEvents(sanitizeUrgencyEvents(raw.urgencia), {
+    message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, { invenciones }), origen: 'cierre',
+  });
+  const next = markProcessed(applyUrgencyEvents(state, accepted), index);
+  return { ...next, cierre: { mensaje: index, aceptadas: accepted, descartadas: rejected } };
 };
 
 // Lo que muestra la pantalla: el valor lo calcula el código (no la IA).
@@ -338,7 +347,7 @@ export const runCoachTurn = async ({ call, project, history, setterText, control
   }
   const urgencia = urgencyFromCoach(raw, history, project, control);
   if (urgencia.rejected.length) issues = [...issues, ...urgencia.rejected.map((e) => `urgencia_descartada:${e.motivo}:${e.senal}`)];
-  return { coaching, issues, retried, claims, discovery, invencion, urgencyEvents: urgencia.accepted };
+  return { coaching, issues, retried, claims, discovery, invencion, urgencyEvents: urgencia.accepted, urgencyIndex: urgencia.index };
 };
 
 // Un turno: el coaching arranca primero y el prospecto a la vez; se entregan
@@ -349,8 +358,8 @@ export const runCoachTurn = async ({ call, project, history, setterText, control
 // turno queda sin coaching ni puntuación (y sin descubrimiento confirmado).
 export const startPrimerContactoTurn = ({ call, project, profile, history, setterText, control }) => {
   const coach = runCoachTurn({ call, project, history, setterText, control })
-    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery, invencion: value.invencion, urgencyEvents: value.urgencyEvents || [] }))
-    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {}, invencion: null, urgencyEvents: [] }));
+    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery, invencion: value.invencion, urgencyEvents: value.urgencyEvents || [], urgencyIndex: value.urgencyIndex ?? null }))
+    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {}, invencion: null, urgencyEvents: [], urgencyIndex: null }));
   const prospect = runProspectTurn({ call, project, profile, history, setterText, control, awaitDiscovery: () => coach.then((c) => c.discovery) });
   return { prospect, coach };
 };
@@ -369,11 +378,13 @@ export const runPrimerContactoTurn = async (args) => {
 // Lo que el coaching de un turno agrega al control: el descubrimiento
 // confirmado y la característica inventada que haya verificado. La pantalla
 // lo aplica cuando llega el coaching (Simulator.jsx), antes del turno siguiente.
-// También agrega la urgencia verificada del último mensaje del prospecto.
+// También agrega la urgencia verificada del último mensaje del prospecto y lo
+// marca como analizado (si el coaching falló, queda pendiente).
 export const applyCoachResult = (control, coachResult, turno = control?.turno) => {
   const next = applyCoachInvention(
     applyDiscovery(control, coachResult?.discovery || {}, turno), coachResult?.invencion || null, turno,
   );
   if (!next) return next;
-  return { ...next, urgencia: applyUrgencyEvents(urgencyOf(next), coachResult?.urgencyEvents || []) };
+  const urgencia = applyUrgencyEvents(urgencyOf(next), coachResult?.urgencyEvents || []);
+  return { ...next, urgencia: markProcessed(urgencia, coachResult?.urgencyIndex) };
 };

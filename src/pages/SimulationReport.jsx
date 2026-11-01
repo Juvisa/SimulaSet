@@ -6,8 +6,8 @@ import { getValidSimulationCount } from '../utils/simulatorSessions';
 import { callClaude } from '../utils/anthropic';
 import { buildFinalReportPrompt } from '../utils/prompts';
 import { finalStateLabel } from '../utils/primerContactoControl';
-import { runUrgencyExtraction } from '../utils/primerContactoTurn';
-import { createUrgencyState } from '../utils/prospectUrgency';
+import { runPendingUrgency } from '../utils/primerContactoTurn';
+import { URGENCY_SIGNAL_LABELS, createUrgencyState } from '../utils/prospectUrgency';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import FomoBar from '../components/FomoBar';
@@ -40,15 +40,17 @@ const SimulationReport = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  // Urgencia final de Primer contacto: una extracción con toda la conversación
-  // (incluye la última respuesta del prospecto). Si falla, queda el estado de
-  // los turnos, marcado como incompleto.
+  // Urgencia final de Primer contacto: parte del estado verificado durante la
+  // sesión (lo que mostraba la barra) y analiza solo la última respuesta del
+  // prospecto si ningún coaching la vio. Si falla, queda el estado de la
+  // sesión, marcado como incompleto.
   const finalizeUrgency = async (project) => {
+    const base = session.urgency || createUrgencyState();
     try {
-      const full = await runUrgencyExtraction({ call: callClaude, project, history: session.messages, control: session.urgencyControl });
-      return { ...full, completa: true };
+      const full = await runPendingUrgency({ call: callClaude, project, history: session.messages, urgency: base, invenciones: session.urgencyControl?.invenciones });
+      return { ...full, sesion: base.valor || 0, completa: true };
     } catch {
-      return { ...(session.urgency || createUrgencyState()), completa: false };
+      return { ...base, sesion: base.valor || 0, cierre: null, completa: false };
     }
   };
 
@@ -215,6 +217,16 @@ const SimulationReport = () => {
             <p className="text-xs text-text-secondary mt-3">
               La urgencia final es la que el prospecto mantenía al cerrar la conversación; la máxima es el punto más alto que llegó a expresar.
             </p>
+            {urgency.completa && urgency.valor !== urgency.sesion && (
+              <div className="text-xs text-text-secondary mt-2">
+                <p>Durante la práctica la barra marcaba {urgency.sesion}%. La última respuesta del prospecto la cambió:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {(urgency.cierre?.aceptadas || []).map((e) => (
+                    <li key={`${e.senal}-${e.posicion}`}>{URGENCY_SIGNAL_LABELS[e.senal] || e.senal} ({e.postura}): «{e.cita}»</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {!urgency.completa && (
               <p className="text-xs text-text-secondary mt-1">Calculada sin la última respuesta del prospecto.</p>
             )}

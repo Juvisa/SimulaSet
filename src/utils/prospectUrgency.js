@@ -3,8 +3,9 @@
 // y expresa —su problema, las consecuencias, el costo de seguir postergando,
 // su prioridad temporal y su motivación—, no la presión del setter.
 //
-// La IA (el coaching de cada turno y una extracción al cerrar) señala eventos
-// con la frase del prospecto y su postura; este módulo decide:
+// La IA (el coaching de cada turno y, al cerrar, el análisis de la última
+// respuesta pendiente) señala eventos con la frase del prospecto y su postura;
+// este módulo decide:
 //   - la frase tiene que estar LITERALMENTE en ese mensaje del prospecto (puede
 //     ser corta: «me urge», «esta semana»);
 //   - una frase que niega urgencia nunca suma (guardas de negación);
@@ -23,6 +24,10 @@ export const URGENCY_SIGNALS = Object.freeze({
   motivacion: 15,
 });
 export const URGENCY_POSTURES = Object.freeze({ afirma: 1, matiza: 0.5, niega: 0 });
+export const URGENCY_SIGNAL_LABELS = Object.freeze({
+  reconoce_problema: 'Reconoce el problema', consecuencias: 'Consecuencias', costo_de_no_actuar: 'Costo de no actuar',
+  prioridad_temporal: 'Prioridad temporal', motivacion: 'Motivación',
+});
 
 const normLit = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-z0-9ñ]+/g, ' ').trim();
@@ -88,6 +93,9 @@ export const sanitizeUrgencyEvents = (raw) => (Array.isArray(raw) ? raw : [])
 //   message: el texto del mensaje; index: su posición en la conversación.
 //   afterPressure: el mensaje del setter justo anterior afirmó algo no
 //   documentado (escasez, garantías, promesas…).
+// Una frase cuenta para UNA sola señal: si se superpone con otra ya aceptada
+// del mismo mensaje (aunque sea de otra señal), se descarta (ronda 7, U02:
+// «algunos meses es complicado» sumaba como problema y como consecuencias).
 // Devuelve los aceptados (con la postura ya ajustada) y los descartados con su motivo.
 export const verifyUrgencyEvents = (events, { message, index, afterPressure = false, origen = 'turno' }) => {
   const accepted = [];
@@ -95,6 +103,8 @@ export const verifyUrgencyEvents = (events, { message, index, afterPressure = fa
   for (const e of events) {
     const posicion = literalPosition(e.cita, message);
     if (posicion < 0) { rejected.push({ ...e, motivo: 'no_esta_en_el_mensaje' }); continue; }
+    const candidate = { mensaje: index, posicion, cita: e.cita };
+    if (accepted.some((a) => overlaps(a, candidate))) { rejected.push({ ...e, motivo: 'cita_superpuesta' }); continue; }
     let { postura } = e;
     let ajuste = null;
     const context = withContext(e.cita, message, posicion);
@@ -109,33 +119,53 @@ export const verifyUrgencyEvents = (events, { message, index, afterPressure = fa
   return { accepted, rejected };
 };
 
-export const createUrgencyState = () => ({ eventos: [], vigente: {}, valor: 0, maximo: 0 });
+// procesados: índices de los mensajes del prospecto que ya se analizaron (los
+// vio un coaching que respondió, o el cierre). El informe solo analiza el
+// último mensaje del prospecto si todavía no está aquí.
+export const createUrgencyState = () => ({ eventos: [], vigente: {}, valor: 0, maximo: 0, procesados: [] });
 
 export const urgencyValue = (vigente) => Math.round(Object.entries(vigente || {})
   .reduce((sum, [senal, e]) => sum + (URGENCY_SIGNALS[senal] || 0) * (URGENCY_POSTURES[e?.postura] ?? 0), 0));
 
 const order = (a, b) => (a.mensaje - b.mensaje) || (a.posicion - b.posicion);
 const sameEvent = (a, b) => a.senal === b.senal && a.mensaje === b.mensaje && normLit(a.cita) === normLit(b.cita);
+// Tramo de la frase en el mensaje normalizado (posicion apunta al espacio previo).
+function overlaps(a, b) {
+  if (a.mensaje !== b.mensaje) return false;
+  const end = (e) => e.posicion + normLit(e.cita).length + 1;
+  return a.posicion < end(b) && b.posicion < end(a);
+}
 
 // Agrega eventos verificados y recalcula la postura vigente de cada señal
 // recorriendo la conversación en orden: la última postura gana. El historial
-// nunca se borra; el máximo es el mayor valor que alcanzó en ese recorrido.
+// nunca se borra. El máximo se mide al terminar cada MENSAJE (no tras cada
+// frase: dentro de un mismo mensaje no hay estados intermedios; ronda 7, U02).
+// Una frase que se superpone con otra ya registrada de otra señal no suma.
 export const applyUrgencyEvents = (state, events) => {
   const base = state && Array.isArray(state.eventos) ? state : createUrgencyState();
   const eventos = [...base.eventos];
   for (const e of events || []) {
     const i = eventos.findIndex((x) => sameEvent(x, e));
-    if (i >= 0) eventos[i] = e; else eventos.push(e);
+    if (i >= 0) { eventos[i] = e; continue; }
+    if (eventos.some((x) => x.senal !== e.senal && overlaps(x, e))) continue;
+    eventos.push(e);
   }
   eventos.sort(order);
   const vigente = {};
   let maximo = 0;
-  for (const e of eventos) {
+  eventos.forEach((e, i) => {
     vigente[e.senal] = { postura: e.postura, cita: e.cita, mensaje: e.mensaje };
-    maximo = Math.max(maximo, urgencyValue(vigente));
-  }
-  return { eventos, vigente, valor: urgencyValue(vigente), maximo };
+    if (eventos[i + 1]?.mensaje !== e.mensaje) maximo = Math.max(maximo, urgencyValue(vigente));
+  });
+  return { eventos, vigente, valor: urgencyValue(vigente), maximo, procesados: [...(base.procesados || [])] };
 };
 
-// Estado completo a partir de una lista de eventos (la extracción del cierre).
+// Marca un mensaje del prospecto como analizado.
+export const markProcessed = (state, index) => {
+  const base = state && Array.isArray(state.eventos) ? state : createUrgencyState();
+  if (!Number.isInteger(index) || (base.procesados || []).includes(index)) return base;
+  return { ...base, procesados: [...(base.procesados || []), index].sort((a, b) => a - b) };
+};
+
+// Estado completo a partir de una lista de eventos.
 export const rebuildUrgency = (events) => applyUrgencyEvents(createUrgencyState(), events);
