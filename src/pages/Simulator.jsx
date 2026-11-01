@@ -11,7 +11,7 @@ import {
 } from '../utils/prompts';
 import { getMode, isTerminalState, modeColor as getModeColor } from '../utils/simulatorModes';
 import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
-import { applyCoachResult, startPrimerContactoTurn } from '../utils/primerContactoTurn';
+import { applyCoachResult, coachingWithUrgency, startPrimerContactoTurn, urgencyOf } from '../utils/primerContactoTurn';
 import { OUTCOME_LABELS, createControlState, primerContactoFinalState } from '../utils/primerContactoControl';
 import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
 import FomoBar from '../components/FomoBar';
@@ -113,7 +113,7 @@ const CoachingPanel = ({ coaching, mode, visible, onToggle }) => {
   );
 };
 
-const CoachingContent = ({ coaching, probLabel, prob }) => {
+const CoachingContent = ({ coaching, mode, probLabel, prob }) => {
   if (!coaching) return <div className="p-4 text-text-secondary text-sm text-center">Envía tu primer mensaje para recibir coaching</div>;
   return (
     <div className="p-4 space-y-4">
@@ -173,7 +173,7 @@ const CoachingContent = ({ coaching, probLabel, prob }) => {
       )}
 
       <div className="space-y-3 pt-2">
-        <FomoBar value={coaching.nivel_fomo} label="FOMO generado" />
+        <FomoBar value={coaching.nivel_fomo} label={mode === PRIMER_CONTACTO ? 'Urgencia del prospecto' : 'FOMO generado'} />
         {prob !== undefined && (
           <FomoBar value={prob} label={probLabel} />
         )}
@@ -204,7 +204,7 @@ const InlineCoachingCard = ({ coaching, mode }) => {
           <span className="text-[10px] font-black uppercase tracking-wider text-accent-coral">Coaching de este mensaje</span>
           <ScoreBadge score={coaching.puntuacion_mensaje} />
         </div>
-        <CoachingContent coaching={coaching} probLabel={probLabel} prob={prob} />
+        <CoachingContent coaching={coaching} mode={mode} probLabel={probLabel} prob={prob} />
       </div>
     </div>
   );
@@ -365,13 +365,16 @@ const Simulator = () => {
     // los turnos siguientes y para decidir si la cita es válida.
     const controlAfterCoach = applyCoachResult(response.control, coachResult);
     setControl(controlAfterCoach);
-    const finalProspectMsg = { ...prospectMsg, coaching, coachingPending: false };
+    // La urgencia del prospecto la calcula el código con las frases verificadas
+    // (se muestra como nivel_fomo, «Urgencia del prospecto»).
+    const coachingShown = coachingWithUrgency(coaching, controlAfterCoach);
+    const finalProspectMsg = { ...prospectMsg, coaching: coachingShown, coachingPending: false };
     setMessages(prev => prev.map(m => (m.id === prospectMsg.id ? finalProspectMsg : m)));
-    if (coaching) setLastCoaching(coaching);
+    if (coachingShown) setLastCoaching(coachingShown);
     // Solo se suman puntuaciones válidas (1–10): un turno sin puntuación
     // válida no cuenta, en vez de entrar como 0.
     if (validateScore(coaching?.puntuacion_mensaje) !== null) setScores(prev => [...prev, coaching.puntuacion_mensaje]);
-    setLastFomo(coaching?.nivel_fomo || 0);
+    setLastFomo(urgencyOf(controlAfterCoach).valor);
     // Una cita conseguida con información inventada que el alumno nunca
     // corrigió se guarda como cita_no_valida: queda lo que pasó, pero no
     // cuenta como éxito (ver primerContactoFinalState).
@@ -463,6 +466,10 @@ const Simulator = () => {
       scores,
       finalState: finalState || leadState,
       finalFomo: lastFomo,
+      // Primer contacto: estado de la urgencia de los turnos; el informe lo
+      // completa con la extracción del cierre (o lo usa tal cual si falla).
+      urgency: mode === PRIMER_CONTACTO ? (control?.urgencia || null) : null,
+      urgencyControl: mode === PRIMER_CONTACTO ? { invenciones: control?.invenciones || [] } : null,
       messages: finalMessages || messages,
       prospectProfile,
       createdAt: new Date().toISOString(),

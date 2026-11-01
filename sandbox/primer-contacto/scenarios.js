@@ -44,8 +44,9 @@ export const SCENARIOS = [
     turns: [
       dentalTurns.t0,
       dentalTurns.t1,
-      { setter: '¿Y qué pasa hoy en los meses flojos?', prospect: prospect('Casi no llegan pacientes nuevos y me cuesta cubrir los gastos fijos.', { estado_lead: 'interesado' }), coach: coach(8, 'Profundiza en el costo del problema.', '', { descubrimiento: DISCOVERY_1 }) },
-      { setter: 'Tiene todo el sentido. Para ver cómo llegar a ese segundo consultorio, ¿te parece una llamada corta con la Dra. Ana el jueves?', prospect: prospect('Dale, el jueves me va bien.', { acepta_cita: 'si', estado_lead: 'interesado' }), coach: coach(10, 'Propone la cita conectándola con su motivo.', '', { descubrimiento: DISCOVERY_1 }) },
+      // Urgencia: cada coaching cita el mensaje del prospecto que vio (C2); la barra muestra lo calculado.
+      { setter: '¿Y qué pasa hoy en los meses flojos?', prospect: prospect('Casi no llegan pacientes nuevos y me cuesta cubrir los gastos fijos.', { estado_lead: 'interesado' }), coach: coach(8, 'Profundiza en el costo del problema.', '', { descubrimiento: DISCOVERY_1, urgencia: [{ senal: 'motivacion', postura: 'afirma', cita: 'Quiero abrir un segundo consultorio' }] }) },
+      { setter: 'Tiene todo el sentido. Para ver cómo llegar a ese segundo consultorio, ¿te parece una llamada corta con la Dra. Ana el jueves?', prospect: prospect('Dale, el jueves me va bien.', { acepta_cita: 'si', estado_lead: 'interesado' }), coach: coach(10, 'Propone la cita conectándola con su motivo.', '', { descubrimiento: DISCOVERY_1, urgencia: [{ senal: 'consecuencias', postura: 'afirma', cita: 'me cuesta cubrir los gastos fijos' }] }) },
     ],
   },
   {

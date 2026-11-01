@@ -10,7 +10,12 @@ import {
   buildPrimerContactoCoachMessage,
   buildPrimerContactoCoachPrompt,
   buildPrimerContactoSystemPrompt,
+  buildPrimerContactoUrgencyMessage,
+  PRIMER_CONTACTO_URGENCY_SYSTEM,
 } from './prompts.js';
+import {
+  applyUrgencyEvents, createUrgencyState, rebuildUrgency, sanitizeUrgencyEvents, verifyUrgencyEvents,
+} from './prospectUrgency.js';
 import {
   drawProfileSeeds,
   buildPrimerContactoProfilePrompt,
@@ -34,7 +39,10 @@ import {
 // respuestas llegaron a 450).
 export const PROFILE_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 500, operation: 'simulator_prospect' });
 export const PROSPECT_TURN_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 300, operation: 'simulator_turn' });
-export const COACH_TURN_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 550, operation: 'simulator_turn' });
+// 650: el coaching ahora también devuelve las frases de urgencia (antes 550).
+export const COACH_TURN_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 650, operation: 'simulator_turn' });
+// Extracción de la urgencia al cerrar: una sola llamada por sesión.
+export const URGENCY_EXTRACTION_OPTIONS = Object.freeze({ model: 'haiku', maxTokens: 600, operation: 'simulator_turn' });
 
 const ECHO_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior repetía el mensaje del setter. No lo repitas: responde con tus propias palabras a lo que te dijo.';
 const ACCEPT_RETRY_INSTRUCTION = 'IMPORTANTE: tu respuesta anterior aceptaba la cita, pero en este turno NO puedes aceptarla (mira la SITUACIÓN DE ESTE TURNO). Responde de nuevo, con naturalidad, sin aceptarla.';
@@ -241,13 +249,60 @@ export const priceNoteFor = (setterText, project, priorText) => {
 // cita de «motivo» no puede valer (ronda 5, C02). Solo frases inequívocas.
 const SAYS_NO_MOTIVE = /sin (haber )?(descubierto|conocer|saber|entender) (el |su |por que |por qu[eé] )?(motivo|escrib)|no (descubri[oó]|descubriste|conoce|conoces|sabe|sabes) (el |su )?motivo|falta (descubrir )?(el |su )?motivo/i;
 
+// ─── Urgencia del prospecto ────────────────────────────────────────────────
+// ¿El mensaje del alumno justo anterior al mensaje del prospecto `index`
+// afirmó algo no documentado (cifras, garantías, promesas, escasez…)? Lo que
+// el prospecto responda a eso no cuenta como urgencia auténtica.
+const pressureBefore = (shown, index, project, control) => {
+  const prevIdx = shown.slice(0, index).map((m) => m.role).lastIndexOf('setter');
+  if (prevIdx < 0) return false;
+  const prior = shown.slice(0, prevIdx).map((m) => m.content).join('\n');
+  if (setterClaimsOf(shown[prevIdx].content, project, prior).length) return true;
+  // Características inventadas sin cifras que el coaching de ese turno señaló.
+  const turno = shown.slice(0, prevIdx + 1).filter((m) => m.role === 'setter').length;
+  return (control?.invenciones || []).some((c) => c.turno === turno && /característica no documentada/.test(c.texto));
+};
+
+// Eventos de urgencia del ÚLTIMO mensaje del prospecto que ve el coaching
+// (la respuesta al mensaje anterior del alumno: no rompe la regla C2).
+const urgencyFromCoach = (raw, history, project, control) => {
+  const shown = visible(history);
+  const index = shown.map((m) => m.role).lastIndexOf('prospect');
+  if (index < 0) return { accepted: [], rejected: [] };
+  return verifyUrgencyEvents(sanitizeUrgencyEvents(raw?.urgencia), {
+    message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, control),
+  });
+};
+
+// Extracción al cerrar: revisa todos los mensajes del prospecto (incluida la
+// última respuesta) y reconstruye el estado. Lanza si la IA no responde algo
+// utilizable; quien la llama conserva entonces el estado de los turnos.
+export const runUrgencyExtraction = async ({ call, project, history, control }) => {
+  const shown = visible(history);
+  const raw = await call(PRIMER_CONTACTO_URGENCY_SYSTEM, [{ role: 'user', content: buildPrimerContactoUrgencyMessage(shown) }], URGENCY_EXTRACTION_OPTIONS);
+  if (!raw || !Array.isArray(raw.urgencia)) throw new Error('Extracción de urgencia inválida');
+  const accepted = [];
+  for (const e of sanitizeUrgencyEvents(raw.urgencia)) {
+    const index = (e.mensaje ?? 0) - 1;
+    if (shown[index]?.role !== 'prospect') continue;
+    accepted.push(...verifyUrgencyEvents([e], {
+      message: shown[index].content, index, afterPressure: pressureBefore(shown, index, project, control), origen: 'cierre',
+    }).accepted);
+  }
+  return rebuildUrgency(accepted);
+};
+
+// Lo que muestra la pantalla: el valor lo calcula el código (no la IA).
+export const urgencyOf = (control) => (control?.urgencia || createUrgencyState());
+export const coachingWithUrgency = (coaching, control) => (coaching ? { ...coaching, nivel_fomo: urgencyOf(control).valor } : coaching);
+
 // Coaching: NO recibe el perfil privado ni la respuesta nueva del prospecto
 // (C2 y evaluación con lo que el alumno sabía). Si la puntuación no es un
 // entero de 1 a 10, se pide una vez más; si sigue inválida, el turno queda sin
 // puntuación (no se inventa un número) (C3). Lo copiable no puede afirmar
 // condiciones no documentadas (C1). También devuelve las citas del
 // descubrimiento, verificadas contra los mensajes del prospecto (F1).
-export const runCoachTurn = async ({ call, project, history, setterText }) => {
+export const runCoachTurn = async ({ call, project, history, setterText, control = null }) => {
   const system = buildPrimerContactoCoachPrompt(project);
   const priorText = visible(history).map((m) => m.content).join('\n');
   const messages = [{ role: 'user', content: buildPrimerContactoCoachMessage(visible(history), setterText, priceNoteFor(setterText, project, priorText)) }];
@@ -281,7 +336,9 @@ export const runCoachTurn = async ({ call, project, history, setterText }) => {
     delete discovery.motivo;
     issues = [...issues, 'motivo_descartado:el_coaching_dice_que_falta'];
   }
-  return { coaching, issues, retried, claims, discovery, invencion };
+  const urgencia = urgencyFromCoach(raw, history, project, control);
+  if (urgencia.rejected.length) issues = [...issues, ...urgencia.rejected.map((e) => `urgencia_descartada:${e.motivo}:${e.senal}`)];
+  return { coaching, issues, retried, claims, discovery, invencion, urgencyEvents: urgencia.accepted };
 };
 
 // Un turno: el coaching arranca primero y el prospecto a la vez; se entregan
@@ -291,9 +348,9 @@ export const runCoachTurn = async ({ call, project, history, setterText }) => {
 // que trae el coaching de este turno. `coach` nunca rechaza: si falla, el
 // turno queda sin coaching ni puntuación (y sin descubrimiento confirmado).
 export const startPrimerContactoTurn = ({ call, project, profile, history, setterText, control }) => {
-  const coach = runCoachTurn({ call, project, history, setterText })
-    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery, invencion: value.invencion }))
-    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {}, invencion: null }));
+  const coach = runCoachTurn({ call, project, history, setterText, control })
+    .then((value) => ({ coaching: value.coaching, coachingIssues: value.issues, coachingRetried: value.retried, setterClaims: value.claims, discovery: value.discovery, invencion: value.invencion, urgencyEvents: value.urgencyEvents || [] }))
+    .catch((err) => ({ coaching: null, coachingIssues: [`coaching_error:${err?.message || err}`], coachingRetried: false, setterClaims: [], discovery: {}, invencion: null, urgencyEvents: [] }));
   const prospect = runProspectTurn({ call, project, profile, history, setterText, control, awaitDiscovery: () => coach.then((c) => c.discovery) });
   return { prospect, coach };
 };
@@ -312,6 +369,11 @@ export const runPrimerContactoTurn = async (args) => {
 // Lo que el coaching de un turno agrega al control: el descubrimiento
 // confirmado y la característica inventada que haya verificado. La pantalla
 // lo aplica cuando llega el coaching (Simulator.jsx), antes del turno siguiente.
-export const applyCoachResult = (control, coachResult, turno = control?.turno) => applyCoachInvention(
-  applyDiscovery(control, coachResult?.discovery || {}, turno), coachResult?.invencion || null, turno,
-);
+// También agrega la urgencia verificada del último mensaje del prospecto.
+export const applyCoachResult = (control, coachResult, turno = control?.turno) => {
+  const next = applyCoachInvention(
+    applyDiscovery(control, coachResult?.discovery || {}, turno), coachResult?.invencion || null, turno,
+  );
+  if (!next) return next;
+  return { ...next, urgencia: applyUrgencyEvents(urgencyOf(next), coachResult?.urgencyEvents || []) };
+};

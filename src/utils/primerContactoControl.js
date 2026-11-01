@@ -24,6 +24,7 @@
 // No usa la IA ni la red: todo es determinista y se prueba en
 // primerContactoControl.test.js. Las otras tres modalidades no lo usan.
 import { RESISTANCE_RULES, documentedOfferText, findUndocumentedClaims, isPriceDocumented } from './primerContacto.js';
+import { createUrgencyState } from './prospectUrgency.js';
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-z0-9ñ$%.,¿? ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -373,6 +374,7 @@ export const createControlState = (profile = {}) => {
     citaPendiente: false,   // hubo un «sí, pero antes…» que no se resolvió
     invenciones: [],        // afirmaciones no documentadas del alumno que todavía no corrigió
     cambioEncaje: null,     // explicación verificada del cambio de encaje
+    urgencia: createUrgencyState(), // urgencia del prospecto: historial y postura vigente por señal
     desenlace: 'abierta',
   };
 };
