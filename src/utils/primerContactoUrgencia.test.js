@@ -371,3 +371,26 @@ describe('B · ronda 8 (U01 y U02)', () => {
     expect(u.valor).toBe(0);
   });
 });
+
+describe('validación determinista compartida (coaching y cierre)', () => {
+  const history = [
+    { role: 'prospect', content: 'Info' },
+    { role: 'setter', content: '¿Eso es lo que necesitas resolver antes de cerrar?' },
+    { role: 'prospect', content: 'Exacto, eso es. Antes de cerrar es crítico. Gasté en dos programas que no completé.' },
+  ];
+  const raw = [
+    { senal: 'costo_de_no_actuar', postura: 'afirma', cita: 'Antes de cerrar es crítico' },
+    { senal: 'consecuencias', postura: 'afirma', cita: 'Gasté en dos programas que no completé' },
+  ];
+  it('coaching: U2 pasa a prioridad temporal y F1 se descarta', async () => {
+    const r = await runCoachTurn({ call: fakeCall(COACH(raw)), project: PROJECT, history, setterText: SETTER });
+    expect(r.urgencyEvents.map((e) => [e.senal, e.postura])).toEqual([['prioridad_temporal', 'afirma']]);
+    expect(r.issues).toContain('urgencia_descartada:fracaso_pasado:consecuencias');
+  });
+  it('cierre: la misma corrección', async () => {
+    const u = await runPendingUrgency({ call: pendingCall(raw), project: PROJECT, history, urgency: markProcessed(rebuildUrgency([]), 0) });
+    expect(u.eventos.map((e) => [e.senal, e.postura])).toEqual([['prioridad_temporal', 'afirma']]);
+    expect(u.valor).toBe(25);
+    expect(u.cierre.descartadas.map((e) => e.motivo)).toEqual(['fracaso_pasado']);
+  });
+});

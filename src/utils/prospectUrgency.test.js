@@ -193,14 +193,16 @@ describe('ronda 7 · máximo por mensaje y una frase, una señal', () => {
   };
   const at = (index, events) => verifyUrgencyEvents(events, { message: U02[index], index }).accepted;
 
-  it('U02: el máximo se mide al terminar cada mensaje (antes marcaba 85 cuando el mensaje terminaba en 73)', () => {
+  it('U02: el máximo se mide al terminar cada mensaje, sin el pico intermedio dentro de un mensaje', () => {
     const s = rebuildUrgency([
       ...at(2, [ev('reconoce_problema', 'afirma', 'algunos meses es complicado')]),
       ...at(4, [ev('costo_de_no_actuar', 'afirma', 'necesito resultados rápido'), ev('prioridad_temporal', 'afirma', 'quiero agenda llena antes de eso')]),
-      ...at(8, [ev('consecuencias', 'afirma', 'El consultorio me tiene saturada en lo operativo'), ev('costo_de_no_actuar', 'matiza', 'No sé si habría funcionado igual')]),
+      ...at(8, [ev('consecuencias', 'afirma', 'El consultorio me tiene saturada en lo operativo'), ev('prioridad_temporal', 'matiza', 'No sé si habría funcionado igual')]),
     ]);
-    expect(s.valor).toBe(73);
-    expect(s.maximo).toBe(73);
+    // «necesito resultados rápido» pasa de costo a prioridad (sin pérdida futura). Tras el mensaje 8 queda en 48;
+    // a mitad de ese mensaje llegó a 60, pero ese estado intermedio no cuenta como máximo.
+    expect(s.valor).toBe(48);
+    expect(s.maximo).toBe(48);
   });
 
   it('U02: la misma frase no suma para dos señales («algunos meses es complicado»)', () => {
@@ -242,5 +244,48 @@ describe('ronda 7 · máximo por mensaje y una frase, una señal', () => {
     expect(s.procesados).toEqual([0, 2]);
     expect(markProcessed(s, null)).toBe(s);
     expect(applyUrgencyEvents(s, at(4, [ev('prioridad_temporal', 'afirma', 'quiero agenda llena antes de eso')])).procesados).toEqual([0, 2]);
+  });
+});
+
+// Batería focal (ronda 8): errores sistemáticos de Haiku, corregidos con la misma
+// verificación para el coaching y el cierre.
+describe('validación determinista de señales', () => {
+  it('U2: «Antes de cerrar es crítico» como costo de no actuar pasa a prioridad temporal', () => {
+    const msg = 'Exacto, eso es. Necesito pacientes que realmente lleguen y agenden, no solo tráfico. Antes de cerrar es crítico.';
+    const { accepted } = verify([ev('costo_de_no_actuar', 'afirma', 'Antes de cerrar es crítico.')], msg, 10);
+    expect(accepted[0]).toMatchObject({ senal: 'prioridad_temporal', postura: 'afirma', ajuste: 'costo_de_no_actuar→prioridad_temporal:sin_perdida_futura' });
+  });
+
+  it('F1: «gasté en dos programas que no completé» no suma como consecuencias', () => {
+    const msg = 'Es prioritario, pero honesto: gasté en dos programas que no completé. ¿Cuánto cuesta esto?';
+    const { accepted, rejected } = verify([ev('consecuencias', 'afirma', 'gasté en dos programas que no completé')], msg, 4);
+    expect(accepted).toEqual([]);
+    expect(rejected[0].motivo).toBe('fracaso_pasado');
+  });
+
+  it('costo sin pérdida futura ni plazo se descarta («No puedo estar en marketing»)', () => {
+    const { rejected } = verify([ev('costo_de_no_actuar', 'afirma', 'No puedo estar en marketing')], 'El tiempo, sin duda. No puedo estar en marketing.', 6);
+    expect(rejected[0].motivo).toBe('sin_perdida_futura');
+  });
+
+  it('contraejemplos válidos: pérdidas futuras y consecuencias presentes se mantienen', () => {
+    const keep = [
+      ['costo_de_no_actuar', 'Si sigo así dos meses más voy a tener que cerrar un sillón'],
+      ['costo_de_no_actuar', 'cada mes que pasa pierdo pacientes'],
+      ['costo_de_no_actuar', 'me quedo sin margen para pagar al equipo'],
+      ['consecuencias', 'no llego a cubrir los gastos fijos'],
+      ['consecuencias', 'Gasté en una agencia y ahora no llego a fin de mes'],
+      ['consecuencias', 'Invertí en equipamiento hace 3 meses y la agenda no creció como esperaba'],
+    ];
+    for (const [senal, cita] of keep) {
+      const { accepted } = verify([ev(senal, 'afirma', cita)], `${cita}.`, 2);
+      expect(accepted).toMatchObject([{ senal, postura: 'afirma' }]);
+      expect(accepted[0].ajuste).toBeUndefined();
+    }
+  });
+
+  it('una negación de costo o de consecuencias no se toca', () => {
+    const { accepted } = verify([ev('costo_de_no_actuar', 'niega', 'tampoco pasa nada si espero')], 'Tampoco pasa nada si espero.', 2);
+    expect(accepted[0]).toMatchObject({ senal: 'costo_de_no_actuar', postura: 'niega' });
   });
 });

@@ -77,6 +77,27 @@ const withContext = (quote, message, posicion) => {
   return [...before, normLit(quote)].join(' ');
 };
 
+// Señales que Haiku confunde de forma sistemática (ronda 8 y batería focal):
+// - costo_de_no_actuar exige una pérdida futura o continua («voy a tener que
+//   cerrar», «cada mes pierdo pacientes»). Sin ella, una frase de plazo
+//   («Antes de cerrar es crítico», U2) pasa a prioridad_temporal y el resto
+//   se descarta.
+// - consecuencias no puede ser solo un gasto o fracaso de una solución
+//   anterior («gasté en dos programas que no completé», F1), salvo que la
+//   frase diga también un efecto presente («…y ahora no llego a fin de mes»).
+const FUTURE_LOSS = /\b(voy a|vamos a|va a|tendre que|tendria que|si sigo|si seguimos|si no (hago|hacemos|cambio|resuelvo)|cada (dia|semana|mes|ano)|perder|pierdo|perdiendo|se me va|me quedo sin|nos quedamos sin|no voy a poder|no podre|cerrar el|quebrar)\b/;
+const TIMEFRAME = /\b(antes de|este mes|esta semana|este ano|ya mismo|cuanto antes|lo antes posible|pronto|rapido|urge|urgente|critico|prioritario|prioridad|no puedo (seguir|esperar))\b/;
+const PAST_FAILURE = /\b(gaste|gastaba|gastamos|pague|pagaba|probe|intente|contrate|me cobro|no complete|no termine)\b/;
+const PRESENT_EFFECT = /\b(ahora|hoy|todavia|sigo|sigue|este mes|no llego|no alcanzo|no cubro|me tiene|estoy)\b/;
+function checkSignal(senal, context) {
+  const t = normLit(context);
+  if (senal === 'costo_de_no_actuar' && !FUTURE_LOSS.test(t)) {
+    return TIMEFRAME.test(t) ? { senal: 'prioridad_temporal' } : { motivo: 'sin_perdida_futura' };
+  }
+  if (senal === 'consecuencias' && PAST_FAILURE.test(t) && !PRESENT_EFFECT.test(t)) return { motivo: 'fracaso_pasado' };
+  return { senal };
+}
+
 // Lo que la IA devolvió, limpio: solo señales y posturas conocidas y una frase.
 export const sanitizeUrgencyEvents = (raw) => (Array.isArray(raw) ? raw : [])
   .filter((e) => e && typeof e === 'object')
@@ -113,8 +134,14 @@ export const verifyUrgencyEvents = (events, { message, index, afterPressure = fa
       const next = postura === 'afirma' && mixed ? 'matiza' : 'niega';
       if (next !== postura) { ajuste = `${postura}→${next}:negacion`; postura = next; }
     }
+    let { senal } = e;
+    if (postura !== 'niega') {
+      const checked = checkSignal(senal, context);
+      if (checked.motivo) { rejected.push({ ...e, motivo: checked.motivo }); continue; }
+      if (checked.senal !== senal) { ajuste = `${senal}→${checked.senal}:sin_perdida_futura`; senal = checked.senal; }
+    }
     if (postura !== 'niega' && afterPressure) { rejected.push({ ...e, motivo: 'tras_afirmacion_no_documentada' }); continue; }
-    accepted.push({ senal: e.senal, postura, cita: e.cita, mensaje: index, posicion, origen, ...(ajuste ? { ajuste } : {}) });
+    accepted.push({ senal, postura, cita: e.cita, mensaje: index, posicion, origen, ...(ajuste ? { ajuste } : {}) });
   }
   return { accepted, rejected };
 };

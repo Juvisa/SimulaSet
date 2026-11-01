@@ -1,7 +1,7 @@
 // Validación focalizada de la «Urgencia del prospecto» (Primer contacto):
 // respuestas FIJAS del prospecto, sin perfiles, alumnos ni conversaciones
 // generadas. Haiku solo clasifica la urgencia, con los mismos prompts y el
-// mismo código de la app: el coaching del turno (runCoachTurn) y el cierre
+// mismo código de la app (--only U2,F1 limita los casos): el coaching del turno (runCoachTurn) y el cierre
 // (runPendingUrgency). Casos: aplazamiento, fracaso pasado, urgencia
 // auténtica y condiciones de compra (frases reales de las rondas 7 y 8).
 //
@@ -23,6 +23,7 @@ const arg = (name, def) => { const i = process.argv.indexOf(name); return i >= 0
 const RUN = process.argv.includes('--run');
 const MAX_USD = Number(arg('--max-usd', '0.15'));
 const REPS = Number(arg('--reps', '2'));
+const ONLY = arg('--only', '') ? arg('--only', '').split(',') : null;
 const OUT = resolve(arg('--out', resolve(process.cwd(), '..', 'urgencia-focal-output')));
 const KEY = process.env.SIMULASET_EVAL_ANTHROPIC_KEY || '';
 const PRICE = { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 };
@@ -44,6 +45,7 @@ const CASES = [
   { id: 'K3', tipo: 'condición de compra', project: 'dental', contexto: 'Incluye un acompañamiento de 90 días.', msg: '¿Incluye seguimiento o es solo un curso? ¿Cuánto tiempo me pide?', nunca: [['*']] },
 ];
 
+const SELECTED = CASES.filter((c) => !ONLY || ONLY.includes(c.id));
 const history = (c) => [{ role: 'prospect', content: 'Info' }, { role: 'setter', content: c.contexto }, { role: 'prospect', content: c.msg }];
 const matches = (e, [senal, postura]) => senal === '*' || (e.senal === senal && (!postura || e.postura === postura));
 const judge = (c, events) => {
@@ -95,7 +97,7 @@ const runCase = async (c) => {
 if (!RUN) {
   // Coaching ≈ 4.000 tokens de entrada (la mayoría en caché tras la primera) y ≈ 420 de salida; cierre ≈ 1.900 y ≈ 40.
   const perCase = (400 * PRICE.input + 3600 * PRICE.cacheRead + 420 * PRICE.output) / 1e6 + (1900 * PRICE.input + 40 * PRICE.output) / 1e6;
-  console.log(JSON.stringify({ casos: CASES.length, repeticiones: REPS, llamadas: CASES.length * REPS * 2, costo_estimado_usd: Number((perCase * CASES.length * REPS + 0.01).toFixed(3)), tope_usd: MAX_USD }, null, 2));
+  console.log(JSON.stringify({ casos: SELECTED.length, repeticiones: REPS, llamadas: SELECTED.length * REPS * 2, costo_estimado_usd: Number((perCase * SELECTED.length * REPS + 0.01).toFixed(3)), tope_usd: MAX_USD }, null, 2));
   console.log('Simulación: no se hizo ninguna llamada. Usa --run para ejecutar.');
   process.exit(0);
 }
@@ -105,7 +107,7 @@ const results = [];
 let detenido = null;
 try {
   for (let rep = 1; rep <= REPS; rep += 1) {
-    for (const c of CASES) {
+    for (const c of SELECTED) {
       const r = await runCase(c);
       results.push({ id: c.id, tipo: c.tipo, rep, msg: c.msg, ...r });
       console.log(`${c.id} #${rep} ${c.tipo.padEnd(19)} coaching ${r.coaching.ok ? 'OK ' : 'FALLA'} · cierre ${r.cierre.ok ? 'OK ' : 'FALLA'} · ${usage.usd.toFixed(4)} USD`);
