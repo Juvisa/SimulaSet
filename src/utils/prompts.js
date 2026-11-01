@@ -318,22 +318,22 @@ ${buildPrimerContactoTurnDirective(plan, prospectProfile)}`;
 const URGENCY_RULES = `- Es la urgencia auténtica que el PROSPECTO expresa con sus palabras, no la presión del alumno. No influye en la nota ni en la probabilidad de cita.
 - Señales ("senal"). Cada frase cuenta para UNA sola señal (la más específica); no uses la misma frase, ni una parte de ella, para dos señales:
   · "reconoce_problema": dice que HOY tiene un problema que le afecta («la agenda anda floja este mes», «los meses flojos me preocupan»).
-  · "consecuencias": un efecto que el problema YA le produce, personal, profesional o económico («no llego a cubrir los gastos fijos», «estoy agotada»).
+  · "consecuencias": un efecto que el problema YA le produce, personal, profesional o económico («no llego a cubrir los gastos fijos», «estoy agotada»). Lo que gastó o perdió en soluciones anteriores no es una consecuencia actual del problema.
   · "costo_de_no_actuar": una pérdida o un daño FUTURO que el propio prospecto dice que tendrá si nada cambia o si posterga («si sigo así voy a tener que cerrar un sillón», «cada mes que pasa pierdo pacientes»). Tiene que decirlo él, de forma explícita o inequívoca: no lo deduzcas.
-  · "prioridad_temporal": el plazo o la prioridad que el propio prospecto le da a resolver el problema («necesito resolverlo este mes», «antes de fin de año»); también cuando lo posterga («lo veo en enero», «puede esperar»).
+  · "prioridad_temporal": el plazo o la prioridad que el propio prospecto le da a resolver el problema. Es "afirma" solo si expresa la necesidad real de actuar dentro de ese plazo («necesito resolverlo este mes», «antes de cerrar es crítico»). Una fecha futura o un plan lejano no es urgencia por sí solo: un aplazamiento («enero próximo idealmente», «lo veo el año que viene», «puede esperar») es "niega", o "matiza" si lo dice junto con algo de apuro. «Es crítico antes de X» es prioridad temporal, no costo de no actuar (salvo que diga además una pérdida futura concreta).
   · "motivacion": la meta propia por la que quiere resolverlo («quiero abrir un segundo consultorio», «quiero recuperar lo que invertí en equipos»).
 - NO son señales (no las incluyas):
   · preguntas: «¿cuánto cuesta esto?», «¿qué ofrece exactamente?», «¿esto es diferente?»;
   · objeciones o dudas sobre el precio o la oferta: «ese precio es alto para mí», «es caro», «¿garantizan resultados?», «no quiero otro curso que no funcione», «depende del precio»;
   · preferencias o requisitos sobre la solución: «algo que genere pacientes, no solo clicks», «prefiero algo más directo», «máximo 3 horas por semana»;
-  · fracasos o dudas del pasado: «ya probé publicidad y fue dinero perdido», «ya lo intenté con dietas y apps», «no sabía si era culpa mía o de ellos»;
+  · fracasos, gastos o dudas de soluciones anteriores: «ya probé publicidad y fue dinero perdido», «ya lo intenté con dietas y apps», «gasté en dos programas que no completé», «gasté bastante y al final no vi pacientes nuevos reales», «no sabía si era culpa mía o de ellos»;
   · datos o límites del negocio y de su agenda: «tengo consultorio en Lima con 2 sillones», «trabajo 10 horas diarias», «no puedo estar en marketing»;
-  · el proceso de decisión: «lo consulto con mi socio», «déjame pensarlo», «mándame los detalles» (no afirma ni niega urgencia);
+  · el proceso de decisión y las condiciones para decidir: «lo consulto con mi socio», «déjame pensarlo», «mándame los detalles», «primero necesito saber el rango de precio» (no afirma ni niega urgencia);
   · aceptar o pedir la llamada, dar días u horarios;
   · lo que dice o propone el alumno.
 - Postura ("postura"): "afirma" (la expresa), "matiza" (la expresa con reservas o se contradice en el mismo mensaje: «es prioritario, pero pensaba empezar en enero»), "niega" (dice que no es urgente, que puede esperar, que lo posterga o que ya no es prioridad). Nunca marques "afirma" en una frase que niega urgencia.
 - "cita": copia TEXTUAL del mensaje que analizas, el fragmento más corto que expresa la señal; puede ser corta («me urge», «puedo esperar») si el contexto la hace clara. Nunca uses palabras del alumno ni resumas.
-- Si el prospecto relativiza algo pero no se puede saber a qué señal se refiere, o dudas de si es una señal, no lo incluyas. Si el mensaje no expresa ninguna señal, "urgencia" va vacío ([]): es lo normal en muchos mensajes.`;
+- Si el prospecto relativiza algo pero no se puede saber a qué señal se refiere, o dudas de si es una señal, no lo incluyas. Si el mensaje no expresa ninguna señal, "urgencia" va vacío ([]): es lo normal en muchos mensajes. No busques llenar las cinco señales.`;
 
 // Coaching de Primer contacto. Recibe solo lo documentado del proyecto y la
 // conversación hasta el mensaje del alumno: nada del perfil privado.

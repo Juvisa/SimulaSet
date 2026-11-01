@@ -335,3 +335,39 @@ describe('B · definiciones y contraejemplos (ronda 7)', () => {
     expect(coach).toContain('analiza SOLO el ÚLTIMO MENSAJE DEL PROSPECTO');
   });
 });
+
+// ─── Ronda 8: frases reales que Haiku clasificó mal en U01 y U02 ────────────
+describe('B · ronda 8 (U01 y U02)', () => {
+  const PROMPTS = { coaching: buildPrimerContactoCoachPrompt(PROJECT), cierre: PRIMER_CONTACTO_URGENCY_SYSTEM };
+  for (const [name, prompt] of Object.entries(PROMPTS)) {
+    const priority = prompt.split('"prioridad_temporal":')[1].split('· "motivacion"')[0];
+    const noSignals = prompt.split('NO son señales')[1].split('Postura ("postura")')[0];
+    it(`${name}: un aplazamiento («enero próximo idealmente», U01) es niega o matiza, no afirma`, () => {
+      expect(priority).toContain('Una fecha futura o un plan lejano no es urgencia por sí solo');
+      expect(priority).toMatch(/«enero próximo idealmente»[^.]*\) es "niega", o "matiza"/);
+    });
+    it(`${name}: «antes de cerrar es crítico» (U02) es prioridad temporal, no costo de no actuar`, () => {
+      expect(priority).toContain('«antes de cerrar es crítico»');
+      expect(priority).toContain('«Es crítico antes de X» es prioridad temporal, no costo de no actuar');
+    });
+    it(`${name}: gastos en soluciones anteriores (U01, U02) y condiciones para decidir no son señales`, () => {
+      for (const phrase of ['gasté en dos programas que no completé', 'gasté bastante y al final no vi pacientes nuevos reales', 'primero necesito saber el rango de precio']) {
+        expect(noSignals).toContain(phrase);
+      }
+      expect(prompt).toContain('Lo que gastó o perdió en soluciones anteriores no es una consecuencia actual del problema');
+      expect(prompt).toContain('No busques llenar las cinco señales');
+    });
+  }
+
+  it('U01: si la IA marca el aplazamiento como niega, la urgencia no sube', async () => {
+    const history = [
+      { role: 'prospect', content: 'Es prioritario, pero honesto: gasté en dos programas que no completé.' },
+      { role: 'setter', content: '¿Para cuándo necesitarías empezar a sentir cambios?' },
+      { role: 'prospect', content: 'Enero próximo idealmente. Pero primero necesito saber el rango de precio. ¿Es accesible o no?' },
+    ];
+    const state = markProcessed(rebuildUrgency([at(0, 'prioridad_temporal', 'matiza', 'Es prioritario, pero honesto')]), 0);
+    const u = await runPendingUrgency({ call: pendingCall([{ senal: 'prioridad_temporal', postura: 'niega', cita: 'Enero próximo idealmente' }]), project: PROJECT, history, urgency: state });
+    expect(state.valor).toBe(13);
+    expect(u.valor).toBe(0);
+  });
+});
