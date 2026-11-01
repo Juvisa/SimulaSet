@@ -10,12 +10,9 @@ import {
 } from 'recharts';
 import { Users, BarChart2, Loader2, AlertTriangle, CheckCircle, ChevronUp, ChevronDown, Zap } from 'lucide-react';
 import { KPICard, ProgressBar } from './Analytics';
+import { SIMULATOR_MODES } from '../utils/simulatorModes';
 
-const MODE_META = {
-  outbound: { label: 'Outbound', color: '#2563EB' },
-  inbound: { label: 'Inbound', color: '#1D9E75' },
-  reactivacion: { label: 'Reactivación', color: '#DC2626' },
-};
+const MODE_META = Object.fromEntries(SIMULATOR_MODES.map((m) => [m.id, { label: m.label, color: m.color }]));
 
 const formatRelativeDate = (isoString) => {
   if (!isoString) return 'Sin actividad';

@@ -1,0 +1,3 @@
+Carpeta vacía a propósito: el preview local de Primer contacto lee las
+variables de entorno desde aquí, así que no carga ninguna (.env de la raíz
+incluido). No agregues archivos .env en esta carpeta.

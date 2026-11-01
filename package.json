@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "check:bundle": "node scripts/check-bundle-env.mjs --simulate"
+    "check:bundle": "node scripts/check-bundle-env.mjs --simulate",
+    "sandbox:primer-contacto": "vite --config sandbox/vite.config.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

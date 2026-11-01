@@ -8,6 +8,7 @@ import { buildAnalyzerPrompt } from '../utils/prompts';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import { BarChart2, Upload, FileText, Loader2, Copy, Check, AlertTriangle, CheckCircle, Target, Lightbulb } from 'lucide-react';
+import { SELECTOR_MODE_IDS, getMode } from '../utils/simulatorModes';
 
 const SELECT = "w-full bg-bg-input border border-border-subtle rounded-xl px-4 py-3 text-text-primary text-sm focus:border-accent-coral transition-colors";
 const LABEL = "block text-sm font-medium text-text-secondary mb-1.5";
@@ -174,11 +175,11 @@ const Analyzer = () => {
               </div>
               <div>
                 <label className={LABEL}>Modo de la conversación</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['outbound', 'inbound', 'reactivacion'].map(m => (
+                <div className="grid grid-cols-2 gap-3">
+                  {SELECTOR_MODE_IDS.map(m => (
                     <button key={m} type="button" onClick={() => setF('mode', m)}
                       className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${form.mode === m ? 'bg-accent-coral border-accent-coral text-white' : 'bg-bg-input border-border-subtle text-text-secondary hover:text-text-primary'}`}>
-                      {m === 'outbound' ? '🔵 Outbound' : m === 'inbound' ? '🟢 Inbound' : '🔴 Reactivación'}
+                      {`${getMode(m).emoji} ${getMode(m).label}`}
                     </button>
                   ))}
                 </div>

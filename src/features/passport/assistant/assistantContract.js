@@ -24,6 +24,7 @@ import {
   normalizeTags,
   passportFromRow,
 } from '../passportModel.js';
+import { modeLabel } from '../../../utils/simulatorModes.js';
 
 export const ASSISTANT_LIMITS = {
   bodyBytes: 8192,
@@ -59,7 +60,6 @@ const STRENGTH_VALUES = new Set(STRENGTH_OPTIONS.map(o => o.value));
 const ROLE_VALUES = new Set(PREFERRED_ROLE_OPTIONS.map(o => o.value));
 const TONE_VALUES = new Set(TONE_OPTIONS.map(o => o.value));
 const SETTER_KINDS = new Set(['setter', 'closer']);
-const MODE_LABELS = { outbound: 'Outbound', inbound: 'Inbound', reactivacion: 'Reactivación' };
 
 const isPlainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 // Sin caracteres de control (intencional: se eliminan) y con espacios normalizados.
@@ -205,7 +205,7 @@ export const buildAssistantFacts = ({ passportRow, onboarding, commercialProfile
       simulaciones_validas: evidence.validSimulations,
       nivel_de_practica: evidence.practiceLevel.name,
       cumple_minimo_de_practica: evidence.practiceMinimum.met,
-      modos_practicados: evidence.byMode.filter(m => m.simulations > 0).map(m => MODE_LABELS[m.mode] || m.mode),
+      modos_practicados: evidence.byMode.filter(m => m.simulations > 0).map(m => modeLabel(m.mode)),
     },
     verificado: { credenciales: [] },
   };

@@ -1,0 +1,921 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`analítica y SET Passport con historial de las modalidades existentes (sin cambios) > evidencia del SET Passport 1`] = `
+{
+  "byMode": [
+    {
+      "mode": "outbound",
+      "simulations": 2,
+    },
+    {
+      "mode": "inbound",
+      "simulations": 2,
+    },
+    {
+      "mode": "reactivacion",
+      "simulations": 2,
+    },
+  ],
+  "practiceLevel": {
+    "color": "#2563EB",
+    "icon": "🔄",
+    "id": "en_practica",
+    "minSimulations": 5,
+    "name": "En práctica",
+    "rank": 2,
+  },
+  "practiceMinimum": {
+    "label": "En entrenamiento",
+    "met": false,
+    "remaining": 13,
+    "required": 20,
+    "validSimulations": 7,
+  },
+  "progress": {
+    "label": "Entrenado: 7/10 simulaciones válidas",
+    "next": {
+      "color": "#C9920A",
+      "icon": "⚡",
+      "id": "entrenado",
+      "minSimulations": 10,
+      "name": "Entrenado",
+      "rank": 3,
+    },
+    "percent": 40,
+    "simulationsToGo": 3,
+  },
+  "setScore": 68,
+  "validSimulations": 7,
+}
+`;
+
+exports[`analítica y SET Passport con historial de las modalidades existentes (sin cambios) > hechos del asistente del Passport 1`] = `
+{
+  "banda_de_practica": "en_entrenamiento",
+  "cumple_minimo_de_practica": false,
+  "modos_practicados": [
+    "Outbound",
+    "Inbound",
+    "Reactivación",
+  ],
+  "nivel_de_practica": "En práctica",
+  "que_es": "Práctica en el simulador de conversaciones de venta de Digital SET. NO es experiencia laboral.",
+  "simulaciones_validas": 7,
+}
+`;
+
+exports[`analítica y SET Passport con historial de las modalidades existentes (sin cambios) > métricas de administración 1`] = `
+{
+  "actividad_barras": [
+    {
+      "fecha": "10-07",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-08",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-09",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-10",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-11",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-12",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-13",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-14",
+      "sesiones": 0,
+    },
+    {
+      "fecha": "10-15",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-16",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-17",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-18",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-19",
+      "sesiones": 1,
+    },
+    {
+      "fecha": "10-20",
+      "sesiones": 0,
+    },
+  ],
+  "bajo_rendimiento": [],
+  "distribucion_niveles": {
+    "Avanzado": 0,
+    "Dominio de práctica": 0,
+    "En inicio": 2,
+    "En práctica": 0,
+    "Entrenado": 0,
+    "Intensivo": 0,
+  },
+  "minimo_practica_cumplido": [],
+  "por_modo_global": [
+    {
+      "mode": "outbound",
+      "pct": 38,
+      "sesiones": 3,
+    },
+    {
+      "mode": "inbound",
+      "pct": 25,
+      "sesiones": 2,
+    },
+    {
+      "mode": "reactivacion",
+      "pct": 25,
+      "sesiones": 2,
+    },
+  ],
+  "ranking": [
+    {
+      "allSessions": [
+        {
+          "averageScore": 80,
+          "createdAt": "2026-10-18T12:00:00.000Z",
+          "finalState": "confirmado_con_entusiasmo",
+          "mode": "inbound",
+          "scores": [
+            8,
+            9,
+            7,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 50,
+          "createdAt": "2026-10-17T12:00:00.000Z",
+          "finalState": "cerrado",
+          "mode": "outbound",
+          "scores": [
+            5,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 45,
+          "createdAt": "2026-10-15T12:00:00.000Z",
+          "finalState": "resistente",
+          "mode": "reactivacion",
+          "scores": [
+            4,
+            5,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 60,
+          "createdAt": "2026-09-30T12:00:00.000Z",
+          "finalState": null,
+          "mode": null,
+          "scores": [
+            6,
+          ],
+          "userId": "u1",
+        },
+      ],
+      "id": "u1",
+      "lastActivity": "2026-10-18T12:00:00.000Z",
+      "metricas": {
+        "simulador": {
+          "mejor_sesion": 80,
+          "modo_mas_debil": "reactivacion",
+          "modo_mas_fuerte": "inbound",
+          "por_modo": {
+            "inbound": {
+              "promedio": 80,
+              "sesiones": 1,
+              "tasaExito": 100,
+            },
+            "outbound": {
+              "promedio": 50,
+              "sesiones": 1,
+              "tasaExito": 0,
+            },
+            "reactivacion": {
+              "promedio": 45,
+              "sesiones": 1,
+              "tasaExito": 0,
+            },
+          },
+          "promedio_ultimas_7_dias": 58,
+          "sesiones_esta_semana": 2,
+          "sesiones_totales": 4,
+          "tendencia": 20,
+        },
+      },
+      "modoFavorito": "outbound",
+      "name": "Uno",
+      "practiceLevel": {
+        "color": "#9A9A9A",
+        "icon": "🌱",
+        "id": "en_inicio",
+        "minSimulations": 0,
+        "name": "En inicio",
+        "rank": 1,
+      },
+      "practiceMinimum": {
+        "label": "En entrenamiento",
+        "met": false,
+        "remaining": 16,
+        "required": 20,
+        "validSimulations": 4,
+      },
+      "set_score": 70,
+      "startedSessionCount": 4,
+      "validSessions": [
+        {
+          "averageScore": 80,
+          "createdAt": "2026-10-18T12:00:00.000Z",
+          "finalState": "confirmado_con_entusiasmo",
+          "mode": "inbound",
+          "scores": [
+            8,
+            9,
+            7,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 50,
+          "createdAt": "2026-10-17T12:00:00.000Z",
+          "finalState": "cerrado",
+          "mode": "outbound",
+          "scores": [
+            5,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 45,
+          "createdAt": "2026-10-15T12:00:00.000Z",
+          "finalState": "resistente",
+          "mode": "reactivacion",
+          "scores": [
+            4,
+            5,
+          ],
+          "userId": "u1",
+        },
+        {
+          "averageScore": 60,
+          "createdAt": "2026-09-30T12:00:00.000Z",
+          "finalState": null,
+          "mode": null,
+          "scores": [
+            6,
+          ],
+          "userId": "u1",
+        },
+      ],
+      "validSimulations": 4,
+    },
+    {
+      "allSessions": [
+        {
+          "averageScore": 75,
+          "createdAt": "2026-10-19T12:00:00.000Z",
+          "finalState": "pidio_llamada",
+          "mode": "outbound",
+          "scores": [
+            7,
+            8,
+          ],
+          "userId": "u2",
+        },
+        {
+          "averageScore": 0,
+          "createdAt": "2026-10-16T12:00:00.000Z",
+          "finalState": null,
+          "mode": "outbound",
+          "scores": [],
+          "userId": "u2",
+        },
+        {
+          "averageScore": 60,
+          "createdAt": "2026-10-11T12:00:00.000Z",
+          "finalState": "sin_compromiso",
+          "mode": "inbound",
+          "scores": [
+            6,
+          ],
+          "userId": "u2",
+        },
+        {
+          "averageScore": 70,
+          "createdAt": "2026-10-08T12:00:00.000Z",
+          "finalState": "quiere_reagendar",
+          "mode": "reactivacion",
+          "scores": [
+            7,
+          ],
+          "userId": "u2",
+        },
+      ],
+      "id": "u2",
+      "lastActivity": "2026-10-19T12:00:00.000Z",
+      "metricas": {
+        "simulador": {
+          "mejor_sesion": 75,
+          "modo_mas_debil": "inbound",
+          "modo_mas_fuerte": "outbound",
+          "por_modo": {
+            "inbound": {
+              "promedio": 60,
+              "sesiones": 1,
+              "tasaExito": 0,
+            },
+            "outbound": {
+              "promedio": 75,
+              "sesiones": 1,
+              "tasaExito": 100,
+            },
+            "reactivacion": {
+              "promedio": 70,
+              "sesiones": 1,
+              "tasaExito": 100,
+            },
+          },
+          "promedio_ultimas_7_dias": 75,
+          "sesiones_esta_semana": 1,
+          "sesiones_totales": 3,
+          "tendencia": 15,
+        },
+      },
+      "modoFavorito": "outbound",
+      "name": "Dos",
+      "practiceLevel": {
+        "color": "#9A9A9A",
+        "icon": "🌱",
+        "id": "en_inicio",
+        "minSimulations": 0,
+        "name": "En inicio",
+        "rank": 1,
+      },
+      "practiceMinimum": {
+        "label": "En entrenamiento",
+        "met": false,
+        "remaining": 17,
+        "required": 20,
+        "validSimulations": 3,
+      },
+      "set_score": 60,
+      "startedSessionCount": 4,
+      "validSessions": [
+        {
+          "averageScore": 75,
+          "createdAt": "2026-10-19T12:00:00.000Z",
+          "finalState": "pidio_llamada",
+          "mode": "outbound",
+          "scores": [
+            7,
+            8,
+          ],
+          "userId": "u2",
+        },
+        {
+          "averageScore": 60,
+          "createdAt": "2026-10-11T12:00:00.000Z",
+          "finalState": "sin_compromiso",
+          "mode": "inbound",
+          "scores": [
+            6,
+          ],
+          "userId": "u2",
+        },
+        {
+          "averageScore": 70,
+          "createdAt": "2026-10-08T12:00:00.000Z",
+          "finalState": "quiere_reagendar",
+          "mode": "reactivacion",
+          "scores": [
+            7,
+          ],
+          "userId": "u2",
+        },
+      ],
+      "validSimulations": 3,
+    },
+  ],
+  "set_score_promedio_cohorte": 65,
+  "setters_activos": 2,
+  "simulaciones_esta_semana": 3,
+  "simulaciones_total": 7,
+  "sin_actividad_7_dias": [],
+  "total_setters": 2,
+}
+`;
+
+exports[`analítica y SET Passport con historial de las modalidades existentes (sin cambios) > métricas del setter 1`] = `
+{
+  "actividad": {
+    "estado": "con_practica",
+    "sesionesIniciadas": 8,
+  },
+  "curva": [
+    {
+      "promedio": 60,
+      "semana": "2026-W39",
+    },
+    {
+      "promedio": 70,
+      "semana": "2026-W40",
+    },
+    {
+      "promedio": 53,
+      "semana": "2026-W41",
+    },
+    {
+      "promedio": 68,
+      "semana": "2026-W42",
+    },
+  ],
+  "leadsReales": null,
+  "practica": {
+    "label": "En entrenamiento",
+    "met": false,
+    "remaining": 13,
+    "required": 20,
+    "validSimulations": 7,
+  },
+  "setScore": 68,
+  "simulador": {
+    "mejor_sesion": 80,
+    "modo_mas_debil": "reactivacion",
+    "modo_mas_fuerte": "inbound",
+    "por_modo": {
+      "inbound": {
+        "promedio": 70,
+        "sesiones": 2,
+        "tasaExito": 50,
+      },
+      "outbound": {
+        "promedio": 63,
+        "sesiones": 2,
+        "tasaExito": 50,
+      },
+      "reactivacion": {
+        "promedio": 58,
+        "sesiones": 2,
+        "tasaExito": 50,
+      },
+    },
+    "promedio_ultimas_7_dias": 63,
+    "sesiones_esta_semana": 3,
+    "sesiones_totales": 7,
+    "tendencia": 15,
+  },
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · inbound 1`] = `
+{
+  "maxTokens": 500,
+  "messages": [
+    {
+      "content": "
+Genera un perfil realista de prospecto para una simulación de ventas.
+
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+PROMESA: Llenar la agenda sin depender de referidos en 90 días
+AVATAR: Odontólogo independiente de 30 a 50 años
+MODO: inbound
+TEMPERATURA: frio
+CANAL: WhatsApp
+RESISTENCIA: alta
+
+RESPONDE EN JSON (sin markdown):
+{
+  "nombre": "nombre completo ficticio",
+  "tipNegocio": "tipo específico de negocio o perfil",
+  "dolor": "dolor principal específico y concreto",
+  "objecion_probable": "objeción más probable en este modo",
+  "nivel_consciencia": "bajo | medio | alto",
+  "apertura_inicial": "primer mensaje del prospecto o contexto de apertura"
+}
+",
+      "role": "user",
+    },
+  ],
+  "model": "haiku",
+  "operation": "simulator_prospect",
+  "systemPrompt": undefined,
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · inbound 2`] = `
+{
+  "canal": "WhatsApp",
+  "dolor": "Z",
+  "nombre": "X",
+  "resistencia": "alta",
+  "temperatura": "frio",
+  "tipNegocio": "Y",
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · outbound 1`] = `
+{
+  "maxTokens": 500,
+  "messages": [
+    {
+      "content": "
+Genera un perfil realista de prospecto para una simulación de ventas.
+
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+PROMESA: Llenar la agenda sin depender de referidos en 90 días
+AVATAR: Odontólogo independiente de 30 a 50 años
+MODO: outbound
+TEMPERATURA: frio
+CANAL: WhatsApp
+RESISTENCIA: alta
+
+RESPONDE EN JSON (sin markdown):
+{
+  "nombre": "nombre completo ficticio",
+  "tipNegocio": "tipo específico de negocio o perfil",
+  "dolor": "dolor principal específico y concreto",
+  "objecion_probable": "objeción más probable en este modo",
+  "nivel_consciencia": "bajo | medio | alto",
+  "apertura_inicial": "primer mensaje del prospecto o contexto de apertura"
+}
+",
+      "role": "user",
+    },
+  ],
+  "model": "haiku",
+  "operation": "simulator_prospect",
+  "systemPrompt": undefined,
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · outbound 2`] = `
+{
+  "canal": "WhatsApp",
+  "dolor": "Z",
+  "nombre": "X",
+  "resistencia": "alta",
+  "temperatura": "frio",
+  "tipNegocio": "Y",
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · reactivacion 1`] = `
+{
+  "maxTokens": 500,
+  "messages": [
+    {
+      "content": "
+Genera un perfil realista de prospecto para una simulación de ventas.
+
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+PROMESA: Llenar la agenda sin depender de referidos en 90 días
+AVATAR: Odontólogo independiente de 30 a 50 años
+MODO: reactivacion
+TEMPERATURA: frio
+CANAL: WhatsApp
+RESISTENCIA: alta
+
+RESPONDE EN JSON (sin markdown):
+{
+  "nombre": "nombre completo ficticio",
+  "tipNegocio": "tipo específico de negocio o perfil",
+  "dolor": "dolor principal específico y concreto",
+  "objecion_probable": "objeción más probable en este modo",
+  "nivel_consciencia": "bajo | medio | alto",
+  "apertura_inicial": "primer mensaje del prospecto o contexto de apertura"
+}
+",
+      "role": "user",
+    },
+  ],
+  "model": "haiku",
+  "operation": "simulator_prospect",
+  "systemPrompt": undefined,
+}
+`;
+
+exports[`prompt del perfil del prospecto en las modalidades existentes (sin cambios) > perfil · reactivacion 2`] = `
+{
+  "canal": "WhatsApp",
+  "dolor": "Z",
+  "nombre": "X",
+  "resistencia": "alta",
+  "temperatura": "frio",
+  "tipNegocio": "Y",
+}
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > Inbound — Call Confirmer 1`] = `
+"
+Eres un experto en ventas consultivas de alto ticket y psicología del comportamiento.
+Tu rol en esta sesión es DUAL:
+1. Actuar como el prospecto "Valeria Ríos" — inbound, ya agendó una llamada
+2. Evaluar en tiempo real cada mensaje del setter y proveer coaching
+
+CONTEXTO DEL PROYECTO:
+- Experto: Dra. Ana Torres
+- Nicho: Odontólogos con consultorio propio
+- Promesa: Llenar la agenda sin depender de referidos en 90 días
+- Precio aproximado: 1.800 USD o 3 cuotas de 650 USD
+- Avatar del cliente ideal: Odontólogo independiente de 30 a 50 años
+- Resultados y testimonios: [{"nombre":"Dr. Luis","resultado":"+40 pacientes nuevos en 3 meses"}]
+BIBLIOTECA DE RECURSOS DISPONIBLES:
+Guías/PDFs:
+  • Guía de retención: 5 pasos (usar en: antes de la llamada)
+Videos testimonios:
+  • Caso Luis (dental): +40 pacientes en 3 meses
+VSL:   Clase Agenda Llena
+Script outbound base: Hola, vi tu consultorio…
+Script inbound base: Hola, vi que agendaste…
+Script reactivación base: Hola, ¿cómo vas?
+
+PERFIL DEL PROSPECTO:
+- Nombre: Valeria Ríos
+- Tipo de negocio: Consultorio dental
+- Dolor principal: Agenda al 60 %
+- Temperatura: Tibio — agendó pero sin convicción fuerte
+- Canal: WhatsApp
+- Resistencia: media
+
+CONTEXTO: El prospecto agendó una llamada por un ad. Si nadie lo trabaja antes, hay alta probabilidad de no-show.
+
+MÉTODO S.E.T. EN MODO INBOUND:
+- S: Conecta desde su mundo actual, haz que se sienta entendido
+- E: Activa el costo de su problema ANTES de la llamada
+- T: Confirma el compromiso con la cita, entrega el recurso correcto
+
+COMPORTAMIENTO:
+- Responde porque agendó, pero sin entusiasmo inicial
+- Si el setter solo manda recordatorios: di "ok, ahí estaré" sin compromiso real
+- Si el setter activa tu dolor: te interesas más en la llamada
+- Si el setter entrega un recurso útil: lo agradeces y subes el nivel de compromiso
+- Objeciones posibles: "se me complicó la agenda", "qué vamos a ver en la llamada", "tengo poco tiempo"
+
+RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "respuesta_prospecto": "mensaje del prospecto",
+  "coaching": {
+    "puntuacion_mensaje": 7,
+    "etapa_set": "S",
+    "que_hizo_bien": "texto concreto",
+    "que_mejorar": "texto concreto",
+    "mensaje_alternativo": "mensaje listo para copiar",
+    "recurso_sugerido": "",
+    "nivel_fomo": 30,
+    "probabilidad_asistencia": 50,
+    "alerta": ""
+  },
+  "estado_lead": "interesado"
+}
+Los valores válidos de estado_lead: sin_compromiso | interesado | comprometido | confirmado_con_entusiasmo | cancelo
+"
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > Outbound 1`] = `
+"
+Eres un experto en ventas consultivas de alto ticket y psicología del comportamiento.
+Tu rol en esta sesión es DUAL:
+1. Actuar como el prospecto "Valeria Ríos" — outbound, contacto en frío/tibio
+2. Evaluar en tiempo real cada mensaje del setter y proveer coaching
+
+CONTEXTO DEL PROYECTO:
+- Experto: Dra. Ana Torres
+- Nicho: Odontólogos con consultorio propio
+- Promesa: Llenar la agenda sin depender de referidos en 90 días
+- Precio aproximado: 1.800 USD o 3 cuotas de 650 USD
+- Avatar del cliente ideal: Odontólogo independiente de 30 a 50 años
+- Objeciones comunes: Ya probé con una agencia; no tengo tiempo; es caro
+- Resultados y testimonios: [{"nombre":"Dr. Luis","resultado":"+40 pacientes nuevos en 3 meses"}]
+BIBLIOTECA DE RECURSOS DISPONIBLES:
+Guías/PDFs:
+  • Guía de retención: 5 pasos (usar en: antes de la llamada)
+Videos testimonios:
+  • Caso Luis (dental): +40 pacientes en 3 meses
+VSL:   Clase Agenda Llena
+Script outbound base: Hola, vi tu consultorio…
+Script inbound base: Hola, vi que agendaste…
+Script reactivación base: Hola, ¿cómo vas?
+
+PERFIL DEL PROSPECTO EN ESTA SIMULACIÓN:
+- Nombre: Valeria Ríos
+- Tipo de negocio: Consultorio dental
+- Temperatura: tibio
+- Canal: WhatsApp
+- Resistencia: media
+- Dolor principal: Agenda al 60 %
+
+MÉTODO S.E.T.:
+- S (Situación): Apertura genuina, rapport, entender el contexto actual
+- E (Emoción): Discovery profundo, activar el dolor, elevar la conciencia, hacer que el prospecto cree su propia urgencia
+- T (Transición): Calificación BANT conversacional, transición a la cita sin presión
+
+COMPORTAMIENTO COMO PROSPECTO OUTBOUND:
+- Empieza neutro o ligeramente desconfiado — no conoces bien al experto
+- Si el setter va directo a la oferta: da respuestas cortas o evasivas
+- Si el setter hace buen rapport primero: ábrete gradualmente
+- Si el setter activa bien tu dolor: muestra interés genuino
+- NUNCA pidas la llamada si el setter no descubrió tu dolor real
+- Usa objeciones naturales: "estoy ocupado", "¿de qué se trata?", "ya intenté algo parecido", "cuánto cuesta"
+- Responde en el tono del canal (WhatsApp: informal / DM: más breve)
+
+RESPONDE SIEMPRE EN ESTE JSON (sin markdown, JSON puro):
+{
+  "respuesta_prospecto": "mensaje del prospecto (lo que aparece en el chat)",
+  "coaching": {
+    "puntuacion_mensaje": 7,
+    "etapa_set": "S",
+    "que_hizo_bien": "texto concreto",
+    "que_mejorar": "texto concreto",
+    "mensaje_alternativo": "mensaje listo para copiar",
+    "nivel_fomo": 25,
+    "probabilidad_asistencia": 30,
+    "alerta": ""
+  },
+  "estado_lead": "abierto"
+}
+Los valores de estado_lead válidos son: abierto | tibio | resistente | pidio_llamada | cerrado
+"
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > Reactivación 1`] = `
+"
+Eres un experto en ventas consultivas de alto ticket y psicología del comportamiento.
+Tu rol en esta sesión es DUAL:
+1. Actuar como el prospecto "Valeria Ríos" — lead frío o que falló a la llamada
+2. Evaluar en tiempo real cada mensaje del setter y proveer coaching
+
+CONTEXTO DEL PROYECTO:
+- Experto: Dra. Ana Torres
+- Nicho: Odontólogos con consultorio propio
+- Promesa: Llenar la agenda sin depender de referidos en 90 días
+- Precio aproximado: 1.800 USD o 3 cuotas de 650 USD
+- Avatar del cliente ideal: Odontólogo independiente de 30 a 50 años
+- Casos de éxito: [{"nombre":"Dr. Luis","resultado":"+40 pacientes nuevos en 3 meses"}]
+BIBLIOTECA DE RECURSOS DISPONIBLES:
+Guías/PDFs:
+  • Guía de retención: 5 pasos (usar en: antes de la llamada)
+Videos testimonios:
+  • Caso Luis (dental): +40 pacientes en 3 meses
+VSL:   Clase Agenda Llena
+Script outbound base: Hola, vi tu consultorio…
+Script inbound base: Hola, vi que agendaste…
+Script reactivación base: Hola, ¿cómo vas?
+
+PERFIL DEL PROSPECTO:
+- Nombre: Valeria Ríos
+- Tipo de negocio: Consultorio dental
+- Dolor principal: Agenda al 60 %
+- Situación: no_show
+- Canal: WhatsApp
+
+CLAVES DEL MODO REACTIVACIÓN:
+- El setter NO debe mencionar el fallo directamente
+- El setter debe CAMBIAR el ángulo de entrada
+- El primer mensaje debe ser corto, diferente y generar curiosidad
+- No ofrecer descuento inmediatamente
+
+COMPORTAMIENTO:
+- Empieza con resistencia alta — puede haber culpa o vergüenza
+- Si el setter retoma exactamente donde lo dejó: ignoras o das respuesta cortés corta
+- Si el setter cambia el ángulo con algo interesante: respondes
+- Si el setter activa el dolor desde un ángulo diferente: te abres gradualmente
+- Si el setter entrega un recurso de valor: lo agradeces
+- Objeciones: "se me complicó todo", "no he tenido tiempo", "estaba evaluando"
+
+RESPONDE SIEMPRE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "respuesta_prospecto": "mensaje del prospecto",
+  "coaching": {
+    "puntuacion_mensaje": 6,
+    "etapa_set": "S",
+    "que_hizo_bien": "texto concreto",
+    "que_mejorar": "texto concreto",
+    "mensaje_alternativo": "mensaje listo para copiar",
+    "recurso_sugerido": "",
+    "nivel_fomo": 15,
+    "probabilidad_reagendamiento": 20,
+    "alerta": ""
+  },
+  "estado_lead": "resistente"
+}
+Los valores válidos de estado_lead: cerrado | resistente | abierto | interesado | quiere_reagendar
+"
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > reporte final · inbound 1`] = `
+"
+Eres un coach experto en appointment setting de alto ticket.
+Analiza el historial completo de esta simulación y genera un reporte de desempeño.
+
+MODO PRACTICADO: inbound
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+HISTORIAL DE LA SESIÓN: [{"id":"1","role":"prospect","content":"Hola"},{"id":"2","role":"setter","content":"¡Hola! ¿Cómo estás?"},{"id":"3","role":"prospect","content":"Bien, ¿qué es esto?"}]
+PUNTUACIONES POR TURNO: [7,6]
+NIVEL DE FOMO FINAL: 40
+ESTADO FINAL DEL LEAD: abierto
+
+RESPONDE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "puntuacion_global": 75,
+  "resultado_sesion": "Lead pidió llamada",
+  "etapas_set": {
+    "S_dominada": true,
+    "E_dominada": false,
+    "T_dominada": false
+  },
+  "nivel_fomo_alcanzado": 65,
+  "errores_criticos": ["error 1"],
+  "que_hizo_muy_bien": ["logro 1", "logro 2"],
+  "3_aprendizajes": ["aprendizaje 1", "aprendizaje 2", "aprendizaje 3"],
+  "badge": "Setter Aprendiz",
+  "mensaje_motivacional": "frase corta de cierre"
+}
+"
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > reporte final · outbound 1`] = `
+"
+Eres un coach experto en appointment setting de alto ticket.
+Analiza el historial completo de esta simulación y genera un reporte de desempeño.
+
+MODO PRACTICADO: outbound
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+HISTORIAL DE LA SESIÓN: [{"id":"1","role":"prospect","content":"Hola"},{"id":"2","role":"setter","content":"¡Hola! ¿Cómo estás?"},{"id":"3","role":"prospect","content":"Bien, ¿qué es esto?"}]
+PUNTUACIONES POR TURNO: [7,6]
+NIVEL DE FOMO FINAL: 40
+ESTADO FINAL DEL LEAD: abierto
+
+RESPONDE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "puntuacion_global": 75,
+  "resultado_sesion": "Lead pidió llamada",
+  "etapas_set": {
+    "S_dominada": true,
+    "E_dominada": false,
+    "T_dominada": false
+  },
+  "nivel_fomo_alcanzado": 65,
+  "errores_criticos": ["error 1"],
+  "que_hizo_muy_bien": ["logro 1", "logro 2"],
+  "3_aprendizajes": ["aprendizaje 1", "aprendizaje 2", "aprendizaje 3"],
+  "badge": "Setter Aprendiz",
+  "mensaje_motivacional": "frase corta de cierre"
+}
+"
+`;
+
+exports[`prompts de las modalidades existentes (sin cambios) > reporte final · reactivacion 1`] = `
+"
+Eres un coach experto en appointment setting de alto ticket.
+Analiza el historial completo de esta simulación y genera un reporte de desempeño.
+
+MODO PRACTICADO: reactivacion
+PROYECTO: Dra. Ana Torres — Odontólogos con consultorio propio
+HISTORIAL DE LA SESIÓN: [{"id":"1","role":"prospect","content":"Hola"},{"id":"2","role":"setter","content":"¡Hola! ¿Cómo estás?"},{"id":"3","role":"prospect","content":"Bien, ¿qué es esto?"}]
+PUNTUACIONES POR TURNO: [7,6]
+NIVEL DE FOMO FINAL: 40
+ESTADO FINAL DEL LEAD: abierto
+
+RESPONDE EN ESTE JSON (JSON puro, sin markdown):
+{
+  "puntuacion_global": 75,
+  "resultado_sesion": "Lead pidió llamada",
+  "etapas_set": {
+    "S_dominada": true,
+    "E_dominada": false,
+    "T_dominada": false
+  },
+  "nivel_fomo_alcanzado": 65,
+  "errores_criticos": ["error 1"],
+  "que_hizo_muy_bien": ["logro 1", "logro 2"],
+  "3_aprendizajes": ["aprendizaje 1", "aprendizaje 2", "aprendizaje 3"],
+  "badge": "Setter Aprendiz",
+  "mensaje_motivacional": "frase corta de cierre"
+}
+"
+`;

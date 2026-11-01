@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, Target, BarChart2, ArrowRight, Loader2 } from 'lucide-react';
+import { MODE_IDS, SIMULATOR_MODES } from '../utils/simulatorModes';
 
 // ─── Reusable components ──────────────────────────────────────────────────────
 
@@ -48,11 +49,7 @@ export const KPICard = ({ label, value, sub, trend, color }) => {
 };
 
 const ModeCard = ({ mode, data, isBest, isWorst }) => {
-  const MODE_CONFIG = {
-    outbound:    { label: 'Outbound',    color: '#2563EB', metricLabel: 'Lead pidió la llamada' },
-    inbound:     { label: 'Inbound',     color: '#1D9E75', metricLabel: 'Confirmó con entusiasmo' },
-    reactivacion:{ label: 'Reactivación',color: '#DC2626', metricLabel: 'Quiso reagendar' },
-  };
+  const MODE_CONFIG = Object.fromEntries(SIMULATOR_MODES.map((m) => [m.id, { label: m.label, color: m.color, metricLabel: m.successLabel }]));
   const navigate = useNavigate();
   const cfg = MODE_CONFIG[mode];
   if (!data) return null;
@@ -313,8 +310,8 @@ const Analytics = () => {
             {simulador && (
               <div className="space-y-3">
                 <h3 className="font-bold text-text-primary">Performance por Modo</h3>
-                <div className="grid md:grid-cols-3 gap-3">
-                  {['outbound', 'inbound', 'reactivacion'].map(mode => (
+                <div className="grid md:grid-cols-2 gap-3">
+                  {MODE_IDS.map(mode => (
                     <ModeCard
                       key={mode}
                       mode={mode}

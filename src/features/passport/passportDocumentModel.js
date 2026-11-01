@@ -12,8 +12,8 @@
 // incluye correo ni otros datos de contacto.
 
 import { AVAILABILITY_OPTIONS, LANGUAGE_LEVELS, normalizeTags, PASSPORT_LIMITS } from './passportModel';
+import { modeLabel } from '../../utils/simulatorModes.js';
 
-const MODE_LABELS = { outbound: 'Outbound', inbound: 'Inbound', reactivacion: 'Reactivación' };
 
 export const PASSPORT_DISCLAIMER =
   'Las métricas de entrenamiento provienen de SimulaSET, el simulador de conversaciones de venta de Digital SET, ' +
@@ -62,7 +62,7 @@ export const buildPassportDocument = ({ name, avatarUrl, passport, evidence, cre
     validSimulations: ev.validSimulations,
     practiceLevel: { name: ev.practiceLevel.name, icon: ev.practiceLevel.icon },
     practiceMinimum: ev.practiceMinimum.label,
-    byMode: (ev.byMode || []).filter(m => m.simulations > 0).map(m => ({ label: MODE_LABELS[m.mode] || m.mode, simulations: m.simulations })),
+    byMode: (ev.byMode || []).filter(m => m.simulations > 0).map(m => ({ label: modeLabel(m.mode), simulations: m.simulations })),
   } : null;
 
   // Solo registros oficiales de emisión (id + título + emisor + fecha), con su

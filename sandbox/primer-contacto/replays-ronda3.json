@@ -1,0 +1,366 @@
+{
+ "R09": {
+  "id": "R09",
+  "cfg": {
+   "temperatura": "tibio",
+   "resistencia": "media",
+   "canal": "WhatsApp",
+   "project": "dental"
+  },
+  "profile": {
+   "nombre": "Ricardo Ibáñez",
+   "origen": "Vio un video de la Dra. Torres sobre agenda dental en redes del nicho.",
+   "identidad": "Odontólogo general con consultorio propio de dos sillones en Guadalajara.",
+   "situacion": "Consultorio con 55% de ocupación; algunos meses bajan más. Trabaja con un socio.",
+   "emocion": "Esperanza mezclada con dudas sobre si realmente funciona para consultorio pequeño.",
+   "motivacion": "Su colega comentó que mejoró pacientes nuevos; le preguntó cómo lo hizo.",
+   "objeciones": [
+    "No tengo dieciocho mil pesos disponibles de golpe ahora mismo",
+    "Mi socio y yo debemos decidir juntos antes de invertir en cualquier cosa"
+   ],
+   "hechos_ocultos": [
+    "Lleva tres meses sin poder crecer; teme que sea culpa suya",
+    "Su familia consume mucho tiempo; no sabe si tendrá disponibilidad mental"
+   ],
+   "encaje": "bajo",
+   "incompatibilidad": "superable",
+   "motivo_no_encaje": "Cree que solo acepta pago completo y eso lo descalifica. No conoce las cuotas.",
+   "que_lo_cambiaria": "Saber que existen 3 cuotas de 650 USD haría la inversión accesible.",
+   "apertura_inicial": "¿Realmente funciona para consultorios con dos sillones como el mío?",
+   "estilo": "escribe formal y educado"
+  },
+  "turns": [
+   {
+    "s": "Sí, funciona para ese tamaño. De hecho, nuestro cliente ideal tiene 1 a 3 sillones. ¿Actualmente qué porcentaje de ocupación tienes en tu agenda?",
+    "p": {
+     "respuesta_prospecto": "Tengo alrededor del 55%. Algunos meses baja más. Por eso escribí después de que un colega mencionó que mejoró sus pacientes nuevos.",
+     "revela": [
+      "situacion",
+      "motivo"
+     ],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "S",
+     "que_hizo_bien": "Respondió la pregunta directa del prospecto con claridad y honestidad, sin evasivas. Reconoció que encaja en el perfil.",
+     "que_mejorar": "La pregunta sobre ocupación es válida, pero no retoma el contexto que el prospecto acaba de abrir: su duda sobre si funciona para 2 sillones. Podría profundizar primero en esa preocupación antes de saltar a números.",
+     "mensaje_alternativo": "Sí, funciona perfecto. De hecho, nuestro cliente ideal tiene 1 a 3 sillones. Dijiste que tienes dos: ¿cuál fue tu duda principal sobre eso?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 35,
+     "probabilidad_cita": 55,
+     "puntuacion_mensaje": 7
+    }
+   },
+   {
+    "s": "Perfecto, ese 55% es exactamente la situación que atacamos. ¿Esos meses bajos cómo impactan en tus gastos fijos del consultorio? Eso me ayuda a entender mejor tu caso.",
+    "p": {
+     "respuesta_prospecto": "Es complicado. Con mi socio cubrimos lo básico, pero sin pacientes nuevos no crecemos. A veces me preocupa si es culpa mía.",
+     "revela": [
+      "situacion",
+      "motivo"
+     ],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "E",
+     "que_hizo_bien": "Retoma el dato del prospecto (55%), lo valida como el problema central y hace una pregunta abierta que busca el costo emocional real.",
+     "que_mejorar": "Evita afirmar 'exactamente la situación que atacamos' sin haber explorado más su contexto (antigüedad, qué intentó antes, por qué baja).",
+     "mensaje_alternativo": "Ese 55% con meses más bajos es lo que vemos en nuestros clientes. Cuando cae la ocupación, ¿cómo te afecta en los gastos fijos del consultorio?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 55,
+     "probabilidad_cita": 65,
+     "puntuacion_mensaje": 8
+    }
+   },
+   {
+    "s": "Entiendo, es frustrante. ¿De dónde vienen tus pacientes nuevos ahora? ¿Principalmente de referidos o ya intentaste otras formas?",
+    "p": {
+     "respuesta_prospecto": "Casi todo de referidos. Intenté con una agencia de anuncios hace un tiempo, pero no funcionó como esperaba.",
+     "revela": [
+      "situacion",
+      "motivo"
+     ],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "E",
+     "que_hizo_bien": "Valida emoción, continúa descubriendo fuente actual de pacientes. Pregunta abierta que retoma el contexto del prospecto.",
+     "que_mejorar": "Evita minimizar con 'es frustrante'. Profundiza en el costo real (tiempo, dinero, estrés) antes de pasar a tácticas.",
+     "mensaje_alternativo": "Entiendo. Cuando dices que sin pacientes nuevos no crecen, ¿cuál es el impacto real cada mes? ¿De dónde llegan hoy tus pacientes nuevos?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 35,
+     "probabilidad_cita": 55,
+     "puntuacion_mensaje": 7
+    }
+   },
+   {
+    "s": "Eso es común. ¿Qué específicamente no funcionó con la agencia? ¿Fue el costo, los resultados o la complejidad de manejarlo?",
+    "p": {
+     "respuesta_prospecto": "Gasté sin ver resultados reales. Además, no tenía tiempo para estar pendiente de campañas. Preferí dejar eso.",
+     "revela": [
+      "motivo"
+     ],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "abierto"
+    },
+    "k": {
+     "etapa_set": "E",
+     "que_hizo_bien": "Valida la experiencia previa sin juzgar. Pregunta abierta que desglosa el problema real detrás del fracaso anterior.",
+     "que_mejorar": "La pregunta tiene tres opciones, lo que suena como interrogatorio. Mejor: una sola pregunta abierta que deje hablar al prospecto.",
+     "mensaje_alternativo": "Eso es común. ¿Qué fue lo que no funcionó con esa agencia? Cuéntame qué pasó.",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 25,
+     "probabilidad_cita": 65,
+     "puntuacion_mensaje": 7
+    }
+   },
+   {
+    "s": "Claro, eso es frecuente. Lo que ofrecemos es diferente: nosotros manejamos todo. ¿Te gustaría una llamada con la Dra. Ana para ver si tu caso específico es viable? Ella detalla cómo es el proceso.",
+    "p": {
+     "respuesta_prospecto": "Me interesa, pero primero necesito saber cuánto cuesta. No tengo dieciocho mil pesos de golpe disponibles ahora.",
+     "revela": [
+      "no_encaje"
+     ],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Reconoce la objeción previa, diferencia la oferta y propone la cita cuando ya hay contexto claro del prospecto.",
+     "que_mejorar": "Falta conectar explícitamente el motivo emocional del prospecto (miedo, frustración) con la solución antes de la cita. Sentiría más relevancia.",
+     "mensaje_alternativo": "Entiendo. Lo que ofrecemos es diferente: manejamos todo nosotros. Dado que ya probaste y no tuviste tiempo, ¿te gustaría una llamada con la Dra. Ana para ver si tu caso específico es viable?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 45,
+     "probabilidad_cita": 72,
+     "puntuacion_mensaje": 8
+    }
+   },
+   {
+    "s": "El precio es 1.800 USD (o 3 cuotas de 650 USD cada una). ¿Eso cambia las cosas, o prefieres hablar con Ana sobre opciones de pago?",
+    "p": {
+     "respuesta_prospecto": "Las cuotas me hacen más viable. Pero mi socio y yo debemos decidir juntos antes de invertir. ¿Podemos hablar los dos en la llamada?",
+     "revela": [
+      "no_encaje"
+     ],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "3 cuotas de 650 USD cada una",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Respondió el precio documentado con claridad y honestidad. Reconoció la objeción de presupuesto sin evasivas. Ofreció la alternativa de cuotas de forma directa.",
+     "que_mejorar": "Saltó a la cita sin validar si el precio (incluso en cuotas) es viable para él. Falta una pregunta que cierre si 650 USD mensuales encaja o si necesita explorar más antes.",
+     "mensaje_alternativo": "El precio es 1.800 USD (o 3 cuotas de 650 USD). ¿Eso es manejable para ti, o prefieres hablar con Ana sobre otras opciones antes de agendar?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 25,
+     "probabilidad_cita": 72,
+     "puntuacion_mensaje": 8
+    }
+   },
+   {
+    "s": "Perfecto, pueden venir los dos. ¿Qué día y hora te viene bien esta semana para una llamada con la Dra. Ana?",
+    "p": {
+     "respuesta_prospecto": "Espera, antes de agendar necesito confirmar: ¿la llamada es solo para aclarar o ya es una venta? Quiero saber qué esperar.",
+     "revela": [],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "Las 3 cuotas de 650 USD hicieron la inversión accesible",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Aceptó la condición del socio sin resistencia. Pasó directamente a transición. Tono claro y directo.",
+     "que_mejorar": "Propone día/hora sin confirmar antes que ambos están listos y alineados en la cita. Falta un pequeño cierre de descubrimiento.",
+     "mensaje_alternativo": "Perfecto, los dos pueden estar en la llamada. Solo para confirmar: ¿ustedes dos están alineados en revisar cómo funciona? ¿Cuándo pueden ambos?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 70,
+     "probabilidad_cita": 78,
+     "puntuacion_mensaje": 7
+    }
+   },
+   {
+    "s": "Buena pregunta. La llamada es para que Ana entienda tu situación y vea si el programa encaja en tu caso. No es una venta forzada, es una consultoría honesta.",
+    "p": {
+     "respuesta_prospecto": "Gracias, pero sigo sin ver que sea para mí.",
+     "revela": [],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "resistente"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Respondió con honestidad a una pregunta legítima del prospecto, aclarando que no es venta forzada. Tono transparente y de confianza.",
+     "que_mejorar": "Falta cerrar la transición: ya descubrió la situación, el motivo y la objeción. Debe proponer día/hora ahora o preguntar cuándo están disponibles.",
+     "mensaje_alternativo": "Exacto, es consultoría honesta. Ana revisa tu caso y te explica cómo funciona. Si encaja, avanzan; si no, te lo dice directo. ¿Qué día esta semana les viene a los dos?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 55,
+     "probabilidad_cita": 75,
+     "puntuacion_mensaje": 8
+    }
+   }
+  ]
+ },
+ "R12": {
+  "id": "R12",
+  "cfg": {
+   "temperatura": "frio",
+   "resistencia": "baja",
+   "canal": "Instagram DM",
+   "project": "bienestar"
+  },
+  "profile": {
+   "nombre": "Felipe Navarro",
+   "origen": "Vio un anuncio sobre energía y hábitos en el feed de Instagram hace dos días.",
+   "identidad": "Coordinador de proyectos en empresa de tecnología; lidera equipo de cuatro personas.",
+   "situacion": "Trabaja entre 10 y 12 horas diarias; duerme 5 a 6 horas; come rápido en escritorio.",
+   "emocion": "Agotado pero culpable por no hacer nada al respecto; asustado de fracasar otra vez.",
+   "motivacion": "Curiosidad por saber si existe algo que se adapte a su ritmo actual sin compromisos gigantes.",
+   "objeciones": [
+    "Ya intenté rutinas de ejercicio y duré dos semanas",
+    "Mi agenda es impredecible según el proyecto",
+    "No sé si pueda ser consistente"
+   ],
+   "hechos_ocultos": [
+    "Bajó de peso hace tres años pero lo recuperó en dieciocho meses",
+    "Su médico le mencionó prediabetes en el último chequeo",
+    "Siente que su desempeño laboral está decayendo por el cansancio"
+   ],
+   "encaje": "alto",
+   "incompatibilidad": null,
+   "motivo_no_encaje": "",
+   "que_lo_cambiaria": "",
+   "apertura_inicial": "Info",
+   "estilo": "escribe formal y educado"
+  },
+  "turns": [
+   {
+    "s": "¡Hola! 👋 Vi que te interesó el programa de Coach Marta Ruiz. Es un plan de 12 semanas para recuperar energía y crear hábitos reales que funcionen con tu rutina. ¿Te gustaría conocer más detalles?",
+    "p": {
+     "respuesta_prospecto": "Hola, sí me llamó la atención. La verdad ando muy cansado con el trabajo. ¿Qué exactamente incluye el programa?",
+     "revela": [
+      "situacion",
+      "motivo"
+     ],
+     "acepta_cita": "no",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "S",
+     "que_hizo_bien": "Tono amable y directo. Mencionó la promesa clara (energía, hábitos, 12 semanas). Hizo una pregunta abierta al final.",
+     "que_mejorar": "Es un pitch prematuro. Solo escribió 'Info' y no sabes nada de él: quién es, qué vio, por qué le interesó. Pregunta genérica sin ancla en su contexto.",
+     "mensaje_alternativo": "¡Hola! 👋 Vi que buscaste info sobre el programa. ¿Qué fue lo que te llamó la atención? ¿Hay algo específico en tu día a día que te llevó a escribir ahora?",
+     "recurso_sugerido": "",
+     "alerta": "pitch sin descubrimiento previo. primero: situación, luego: promesa.",
+     "nivel_fomo": 15,
+     "probabilidad_cita": 25,
+     "puntuacion_mensaje": 4
+    }
+   },
+   {
+    "s": "¡Perfecto! El programa incluye: plan de alimentación personalizado, rutinas de movimiento de 20-30 min, seguimiento semanal y acceso a comunidad de apoyo. Todo diseñado para encajar en tu agenda sin sacrificar resultados. ¿Te gustaría reservar una llamada para conocer los detalles?",
+    "p": {
+     "respuesta_prospecto": "Suena bien, pero necesito saber el precio antes. ¿Cuánto cuesta aproximadamente?",
+     "revela": [
+      "motivo"
+     ],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "S",
+     "que_hizo_bien": "Respondió la pregunta directa del prospecto con claridad sobre componentes principales del programa.",
+     "que_mejorar": "Propone cita sin haber descubierto situación, emoción o motivo real del cansancio. Salta de S a T sin E.",
+     "mensaje_alternativo": "¡Perfecto! El programa incluye plan personalizado, rutinas de 20-30 min y seguimiento semanal. Pero antes, cuéntame: ese cansancio que mencionas, ¿cuánto tiempo lleva así? ¿Qué es lo que más te agota?",
+     "recurso_sugerido": "",
+     "alerta": "cita sin descubrimiento de problema o motivo real.",
+     "nivel_fomo": 15,
+     "probabilidad_cita": 35,
+     "puntuacion_mensaje": 5
+    }
+   },
+   {
+    "s": "Excelente pregunta. El precio exacto lo definimos en la llamada inicial porque personalizamos según tu situación. ¿Podemos agendar 15 minutos esta semana para explicarte todo y que despejes dudas?",
+    "p": {
+     "respuesta_prospecto": "Entiendo, pero dame una idea. ¿Estamos hablando de cientos o miles? Necesito saber si entra en mi presupuesto antes de agendar.",
+     "revela": [],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Reconoce la pregunta legítima del prospecto y propone la cita de forma directa sin evasiva explícita.",
+     "que_mejorar": "Saltó de E a T sin entender realmente su situación (solo sabe que está cansado). Falta descubrir por qué ahora, cuál es su frustración real y si encaja.",
+     "mensaje_alternativo": "Entendido. La inversión se ajusta a tu situación y lo vemos en la llamada. Antes: ¿cuánto tiempo llevas sintiéndote así de cansado y qué has intentado hasta ahora?",
+     "recurso_sugerido": "",
+     "alerta": "Propone cita antes de completar descubrimiento emocional; prospecto aún no contó su dolor ni su motivo.",
+     "nivel_fomo": 25,
+     "probabilidad_cita": 45,
+     "puntuacion_mensaje": 5
+    }
+   },
+   {
+    "s": "Lo entiendo perfectamente. Es una inversión accesible para profesionales como tú, pero el rango exacto depende del plan. ¿Te va bien el miércoles o jueves para una breve llamada donde te doy cifras reales?",
+    "p": {
+     "respuesta_prospecto": "Dale, el jueves me viene bien. Pero quiero que en la llamada me digas el rango de precio antes de comprometerte a nada.",
+     "revela": [
+      "situacion",
+      "motivo"
+     ],
+     "acepta_cita": "condicionada",
+     "cambio_encaje": "",
+     "estado_lead": "interesado"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Reconoce la objeción legítima del prospecto y mantiene tono empático sin defensiva.",
+     "que_mejorar": "Evasiva reiterada del precio. «Inversión accesible» y «rango depende del plan» sin cifra real evita la pregunta directa tres veces.",
+     "mensaje_alternativo": "Te entiendo. Honestamente, el equipo lo personaliza en la llamada porque varía según tu situación. No tengo el número aquí, pero te lo detalla en 15 min. ¿Te va miércoles o jueves?",
+     "recurso_sugerido": "",
+     "alerta": "evasiva reiterada al precio. prospecto preguntó tres veces y no recibió cifra ni rango documentado.",
+     "nivel_fomo": 25,
+     "probabilidad_cita": 35,
+     "puntuacion_mensaje": 4
+    }
+   },
+   {
+    "s": "Perfecto, jueves funciona. Te pasaré el link de disponibilidad para que elijas hora. En la llamada hablamos de todo, incluyendo inversión. ¿A qué número te contacto?",
+    "p": {
+     "respuesta_prospecto": "Dale, perfecto. Me contactas al +00 000 000 000. Espero que sea directo con el precio en la llamada.",
+     "revela": [],
+     "acepta_cita": "si",
+     "cambio_encaje": "",
+     "estado_lead": "pidio_llamada"
+    },
+    "k": {
+     "etapa_set": "T",
+     "que_hizo_bien": "Aceptó la objeción sin insistir, confirmó el día y pasó a cerrar la cita de forma natural. Reconoció el compromiso de hablar de inversión.",
+     "que_mejorar": "No validó emocionalmente la preocupación del prospecto antes de cerrar. Una frase que reconozca su inquietud haría la transición más sólida y aumentaría la probabilidad de que asista.",
+     "mensaje_alternativo": "Perfecto, jueves funciona. Te pasaré el link para elegir hora. En la llamada vamos directo al punto: números reales, qué incluye y si encaja con tu situación. ¿A qué número te contacto?",
+     "recurso_sugerido": "",
+     "alerta": "",
+     "nivel_fomo": 25,
+     "probabilidad_cita": 82,
+     "puntuacion_mensaje": 8
+    }
+   }
+  ]
+ }
+}
