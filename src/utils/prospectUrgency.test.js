@@ -1,0 +1,291 @@
+// Urgencia del prospecto (Primer contacto, opción A del 01/11/2026): solo
+// cuenta lo que el prospecto expresa, con su frase literal; puede subir, bajar
+// o mantenerse; las negaciones y lo dicho bajo presión no suman.
+import { describe, expect, it } from 'vitest';
+import {
+  URGENCY_POSTURES, URGENCY_SIGNALS, applyUrgencyEvents, createUrgencyState, deniesUrgency, literalPosition,
+  markProcessed, rebuildUrgency, sanitizeUrgencyEvents, urgencyValue, verifyUrgencyEvents,
+} from './prospectUrgency';
+
+const verify = (events, message, index = 1, extra = {}) => verifyUrgencyEvents(events, { message, index, ...extra });
+const ev = (senal, postura, cita) => ({ senal, postura, cita });
+
+describe('pesos y posturas', () => {
+  it('pesos 15/20/25/25/15 (suman 100) y matiza = 0,5', () => {
+    expect(URGENCY_SIGNALS).toEqual({ reconoce_problema: 15, consecuencias: 20, costo_de_no_actuar: 25, prioridad_temporal: 25, motivacion: 15 });
+    expect(Object.values(URGENCY_SIGNALS).reduce((a, b) => a + b, 0)).toBe(100);
+    expect(URGENCY_POSTURES).toEqual({ afirma: 1, matiza: 0.5, niega: 0 });
+  });
+
+  it('el valor es la suma de las posturas vigentes', () => {
+    expect(urgencyValue({})).toBe(0);
+    expect(urgencyValue({ reconoce_problema: { postura: 'afirma' }, prioridad_temporal: { postura: 'matiza' } })).toBe(28);
+    expect(urgencyValue(Object.fromEntries(Object.keys(URGENCY_SIGNALS).map((s) => [s, { postura: 'afirma' }])))).toBe(100);
+  });
+
+  it('el estado inicial es 0 y sin historial (puede quedarse bajo toda la sesión)', () => {
+    expect(createUrgencyState()).toEqual({ eventos: [], vigente: {}, valor: 0, maximo: 0, procesados: [] });
+    expect(rebuildUrgency([])).toEqual(createUrgencyState());
+  });
+});
+
+describe('cita literal', () => {
+  const msg = 'Uf, me urge. Esta semana tengo que resolverlo, ya no doy más con los referidos.';
+
+  it('frases cortas valen si están en el mensaje («me urge», «esta semana», «ya no»)', () => {
+    for (const q of ['me urge', 'Esta semana', 'ya no', 'ME URGE.']) expect(literalPosition(q, msg)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ignora mayúsculas, tildes y puntuación', () => {
+    expect(literalPosition('mas rapido', 'Necesito ir más rápido.')).toBeGreaterThanOrEqual(0);
+  });
+
+  it('no acepta trozos de palabra ni frases que no están', () => {
+    expect(literalPosition('urge', 'Me urgencia')).toBe(-1);
+    expect(literalPosition('me urge muchísimo', msg)).toBe(-1);
+    expect(literalPosition('', msg)).toBe(-1);
+  });
+
+  it('una frase del alumno (o inventada) se descarta', () => {
+    const { accepted, rejected } = verify([ev('prioridad_temporal', 'afirma', '¿lo resolvemos este mes?')], 'Sí, puede ser.');
+    expect(accepted).toEqual([]);
+    expect(rejected[0].motivo).toBe('no_esta_en_el_mensaje');
+  });
+});
+
+describe('negaciones', () => {
+  it('detecta negaciones y esperas explícitas', () => {
+    for (const t of ['No es urgente', 'no me urge', 'no tengo apuro', 'Puedo esperar', 'más adelante lo veo', 'no es para ya', 'ya no me preocupa', 'no es mi prioridad', 'después lo veo', 'tampoco es para tanto']) {
+      expect(deniesUrgency(t)).toBe(true);
+    }
+  });
+
+  it('«no puedo esperar» y «no sé si puedo esperar» son urgencia, no negación', () => {
+    expect(deniesUrgency('no puedo esperar más')).toBe(false);
+    expect(deniesUrgency('no sé si puedo esperar')).toBe(false);
+    expect(deniesUrgency('no creo que pueda esperar')).toBe(false);
+  });
+
+  it('una negación marcada como «afirma» no suma: pasa a «niega»', () => {
+    const { accepted } = verify([ev('prioridad_temporal', 'afirma', 'no me urge')], 'La verdad no me urge.');
+    expect(accepted[0]).toMatchObject({ postura: 'niega', ajuste: 'afirma→niega:negacion' });
+  });
+
+  it('una cita corta no esconde la negación que la antecede («no es urgente» citado como «es urgente»)', () => {
+    const { accepted } = verify([ev('prioridad_temporal', 'afirma', 'es urgente')], 'Mira, no es urgente.');
+    expect(accepted[0].postura).toBe('niega');
+  });
+
+  it('negación con algo de urgencia en la misma frase queda en «matiza»', () => {
+    const { accepted } = verify([ev('consecuencias', 'afirma', 'no es urgente pero me preocupa')], 'No es urgente pero me preocupa.');
+    expect(accepted[0]).toMatchObject({ postura: 'matiza', ajuste: 'afirma→matiza:negacion' });
+  });
+
+  it('«niega» se respeta tal cual', () => {
+    const { accepted } = verify([ev('prioridad_temporal', 'niega', 'puedo esperar')], 'Puedo esperar unos meses.');
+    expect(accepted[0]).toMatchObject({ postura: 'niega' });
+    expect(accepted[0].ajuste).toBeUndefined();
+  });
+
+  it('una afirmación genuina se acepta sin ajuste', () => {
+    const { accepted } = verify([ev('costo_de_no_actuar', 'afirma', 'cada mes que pasa pierdo pacientes')], 'Cada mes que pasa pierdo pacientes.', 3);
+    expect(accepted).toEqual([{ senal: 'costo_de_no_actuar', postura: 'afirma', cita: 'cada mes que pasa pierdo pacientes', mensaje: 3, posicion: 0, origen: 'turno' }]);
+  });
+});
+
+describe('presión del setter', () => {
+  it('lo que el prospecto dice justo después de una afirmación no documentada no suma', () => {
+    const { accepted, rejected } = verify([ev('prioridad_temporal', 'afirma', 'quiero entrar ya')], 'Ok, quiero entrar ya.', 3, { afterPressure: true });
+    expect(accepted).toEqual([]);
+    expect(rejected[0].motivo).toBe('tras_afirmacion_no_documentada');
+  });
+
+  it('pero una negación tras la presión sí se registra (puede bajar, nunca subir)', () => {
+    const { accepted } = verify([ev('prioridad_temporal', 'niega', 'no tengo apuro')], 'No tengo apuro.', 3, { afterPressure: true });
+    expect(accepted[0].postura).toBe('niega');
+  });
+});
+
+describe('historial y postura vigente', () => {
+  const at = (mensaje, senal, postura, cita, posicion = 0) => ({ senal, postura, cita, mensaje, posicion, origen: 'turno' });
+
+  it('sube, baja y se mantiene; el máximo se conserva aparte', () => {
+    let s = createUrgencyState();
+    s = applyUrgencyEvents(s, [at(1, 'reconoce_problema', 'afirma', 'me cuesta conseguir pacientes')]);
+    expect(s).toMatchObject({ valor: 15, maximo: 15 });
+    s = applyUrgencyEvents(s, [at(3, 'prioridad_temporal', 'afirma', 'esta semana')]);
+    expect(s).toMatchObject({ valor: 40, maximo: 40 });
+    s = applyUrgencyEvents(s, [at(5, 'prioridad_temporal', 'niega', 'puedo esperar')]);
+    expect(s).toMatchObject({ valor: 15, maximo: 40 });
+    s = applyUrgencyEvents(s, []);
+    expect(s).toMatchObject({ valor: 15, maximo: 40 });
+    expect(s.eventos).toHaveLength(3);
+    expect(s.vigente.prioridad_temporal).toEqual({ postura: 'niega', cita: 'puedo esperar', mensaje: 5 });
+  });
+
+  it('contradicción entre mensajes: gana el más reciente aunque llegue antes', () => {
+    const s = applyUrgencyEvents(createUrgencyState(), [
+      at(5, 'prioridad_temporal', 'afirma', 'ya mismo'),
+      at(3, 'prioridad_temporal', 'niega', 'más adelante'),
+    ]);
+    expect(s.vigente.prioridad_temporal.postura).toBe('afirma');
+    expect(s.valor).toBe(25);
+  });
+
+  it('contradicción dentro de un mismo mensaje: gana la frase posterior y no deja un máximo intermedio', () => {
+    const msg = 'Me urge resolverlo, aunque bueno, puedo esperar a enero.';
+    const { accepted } = verify([ev('prioridad_temporal', 'niega', 'puedo esperar a enero'), ev('prioridad_temporal', 'afirma', 'me urge')], msg, 1);
+    const s = rebuildUrgency(accepted);
+    expect(s.vigente.prioridad_temporal.postura).toBe('niega');
+    // El mensaje completo dice «me urge, aunque puedo esperar»: nunca estuvo en 25.
+    expect(s).toMatchObject({ valor: 0, maximo: 0 });
+  });
+
+  it('una relativización ambigua sin señal identificable no cambia nada', () => {
+    // La IA no la incluye (instrucción del prompt) y el código no aplica nada genérico.
+    const before = applyUrgencyEvents(createUrgencyState(), [at(1, 'costo_de_no_actuar', 'afirma', 'pierdo dinero')]);
+    const after = applyUrgencyEvents(before, sanitizeUrgencyEvents([{ senal: 'general', postura: 'niega', cita: 'bueno, tampoco es para tanto' }]));
+    expect(after).toEqual(before);
+  });
+
+  it('la relativización solo afecta a la señal que nombra', () => {
+    const s = applyUrgencyEvents(createUrgencyState(), [
+      at(1, 'costo_de_no_actuar', 'afirma', 'pierdo dinero'),
+      at(1, 'prioridad_temporal', 'afirma', 'este mes', 10),
+      at(3, 'prioridad_temporal', 'matiza', 'quizás el otro mes'),
+    ]);
+    expect(s.vigente.costo_de_no_actuar.postura).toBe('afirma');
+    expect(s.valor).toBe(25 + 13);
+  });
+
+  it('el mismo evento repetido (turno y cierre) no se cuenta dos veces', () => {
+    const e = at(3, 'motivacion', 'afirma', 'quiero crecer');
+    const s = applyUrgencyEvents(applyUrgencyEvents(createUrgencyState(), [e]), [{ ...e, cita: 'Quiero crecer', origen: 'cierre' }]);
+    expect(s.eventos).toHaveLength(1);
+    expect(s.valor).toBe(15);
+  });
+});
+
+describe('lo que devuelve la IA', () => {
+  it('solo señales, posturas y frases válidas; como máximo 10', () => {
+    const raw = [
+      { senal: 'motivacion', postura: 'afirma', cita: ' quiero crecer ' },
+      { senal: 'fomo', postura: 'afirma', cita: 'x' },
+      { senal: 'motivacion', postura: 'muy alta', cita: 'x' },
+      { senal: 'motivacion', postura: 'afirma', cita: '' },
+      null, 'texto',
+      ...Array.from({ length: 12 }, () => ({ senal: 'consecuencias', postura: 'matiza', cita: 'algo', mensaje: 2 })),
+    ];
+    const out = sanitizeUrgencyEvents(raw);
+    expect(out).toHaveLength(10);
+    expect(out[0]).toEqual({ senal: 'motivacion', postura: 'afirma', cita: 'quiero crecer', mensaje: undefined });
+    expect(out[1].mensaje).toBe(2);
+    expect(sanitizeUrgencyEvents(undefined)).toEqual([]);
+  });
+});
+
+// Ronda 7 (Haiku real, 01/11/2026): errores de lógica encontrados en U02.
+describe('ronda 7 · máximo por mensaje y una frase, una señal', () => {
+  const U02 = {
+    2: 'Vi tu video sobre llenar agenda sin depender solo de referidos. Mi consultorio está entre 55 y 65% ocupado, y algunos meses es complicado.',
+    4: 'La verdad, necesito resultados rápido. Aunque cierro dos meses por remodelación, quiero agenda llena antes de eso.',
+    8: 'Fue tiempo principalmente. El consultorio me tiene saturada en lo operativo, y el curso pedía mucho dedicarle. No sé si habría funcionado igual.',
+  };
+  const at = (index, events) => verifyUrgencyEvents(events, { message: U02[index], index }).accepted;
+
+  it('U02: el máximo se mide al terminar cada mensaje, sin el pico intermedio dentro de un mensaje', () => {
+    const s = rebuildUrgency([
+      ...at(2, [ev('reconoce_problema', 'afirma', 'algunos meses es complicado')]),
+      ...at(4, [ev('costo_de_no_actuar', 'afirma', 'necesito resultados rápido'), ev('prioridad_temporal', 'afirma', 'quiero agenda llena antes de eso')]),
+      ...at(8, [ev('consecuencias', 'afirma', 'El consultorio me tiene saturada en lo operativo'), ev('prioridad_temporal', 'matiza', 'No sé si habría funcionado igual')]),
+    ]);
+    // «necesito resultados rápido» pasa de costo a prioridad (sin pérdida futura). Tras el mensaje 8 queda en 48;
+    // a mitad de ese mensaje llegó a 60, pero ese estado intermedio no cuenta como máximo.
+    expect(s.valor).toBe(48);
+    expect(s.maximo).toBe(48);
+  });
+
+  it('U02: la misma frase no suma para dos señales («algunos meses es complicado»)', () => {
+    const { accepted, rejected } = verify([
+      ev('reconoce_problema', 'afirma', 'algunos meses es complicado'),
+      ev('consecuencias', 'matiza', 'algunos meses es complicado'),
+    ], U02[2], 2);
+    expect(accepted.map((e) => e.senal)).toEqual(['reconoce_problema']);
+    expect(rejected).toMatchObject([{ senal: 'consecuencias', motivo: 'cita_superpuesta' }]);
+  });
+
+  it('U02 (cierre): una frase contenida en otra ya aceptada tampoco suma', () => {
+    const { accepted, rejected } = verify([
+      ev('prioridad_temporal', 'afirma', 'necesito resultados rápido. Aunque cierro dos meses por remodelación, quiero agenda llena antes de eso'),
+      ev('costo_de_no_actuar', 'matiza', 'quiero agenda llena antes de eso'),
+    ], U02[4], 4);
+    expect(accepted).toHaveLength(1);
+    expect(rejected[0].motivo).toBe('cita_superpuesta');
+  });
+
+  it('dos frases distintas del mismo mensaje sí pueden sumar dos señales', () => {
+    const { accepted } = verify([
+      ev('costo_de_no_actuar', 'afirma', 'necesito resultados rápido'),
+      ev('prioridad_temporal', 'afirma', 'quiero agenda llena antes de eso'),
+    ], U02[4], 4);
+    expect(accepted).toHaveLength(2);
+  });
+
+  it('al agregar eventos de otra llamada, una frase superpuesta de otra señal no suma', () => {
+    const first = rebuildUrgency(at(2, [ev('reconoce_problema', 'afirma', 'algunos meses es complicado')]));
+    const second = applyUrgencyEvents(first, at(2, [ev('consecuencias', 'afirma', 'algunos meses es complicado')]));
+    expect(second.eventos).toHaveLength(1);
+    expect(second.valor).toBe(15);
+  });
+
+  it('los mensajes analizados se registran una sola vez y sobreviven a nuevos eventos', () => {
+    let s = markProcessed(createUrgencyState(), 2);
+    s = markProcessed(markProcessed(s, 0), 2);
+    expect(s.procesados).toEqual([0, 2]);
+    expect(markProcessed(s, null)).toBe(s);
+    expect(applyUrgencyEvents(s, at(4, [ev('prioridad_temporal', 'afirma', 'quiero agenda llena antes de eso')])).procesados).toEqual([0, 2]);
+  });
+});
+
+// Batería focal (ronda 8): errores sistemáticos de Haiku, corregidos con la misma
+// verificación para el coaching y el cierre.
+describe('validación determinista de señales', () => {
+  it('U2: «Antes de cerrar es crítico» como costo de no actuar pasa a prioridad temporal', () => {
+    const msg = 'Exacto, eso es. Necesito pacientes que realmente lleguen y agenden, no solo tráfico. Antes de cerrar es crítico.';
+    const { accepted } = verify([ev('costo_de_no_actuar', 'afirma', 'Antes de cerrar es crítico.')], msg, 10);
+    expect(accepted[0]).toMatchObject({ senal: 'prioridad_temporal', postura: 'afirma', ajuste: 'costo_de_no_actuar→prioridad_temporal:sin_perdida_futura' });
+  });
+
+  it('F1: «gasté en dos programas que no completé» no suma como consecuencias', () => {
+    const msg = 'Es prioritario, pero honesto: gasté en dos programas que no completé. ¿Cuánto cuesta esto?';
+    const { accepted, rejected } = verify([ev('consecuencias', 'afirma', 'gasté en dos programas que no completé')], msg, 4);
+    expect(accepted).toEqual([]);
+    expect(rejected[0].motivo).toBe('fracaso_pasado');
+  });
+
+  it('costo sin pérdida futura ni plazo se descarta («No puedo estar en marketing»)', () => {
+    const { rejected } = verify([ev('costo_de_no_actuar', 'afirma', 'No puedo estar en marketing')], 'El tiempo, sin duda. No puedo estar en marketing.', 6);
+    expect(rejected[0].motivo).toBe('sin_perdida_futura');
+  });
+
+  it('contraejemplos válidos: pérdidas futuras y consecuencias presentes se mantienen', () => {
+    const keep = [
+      ['costo_de_no_actuar', 'Si sigo así dos meses más voy a tener que cerrar un sillón'],
+      ['costo_de_no_actuar', 'cada mes que pasa pierdo pacientes'],
+      ['costo_de_no_actuar', 'me quedo sin margen para pagar al equipo'],
+      ['consecuencias', 'no llego a cubrir los gastos fijos'],
+      ['consecuencias', 'Gasté en una agencia y ahora no llego a fin de mes'],
+      ['consecuencias', 'Invertí en equipamiento hace 3 meses y la agenda no creció como esperaba'],
+    ];
+    for (const [senal, cita] of keep) {
+      const { accepted } = verify([ev(senal, 'afirma', cita)], `${cita}.`, 2);
+      expect(accepted).toMatchObject([{ senal, postura: 'afirma' }]);
+      expect(accepted[0].ajuste).toBeUndefined();
+    }
+  });
+
+  it('una negación de costo o de consecuencias no se toca', () => {
+    const { accepted } = verify([ev('costo_de_no_actuar', 'niega', 'tampoco pasa nada si espero')], 'Tampoco pasa nada si espero.', 2);
+    expect(accepted[0]).toMatchObject({ senal: 'costo_de_no_actuar', postura: 'niega' });
+  });
+});

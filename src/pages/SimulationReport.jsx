@@ -6,6 +6,8 @@ import { getValidSimulationCount } from '../utils/simulatorSessions';
 import { callClaude } from '../utils/anthropic';
 import { buildFinalReportPrompt } from '../utils/prompts';
 import { finalStateLabel } from '../utils/primerContactoControl';
+import { runPendingUrgency } from '../utils/primerContactoTurn';
+import { URGENCY_SIGNAL_LABELS, createUrgencyState } from '../utils/prospectUrgency';
 import Layout from '../components/Layout';
 import ModeBadge from '../components/ModeBadge';
 import FomoBar from '../components/FomoBar';
@@ -25,6 +27,10 @@ const SimulationReport = () => {
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [project, setProject] = useState(null);
   const [validSimulations, setValidSimulations] = useState(0);
+  // Primer contacto: urgencia del prospecto (vigente al final y máximo).
+  const [urgency, setUrgency] = useState(null);
+  const isPrimerContacto = session?.mode === 'primer_contacto';
+  const finalFomoFor = () => (isPrimerContacto && urgency ? urgency.valor : session?.finalFomo);
 
   useEffect(() => {
     if (!session) { navigate('/dashboard'); return; }
@@ -34,19 +40,39 @@ const SimulationReport = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
+  // Urgencia final de Primer contacto: parte del estado verificado durante la
+  // sesión (lo que mostraba la barra) y analiza solo la última respuesta del
+  // prospecto si ningún coaching la vio. Si falla, queda el estado de la
+  // sesión, marcado como incompleto.
+  const finalizeUrgency = async (project) => {
+    const base = session.urgency || createUrgencyState();
+    try {
+      const full = await runPendingUrgency({ call: callClaude, project, history: session.messages, urgency: base, invenciones: session.urgencyControl?.invenciones });
+      return { ...full, sesion: base.valor || 0, completa: true };
+    } catch {
+      return { ...base, sesion: base.valor || 0, cierre: null, completa: false };
+    }
+  };
+
   const generateReport = async () => {
     setLoading(true);
+    let finalFomo = session.finalFomo;
     try {
       const { project: storedProject } = await getProjectById(session.projectId);
       const found = storedProject || { expertName: 'N/A', niche: 'N/A', avatarDescription: '', commonObjections: '', resources: [], testimonials: [], promise: '', price: '' };
       setProject(found);
       const project = found;
+      if (isPrimerContacto) {
+        const u = await finalizeUrgency(project);
+        setUrgency(u);
+        finalFomo = u.valor;
+      }
       const prompt = buildFinalReportPrompt(
         session.mode,
         project,
         session.messages,
         session.scores,
-        session.finalFomo,
+        finalFomo,
         session.finalState
       );
       // maxTokens 2000: el reporte lee la sesión completa (puede ser larga)
@@ -69,7 +95,7 @@ const SimulationReport = () => {
         // Primer contacto: etiqueta legible (p. ej. cita_no_valida); las demás modalidades, sin cambios.
         resultado_sesion: finalStateLabel(session.mode, session.finalState) || 'Sesión completada',
         etapas_set: { S_dominada: false, E_dominada: false, T_dominada: false },
-        nivel_fomo_alcanzado: session.finalFomo || 0,
+        nivel_fomo_alcanzado: finalFomo || 0,
         errores_criticos: [],
         que_hizo_muy_bien: ['Completaste la simulación'],
         '3_aprendizajes': ['Continúa practicando', 'Enfócate en el rapport', 'Activa el dolor del prospecto'],
@@ -180,11 +206,37 @@ const SimulationReport = () => {
           </div>
         </div>
 
-        {/* FOMO */}
-        <div className="bg-bg-card border border-border-subtle rounded-2xl p-6 mb-4">
-          <h3 className="font-bold text-text-primary mb-4">Nivel de FOMO alcanzado</h3>
-          <FomoBar value={report?.nivel_fomo_alcanzado || 0} label="" />
-        </div>
+        {/* FOMO (Primer contacto: urgencia del prospecto, vigente al final y máxima) */}
+        {isPrimerContacto && urgency ? (
+          <div className="bg-bg-card border border-border-subtle rounded-2xl p-6 mb-4">
+            <h3 className="font-bold text-text-primary mb-4">Urgencia del prospecto</h3>
+            <div className="space-y-4">
+              <FomoBar value={urgency.valor || 0} label="Urgencia del prospecto al final" />
+              <FomoBar value={urgency.maximo || 0} label="Urgencia máxima alcanzada" />
+            </div>
+            <p className="text-xs text-text-secondary mt-3">
+              La urgencia final es la que el prospecto mantenía al cerrar la conversación; la máxima es el punto más alto que llegó a expresar.
+            </p>
+            {urgency.completa && urgency.valor !== urgency.sesion && (
+              <div className="text-xs text-text-secondary mt-2">
+                <p>Durante la práctica la barra marcaba {urgency.sesion}%. La última respuesta del prospecto la cambió:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {(urgency.cierre?.aceptadas || []).map((e) => (
+                    <li key={`${e.senal}-${e.posicion}`}>{URGENCY_SIGNAL_LABELS[e.senal] || e.senal} ({e.postura}): «{e.cita}»</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!urgency.completa && (
+              <p className="text-xs text-text-secondary mt-1">Calculada sin la última respuesta del prospecto.</p>
+            )}
+          </div>
+        ) : (
+          <div className="bg-bg-card border border-border-subtle rounded-2xl p-6 mb-4">
+            <h3 className="font-bold text-text-primary mb-4">Nivel de FOMO alcanzado</h3>
+            <FomoBar value={report?.nivel_fomo_alcanzado || 0} label="" />
+          </div>
+        )}
 
         {/* What worked */}
         {report?.que_hizo_muy_bien?.length > 0 && (
@@ -314,7 +366,7 @@ const SimulationReport = () => {
             .join('\n')}
           modo="simulador"
           setterName={user?.name || 'Setter'}
-          nivelFomo={session.finalFomo || 0}
+          nivelFomo={finalFomoFor() || 0}
           etapaMaxima="T"
           existingBriefing={null}
           onSave={() => setBriefingOpen(false)}
