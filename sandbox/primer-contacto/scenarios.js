@@ -31,6 +31,24 @@ const dentalTurns = {
 
 export const SCENARIOS = [
   {
+    id: 'corte-red-recupera',
+    title: 'Corte de red breve: el reintento lo recupera',
+    check: ['en el turno 1 la primera llamada al prospecto falla con «Failed to fetch»', 'la app reintenta sola y el turno sigue normal, sin error en el chat'],
+    project: PROJECTS.dental,
+    config: { temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp' },
+    profile: LUCIA,
+    turns: [{ ...dentalTurns.t0, networkFails: 1 }, dentalTurns.t1],
+  },
+  {
+    id: 'corte-red-persiste',
+    title: 'Corte de red que persiste: el mensaje vuelve al campo',
+    check: ['en el turno 1 las dos llamadas al prospecto fallan', 'el mensaje del alumno sale del chat, vuelve al campo de texto y aparece el aviso de conexión', 'al reenviarlo, el turno funciona'],
+    project: PROJECTS.dental,
+    config: { temperatura: 'tibio', resistencia: 'baja', canal: 'WhatsApp' },
+    profile: LUCIA,
+    turns: [{ ...dentalTurns.t0, networkFails: 2 }, dentalTurns.t1],
+  },
+  {
     id: 'cita-aceptada',
     title: 'Cita aceptada con descubrimiento confirmado',
     check: [

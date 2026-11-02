@@ -72,6 +72,13 @@ export const sandbox = {
     const index = (messages || []).filter((m) => m.role === 'user').length - 1;
     const turn = s.turns[index];
     await wait(state.prospectMs);
+    // Corte de red simulado («Failed to fetch»): fallan las primeras N llamadas del prospecto de ese turno.
+    const cut = `${state.run}:${index}`;
+    if ((turn?.networkFails || 0) > (networkCuts.get(cut) || 0)) {
+      networkCuts.set(cut, (networkCuts.get(cut) || 0) + 1);
+      this.note({ rol: 'prospecto', turno: index + 1, detalle: `corte de red simulado (${networkCuts.get(cut)} de ${turn.networkFails})` });
+      throw new TypeError('Failed to fetch');
+    }
     const raw = retry && turn?.prospectRetry ? turn.prospectRetry : turn?.prospect;
     this.note({ rol: 'prospecto', turno: index + 1, detalle: retry ? `REINTENTO pedido por la app${turn?.prospectRetry ? ' (respuesta corregida del guion)' : ' (el guion repite la respuesta)'}` : 'respuesta del guion' });
     if (!retry) { state.nextTurn = index + 1; emit(); }
@@ -80,6 +87,7 @@ export const sandbox = {
 };
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const networkCuts = new Map();
 const DEFAULT_COACH = {
   etapa_set: 'S', que_hizo_bien: 'Fuera del guion de este escenario.', que_mejorar: '', mensaje_alternativo: '', recurso_sugerido: '',
   alerta: '', nivel_fomo: 20, probabilidad_cita: 30, descubrimiento: { situacion: '', motivo: '' }, puntuacion_mensaje: 6,

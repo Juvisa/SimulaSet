@@ -6,6 +6,7 @@ import { applyDiscovery, createControlState } from '../../src/utils/primerContac
 import { pickOpeningMessage } from '../../src/utils/primerContacto.js';
 import { startPrimerContactoTurn } from '../../src/utils/primerContactoTurn.js';
 import { isTerminalState } from '../../src/utils/simulatorModes.js';
+import { isNetworkError, withNetworkRetry } from '../../src/utils/networkRetry.js';
 import { SCENARIOS } from './scenarios.js';
 import { sandbox } from './state.js';
 
@@ -18,9 +19,18 @@ const play = async (scenario) => {
   const messages = [{ role: 'prospect', content: pickOpeningMessage(profile.apertura_inicial, config.temperatura).text }];
   let control = createControlState(profile);
   const turns = [];
+  // Como la pantalla: un reintento automático ante un corte de red y, si persiste, el alumno reenvía el mensaje.
+  const call = withNetworkRetry((s, m) => sandbox.fakeCall(s, m), { delayMs: 0 });
+  turns.reenvios = 0;
   for (const t of scenario.turns) {
-    const { prospect, coach } = startPrimerContactoTurn({ call: (s, m) => sandbox.fakeCall(s, m), project: scenario.project, profile, history: messages, setterText: t.setter, control });
-    const p = await prospect;
+    let started = startPrimerContactoTurn({ call, project: scenario.project, profile, history: messages, setterText: t.setter, control });
+    let p = await started.prospect.catch((err) => { if (!isNetworkError(err)) throw err; return null; });
+    if (!p) {
+      turns.reenvios += 1;
+      started = startPrimerContactoTurn({ call, project: scenario.project, profile, history: messages, setterText: t.setter, control });
+      p = await started.prospect;
+    }
+    const { coach } = started;
     const c = await coach;
     control = applyDiscovery(p.control, c.discovery);
     messages.push({ role: 'setter', content: t.setter }, { role: 'prospect', content: p.respuesta_prospecto });
@@ -39,6 +49,8 @@ const EXPECTED = {
   'despedida-evasivas': { desenlace: 'despedida', turnos: 3 },
   'no-califica': { desenlace: 'no_califica', turnos: 3 },
   'coaching-falla': { desenlace: 'abierta', turnos: 2 },
+  'corte-red-recupera': { desenlace: 'abierta', turnos: 2, reenvios: 0 },
+  'corte-red-persiste': { desenlace: 'abierta', turnos: 2, reenvios: 1 },
   'reproduccion-r12': { desenlace: 'cita_condicionada', turnos: 5 },
   'reproduccion-r09': { desenlace: 'cita_aceptada', turnos: 7 },
 };
@@ -58,6 +70,7 @@ describe('preview local · escenarios', () => {
       expect(last.desenlace).toBe(e.desenlace);
       expect(turns).toHaveLength(e.turnos);
       if (e.estado) expect(last.estado_lead).toBe(e.estado);
+      if (e.reenvios !== undefined) expect(turns.reenvios).toBe(e.reenvios);
       if (e.espera) expect(turns.map((t, i) => (t.awaitedCoach ? i + 1 : null)).filter(Boolean)).toEqual(e.espera);
       // Ninguna respuesta mostrada trae datos de contacto.
       for (const t of turns) expect(t.respuesta_prospecto).not.toMatch(/\+?\d[\d\s()-]{7,}\d/);

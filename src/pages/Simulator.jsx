@@ -14,6 +14,11 @@ import { pickOpeningMessage, validateScore } from '../utils/primerContacto';
 import { applyCoachResult, coachingWithUrgency, startPrimerContactoTurn, urgencyOf } from '../utils/primerContactoTurn';
 import { OUTCOME_LABELS, createControlState, primerContactoFinalState } from '../utils/primerContactoControl';
 import { MOBILE_DRAWER_BOTTOM_CLASS, MOBILE_DRAWER_HIDDEN_CLASS } from '../utils/mobileDrawer';
+import { NETWORK_ERROR_MESSAGE, isNetworkError, withNetworkRetry } from '../utils/networkRetry';
+
+// Primer contacto: cada llamada del turno (prospecto, coaching y reintentos)
+// se repite una vez si se corta la conexión (ver utils/networkRetry.js).
+const primerContactoCall = withNetworkRetry(callClaude);
 import FomoBar from '../components/FomoBar';
 import ModeBadge from '../components/ModeBadge';
 import { Send, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, X, Loader2, Flag } from 'lucide-react';
@@ -340,7 +345,7 @@ const Simulator = () => {
   const sendPrimerContactoTurn = async (text, updatedMessages) => {
     setAwaitingProspect(true);
     const { prospect, coach } = startPrimerContactoTurn({
-      call: callClaude, project, profile: { ...prospectProfile, ...config }, history: messages, setterText: text, control,
+      call: primerContactoCall, project, profile: { ...prospectProfile, ...config }, history: messages, setterText: text, control,
     });
     const response = await prospect;
     const prospectMsg = {
@@ -440,14 +445,16 @@ const Simulator = () => {
     } catch (err) {
       // Si el servidor rechazó la solicitud (sesión, acceso o límite), el
       // mensaje del setter no llegó a evaluarse: se quita del chat y vuelve al
-      // campo de texto para reenviarlo sin perder la conversación.
-      const rejected = err instanceof AiRequestError;
+      // campo de texto para reenviarlo sin perder la conversación. En Primer
+      // contacto, un corte de red que persiste tras el reintento se trata igual.
+      const network = mode === PRIMER_CONTACTO && isNetworkError(err);
+      const rejected = err instanceof AiRequestError || network;
       if (rejected) setInput(text);
       setAwaitingProspect(false);
       setMessages(prev => [...(rejected ? prev.filter(m => m.id !== setterMsg.id) : prev), {
         id: crypto.randomUUID(),
         role: 'system',
-        content: rejected ? err.message : `Error: ${err.message}`,
+        content: network ? NETWORK_ERROR_MESSAGE : rejected ? err.message : `Error: ${err.message}`,
         time: formatTime(),
       }]);
     }
