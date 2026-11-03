@@ -1,21 +1,30 @@
 import { supabase } from '../lib/supabase';
 
-const COMMENT_SELECT = 'id, lesson_id, user_id, user_name, user_role, content, timestamp_marker, parent_id, created_at';
+const COMMENT_SELECT = 'id, lesson_id, lesson_ref, cohort_id, user_id, user_name, user_role, content, timestamp_marker, parent_id, created_at';
 
-export const getCommentCount = async (lessonId) => {
+// Los comentarios de una clase se separan por generación (F1B · B1): se leen y
+// se escriben por la fila de la clase (lesson_ref, UUID) y la generación
+// activa (cohort_id). Sin generación no hay comentarios (colecciones/downsell).
+// La base de datos (disparador de F1B-A y políticas de B2) vuelve a validarlo.
+
+export const getCommentCount = async ({ lessonRef, cohortId }) => {
+  if (!lessonRef || !cohortId) return { count: 0, error: undefined };
   const { count, error } = await supabase
     .from('lesson_comments')
     .select('id', { count: 'exact', head: true })
-    .eq('lesson_id', lessonId);
+    .eq('lesson_ref', lessonRef)
+    .eq('cohort_id', cohortId);
 
   return { count: count || 0, error: error?.message };
 };
 
-export const getLessonComments = async ({ lessonId, userId }) => {
+export const getLessonComments = async ({ lessonRef, cohortId, userId }) => {
+  if (!lessonRef || !cohortId) return { comments: [], error: undefined };
   const { data: comments, error } = await supabase
     .from('lesson_comments')
     .select(COMMENT_SELECT)
-    .eq('lesson_id', lessonId)
+    .eq('lesson_ref', lessonRef)
+    .eq('cohort_id', cohortId)
     .order('created_at', { ascending: true });
 
   if (error) return { comments: [], error: error.message };
@@ -44,18 +53,23 @@ export const getLessonComments = async ({ lessonId, userId }) => {
   };
 };
 
-export const createLessonComment = async ({ lessonId, userId, userName, userRole, content, timestampMarker, parentId }) => {
-  if (!content?.trim()) return { comment: null, error: 'Escribe tu pregunta o comentario.' };
+export const buildLessonCommentPayload = ({ lessonId, lessonRef, cohortId, userId, userName, userRole, content, timestampMarker, parentId }) => ({
+  lesson_id: lessonId,
+  lesson_ref: lessonRef,
+  cohort_id: cohortId,
+  user_id: userId,
+  user_name: userName,
+  user_role: userRole,
+  content: content.trim(),
+  timestamp_marker: timestampMarker?.trim() || null,
+  parent_id: parentId || null,
+});
 
-  const payload = {
-    lesson_id: lessonId,
-    user_id: userId,
-    user_name: userName,
-    user_role: userRole,
-    content: content.trim(),
-    timestamp_marker: timestampMarker?.trim() || null,
-    parent_id: parentId || null,
-  };
+export const createLessonComment = async ({ lessonId, lessonRef, cohortId, userId, userName, userRole, content, timestampMarker, parentId }) => {
+  if (!content?.trim()) return { comment: null, error: 'Escribe tu pregunta o comentario.' };
+  if (!lessonRef || !cohortId) return { comment: null, error: 'Los comentarios están disponibles solo dentro de tu generación.' };
+
+  const payload = buildLessonCommentPayload({ lessonId, lessonRef, cohortId, userId, userName, userRole, content, timestampMarker, parentId });
 
   const { data, error } = await supabase
     .from('lesson_comments')

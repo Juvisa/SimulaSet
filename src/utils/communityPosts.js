@@ -33,10 +33,28 @@ export const formatRelativeTime = (isoString) => {
   return new Date(isoString).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 };
 
-export const getFeed = async ({ limit = 30 } = {}) => {
+// Comunidad por generación (F1B · B1). El muro de una generación muestra:
+// sus publicaciones, los anuncios de la administración para todas, y las
+// publicaciones propias que quedaron sin asignar. Comentarios y reacciones:
+// los de esa generación (y los antiguos sin generación). Las políticas de B2
+// lo exigirán en la base de datos; aquí solo se decide qué pedir.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const assertUuid = (value, label) => {
+  if (!UUID.test(String(value || ''))) throw new Error(`${label} inválido`);
+  return value;
+};
+
+export const buildFeedFilter = ({ cohortId, userId }) => (
+  `audience.eq.all_cohorts,cohort_id.eq.${assertUuid(cohortId, 'cohortId')},and(user_id.eq.${assertUuid(userId, 'userId')},audience.eq.unassigned)`
+);
+export const buildChildFilter = ({ cohortId }) => `cohort_id.eq.${assertUuid(cohortId, 'cohortId')},cohort_id.is.null`;
+
+export const getFeed = async ({ cohortId, userId, limit = 30 } = {}) => {
+  if (!cohortId) return { posts: [], error: undefined };
   const { data: posts, error } = await supabase
     .from('community_posts')
     .select(POST_SELECT)
+    .or(buildFeedFilter({ cohortId, userId }))
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -45,6 +63,7 @@ export const getFeed = async ({ limit = 30 } = {}) => {
 
   const postIds = posts.map((p) => p.id);
   const authorIds = [...new Set(posts.map((p) => p.user_id))];
+  const childFilter = buildChildFilter({ cohortId });
 
   // leaderboard_stats (ver getWeeklyVictoryLeaderboard) resuelve avatar + SET
   // Score + sesiones de CUALQUIER autor del feed sin chocar con la RLS de
@@ -52,8 +71,8 @@ export const getFeed = async ({ limit = 30 } = {}) => {
   // autor no aparece ahí (ej. admin, cuenta inactiva), el post simplemente
   // no trae avatar/insignia y el frontend cae al círculo de iniciales.
   const [{ data: reactions }, { data: comments }, { data: authorStats }] = await Promise.all([
-    supabase.from('community_post_reactions').select('post_id, user_id').in('post_id', postIds),
-    supabase.from('community_post_comments').select('id, post_id').in('post_id', postIds),
+    supabase.from('community_post_reactions').select('post_id, user_id').in('post_id', postIds).or(childFilter),
+    supabase.from('community_post_comments').select('id, post_id').in('post_id', postIds).or(childFilter),
     supabase.from('leaderboard_stats').select(AUTHOR_STATS_SELECT).in('user_id', authorIds),
   ]);
 
@@ -94,14 +113,17 @@ export const getMyReactions = async ({ userId, postIds }) => {
   return { reactedPostIds: new Set((data || []).map((r) => r.post_id)), error: undefined };
 };
 
-export const createPost = async ({ userId, authorName, postType, content, niche, victoryType, evidenceUrl }) => {
+export const createPost = async ({ userId, cohortId, authorName, postType, content, niche, victoryType, evidenceUrl }) => {
   if (!content?.trim()) return { post: null, error: 'Escribe el contenido de tu publicación.' };
+  if (!cohortId) return { post: null, error: 'Publicar en la comunidad requiere una generación.' };
   if (postType === 'victoria' && (!niche?.trim() || !victoryType?.trim() || !evidenceUrl?.trim())) {
     return { post: null, error: 'Para una Victoria necesitas nicho, tipo de logro y captura/link.' };
   }
 
   const payload = {
     user_id: userId,
+    cohort_id: cohortId,
+    audience: 'cohort',
     author_name: authorName,
     post_type: postType,
     content: content.trim(),
@@ -133,7 +155,7 @@ export const uploadPostEvidenceFile = async ({ userId, file }) => {
   return { url: data?.publicUrl || null, error: data?.publicUrl ? undefined : 'No pudimos generar el enlace de tu captura.' };
 };
 
-export const toggleFireReaction = async ({ postId, userId, reacted }) => {
+export const toggleFireReaction = async ({ postId, userId, cohortId, reacted }) => {
   if (reacted) {
     const { error } = await supabase
       .from('community_post_reactions')
@@ -146,39 +168,44 @@ export const toggleFireReaction = async ({ postId, userId, reacted }) => {
 
   const { error } = await supabase
     .from('community_post_reactions')
-    .insert({ post_id: postId, user_id: userId, reaction: 'fire' });
+    .insert({ post_id: postId, user_id: userId, cohort_id: cohortId || null, reaction: 'fire' });
   return { reacted: true, error: error?.message };
 };
 
 const COMMENT_SELECT = 'id, post_id, user_id, author_name, content, created_at';
 
-export const getComments = async (postId) => {
+export const getComments = async ({ postId, cohortId }) => {
+  if (!cohortId) return { comments: [], error: undefined };
   const { data, error } = await supabase
     .from('community_post_comments')
     .select(COMMENT_SELECT)
     .eq('post_id', postId)
+    .or(buildChildFilter({ cohortId }))
     .order('created_at', { ascending: true });
 
   return { comments: data || [], error: error?.message };
 };
 
-export const addComment = async ({ postId, userId, authorName, content }) => {
+export const addComment = async ({ postId, userId, cohortId, authorName, content }) => {
   if (!content?.trim()) return { comment: null, error: 'Escribe un comentario.' };
 
   const { data, error } = await supabase
     .from('community_post_comments')
-    .insert({ post_id: postId, user_id: userId, author_name: authorName, content: content.trim() })
+    .insert({ post_id: postId, user_id: userId, cohort_id: cohortId || null, author_name: authorName, content: content.trim() })
     .select(COMMENT_SELECT)
     .single();
 
   return { comment: data || null, error: error?.message };
 };
 
-export const getWeeklyVictoryLeaderboard = async () => {
+export const getWeeklyVictoryLeaderboard = async ({ cohortId } = {}) => {
+  if (!cohortId) return { leaderboard: [], error: undefined };
   const { data, error } = await supabase
     .from('community_posts')
     .select('user_id, author_name')
     .eq('post_type', 'victoria')
+    .eq('audience', 'cohort')
+    .eq('cohort_id', cohortId)
     .gte('created_at', getStartOfWeekIso());
 
   if (error) return { leaderboard: [], error: error.message };

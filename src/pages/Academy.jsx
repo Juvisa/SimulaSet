@@ -9,40 +9,15 @@ import LessonInteractionPanel from '../components/LessonInteractionPanel';
 import MuxLessonVideo from '../components/MuxLessonVideo';
 import PracticeCta from '../components/PracticeCta';
 import { describeCompletionResult, getCompletionState, isTrackableLesson } from '../utils/lessonWatch/lessonCompletion';
+import { useAcademyAccess } from '../hooks/useAcademyAccess';
+import { ACCESS_STATE, fetchLessonScopes, filterLessonsForScope } from '../utils/academyAccess';
+import { START_COURSE_ID, START_MODULE_ID, groupAcademyLessons } from '../utils/academyLayout';
+import { AccessError, AccessLoading, ScopeSwitcher, TrainingNotEnabled } from '../components/AcademyAccessGate';
 
 const journeySteps = ['START', 'APRENDE', 'ENTRENA', 'DEMUESTRA', 'DESBLOQUEA'];
-const START_COURSE_ID = 'set-academy';
-const START_MODULE_ID = 'digital-set-start';
-const WEEK_ORDER = ['week-01', 'week-02', 'week-03', 'week-04'];
-const SPECIAL_MODULE_IDS = new Set([START_MODULE_ID, ...WEEK_ORDER, 'practical-labs']);
-
-const startLessons = [
-  {
-    id: 'digital-ecosystem',
-    module_id: START_MODULE_ID,
-    title: 'Entiende el ecosistema digital',
-    description: 'Los conceptos esenciales para ubicarte dentro de un negocio digital.',
-    topics: ['Negocio digital', 'Infoproducto', 'Oferta', 'Lead', 'Tráfico', 'Embudo', 'CRM', 'Setter', 'Closer', 'Chat closer', 'Lanzamiento', 'Evergreen'],
-    resources: [],
-    video_status: 'not_uploaded',
-  },
-  {
-    id: 'digital-sales-work',
-    module_id: START_MODULE_ID,
-    title: 'Cómo funciona el trabajo en ventas digitales',
-    description: 'Una vista clara del proceso comercial y del día a día de un setter.',
-    topics: ['Origen de leads', 'Roles', 'Pipeline', 'Trabajo en CRM', 'Seguimiento', 'Citas', 'Conversiones', 'Comisiones', 'Métricas básicas', 'Día a día del setter'],
-    resources: [],
-    video_status: 'not_uploaded',
-  },
-];
-
-const fallbackWeekGroups = [
-  { moduleId: 'week-01', week: 'Semana 1', lessons: [{ id: 'set-method-foundations', title: 'El terreno y el Método S.E.T.', scheduled_at: '2026-09-04T19:30:00-05:00', video_status: 'ready' }] },
-  { moduleId: 'week-02', week: 'Semana 2', lessons: [{ id: 'conversations-that-book-and-sell', title: 'Conversaciones que agendan y venden', scheduled_at: '2026-09-11T19:30:00-05:00', video_status: 'not_uploaded' }] },
-  { moduleId: 'week-03', week: 'Semana 3', lessons: [{ id: 'objections-and-follow-up', title: 'Objeciones y seguimiento', scheduled_at: '2026-09-18T19:30:00-05:00', video_status: 'not_uploaded' }] },
-  { moduleId: 'week-04', week: 'Semana 4', lessons: [{ id: 'opportunities-and-interviews', title: 'Oportunidades y entrevistas', scheduled_at: '2026-09-25T19:30:00-05:00', video_status: 'not_uploaded' }] },
-];
+// Sin catálogo de respaldo: antes, si la consulta fallaba, se mostraban los
+// títulos y fechas de G1 a cualquier alumno. Ahora solo se ve lo que la base
+// de datos devuelve para el ámbito (generación o colección) del alumno.
 
 const formatScheduledAt = (scheduledAt) => {
   if (!scheduledAt) return 'Fecha por confirmar';
@@ -118,10 +93,11 @@ const Academy = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isStarter = user.onboarding?.classification === 'starter';
-  const [lessons, setLessons] = useState(startLessons);
-  const [weekGroups, setWeekGroups] = useState(fallbackWeekGroups);
-  const [labLessons, setLabLessons] = useState([]);
-  const [additionalModuleGroups, setAdditionalModuleGroups] = useState([]);
+  const academyAccess = useAcademyAccess();
+  const scope = academyAccess.activeScope;
+  // Comentarios solo dentro de una generación; las colecciones no dan comunidad.
+  const commentCohortId = scope?.type === 'cohort' ? scope.id : null;
+  const [catalog, setCatalog] = useState({ loaded: false, lessons: [], lessonCohorts: [], collectionLessons: [], error: '' });
   const [progress, setProgress] = useState({});
   // Origen de cada finalización (verified_watch | self_reported | legacy_self_reported).
   const [completionSources, setCompletionSources] = useState({});
@@ -145,42 +121,24 @@ const Academy = () => {
   useEffect(() => {
     let active = true;
 
-    getPublishedAcademyLessons(START_COURSE_ID).then(({ lessons: publishedLessons, error }) => {
-      if (!active || error || publishedLessons.length === 0) return;
-      const digitalStartLessons = publishedLessons
-        .filter(lesson => lesson.module_id === START_MODULE_ID)
-        .map(lesson => ({ ...lesson, id: lesson.lesson_id, lesson_uuid: lesson.id }));
-      if (digitalStartLessons.length > 0) setLessons(digitalStartLessons);
-
-      const lessonsByModule = publishedLessons.reduce((groups, lesson) => {
-        if (!groups[lesson.module_id]) groups[lesson.module_id] = [];
-        groups[lesson.module_id].push({ ...lesson, id: lesson.lesson_id, lesson_uuid: lesson.id, scheduled_at: lesson.scheduled_at });
-        return groups;
-      }, {});
-
-      setWeekGroups(fallbackWeekGroups.map((fallbackGroup) => {
-        const moduleLessons = lessonsByModule[fallbackGroup.moduleId];
-        return moduleLessons?.length > 0
-          ? { ...fallbackGroup, lessons: [...moduleLessons].sort((a, b) => a.position - b.position) }
-          : fallbackGroup;
-      }).sort((a, b) => WEEK_ORDER.indexOf(a.moduleId) - WEEK_ORDER.indexOf(b.moduleId)));
-
-      const practicalLabs = lessonsByModule['practical-labs'];
-      if (practicalLabs?.length > 0) {
-        setLabLessons([...practicalLabs].sort((a, b) => a.position - b.position));
-      }
-
-      setAdditionalModuleGroups(Object.entries(lessonsByModule)
-        .filter(([moduleId]) => !SPECIAL_MODULE_IDS.has(moduleId))
-        .map(([moduleId, moduleLessons]) => ({
-          moduleId,
-          lessons: [...moduleLessons].sort((a, b) => a.position - b.position || a.lesson_id.localeCompare(b.lesson_id)),
-        }))
-        .sort((a, b) => a.moduleId.localeCompare(b.moduleId, 'es', { numeric: true })));
+    Promise.all([getPublishedAcademyLessons(START_COURSE_ID), fetchLessonScopes()]).then(([published, scopes]) => {
+      if (!active) return;
+      setCatalog({
+        loaded: true,
+        lessons: published.lessons,
+        lessonCohorts: scopes.lessonCohorts,
+        collectionLessons: scopes.collectionLessons,
+        error: published.error || scopes.error || '',
+      });
     });
 
     return () => { active = false; };
   }, []);
+
+  const visibleLessons = filterLessonsForScope({
+    lessons: catalog.lessons, scope, lessonCohorts: catalog.lessonCohorts, collectionLessons: catalog.collectionLessons,
+  });
+  const { startLessons: lessons, weekGroups, labLessons, additionalModuleGroups } = groupAcademyLessons(visibleLessons);
 
   useEffect(() => {
     let active = true;
@@ -203,8 +161,8 @@ const Academy = () => {
   }, [user.id]);
 
   const completedCount = lessons.filter(lesson => progress[progressKey(START_MODULE_ID, lesson.id)] === 'completed').length;
-  const startProgressPercent = Math.round((completedCount / lessons.length) * 100);
-  const startCompleted = completedCount === lessons.length;
+  const startProgressPercent = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
+  const startCompleted = lessons.length > 0 && completedCount === lessons.length;
 
   // "Progreso del programa" agrega TODAS las clases publicadas (Módulo 0 +
   // semanas + labs + módulos adicionales), no solo el Módulo 0 — antes este
@@ -263,6 +221,14 @@ const Academy = () => {
     setTimeout(() => setXpToast(''), 4000);
   };
 
+  if (academyAccess.state === ACCESS_STATE.LOADING) return <AccessLoading />;
+  if (academyAccess.state === ACCESS_STATE.ERROR) return <AccessError error={academyAccess.error} onRetry={academyAccess.retry} />;
+  if (!scope) return <TrainingNotEnabled />;
+
+  const interactionPanel = (lesson) => (commentCohortId && lesson.lesson_uuid ? (
+    <LessonInteractionPanel key={`${lesson.lesson_uuid}:${commentCohortId}`} lesson={lesson} lessonRef={lesson.lesson_uuid} cohortId={commentCohortId} userId={user.id} userName={user.name} userRole={user.role} />
+  ) : null);
+
   return (
   <Layout>
     <div className="max-w-4xl mx-auto animate-fade-in">
@@ -273,6 +239,8 @@ const Academy = () => {
         <h1 className="text-3xl md:text-4xl font-black text-text-primary">Tu ruta DIGITAL SET</h1>
         <p className="text-text-secondary mt-2">Aprende. Entrena. Aplica.</p>
       </div>
+
+      <ScopeSwitcher scopes={academyAccess.scopes} activeScope={scope} onSelect={academyAccess.selectScope} />
 
       {xpToast && <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">{xpToast}</div>}
 
@@ -291,6 +259,16 @@ const Academy = () => {
         </div>
       </div>
 
+      {!catalog.loaded && (
+        <div className="mb-6 flex min-h-24 items-center justify-center gap-2 text-sm text-text-secondary"><Loader2 size={18} className="animate-spin" /> Cargando clases...</div>
+      )}
+      {catalog.loaded && catalog.error && (
+        <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">No pudimos cargar las clases: {catalog.error}</div>
+      )}
+      {catalog.loaded && !catalog.error && visibleLessons.length === 0 && (
+        <div className="mb-6 rounded-2xl border border-border-subtle bg-bg-card p-5 text-sm text-text-secondary">Todavía no hay clases publicadas para {scope.name}. Te avisaremos cuando estén disponibles.</div>
+      )}
+      {lessons.length > 0 && (
       <article id="digital-set-start" className={`scroll-mt-6 rounded-2xl border p-4 sm:p-6 mb-6 ${isStarter ? 'border-accent-coral bg-accent-coral/10' : 'border-border-subtle bg-bg-card'}`}>
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
@@ -344,7 +322,7 @@ const Academy = () => {
                         onGoSimulate={() => navigate('/simulate')}
                         onMarkComplete={() => handleMarkComplete(START_MODULE_ID, lesson.id)}
                       />
-                      <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
+                      {interactionPanel(lesson)}
                     </div>
                   )}
                 </section>
@@ -353,7 +331,9 @@ const Academy = () => {
           </div>
         )}
       </article>
+      )}
 
+      {visibleLessons.length > 0 && (
       <div className="bg-bg-card border border-border-subtle rounded-2xl p-5 mb-6">
         <div className="flex justify-between text-sm mb-3">
           <span className="font-semibold text-text-primary">Progreso del programa</span>
@@ -363,6 +343,7 @@ const Academy = () => {
           <div className="h-full bg-accent-coral rounded-full transition-all duration-500" style={{ width: `${overallProgressPercent}%` }} />
         </div>
       </div>
+      )}
 
       <div id="set-academy-main" className="scroll-mt-6 grid md:grid-cols-2 gap-4">
         {weekGroups.map((group) => (
@@ -392,7 +373,7 @@ const Academy = () => {
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}
                   />
-                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
+                  {interactionPanel(lesson)}
                 </article>
               );
             })}
@@ -429,7 +410,7 @@ const Academy = () => {
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete('practical-labs', lesson.id)}
                   />
-                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
+                  {interactionPanel(lesson)}
                 </article>
               );
             })}
@@ -466,7 +447,7 @@ const Academy = () => {
                     onGoSimulate={() => navigate('/simulate')}
                     onMarkComplete={() => handleMarkComplete(group.moduleId, lesson.id)}
                   />
-                  <LessonInteractionPanel lesson={lesson} userId={user.id} userName={user.name} userRole={user.role} />
+                  {interactionPanel(lesson)}
                 </article>
               );
             })}

@@ -6,6 +6,9 @@ import {
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getPracticeLevel } from '../utils/practiceLevel';
+import { useAcademyAccess } from '../hooks/useAcademyAccess';
+import { ACCESS_STATE } from '../utils/academyAccess';
+import { AccessError, AccessLoading, ScopeSwitcher, TrainingNotEnabled } from '../components/AcademyAccessGate';
 import {
   POST_TYPES, formatRelativeTime, getFeed, getMyReactions, createPost,
   uploadPostEvidenceFile, toggleFireReaction, getComments, addComment, getWeeklyVictoryLeaderboard,
@@ -42,7 +45,7 @@ const buildAchievementShareText = (post) => {
   return `🔥 ¡Victoria desbloqueada en Terminal Táctica! ${heading}\n${post.content}`;
 };
 
-const Composer = ({ userId, authorName, onPosted }) => {
+const Composer = ({ userId, cohortId, authorName, onPosted }) => {
   const [activeTab, setActiveTab] = useState('victoria');
   const [content, setContent] = useState('');
   const [niche, setNiche] = useState('');
@@ -76,7 +79,7 @@ const Composer = ({ userId, authorName, onPosted }) => {
     setPosting(true);
     setError('');
     const { post, error: postError } = await createPost({
-      userId, authorName, postType: activeTab, content,
+      userId, cohortId, authorName, postType: activeTab, content,
       niche: activeTab === 'victoria' ? niche : '',
       victoryType: activeTab === 'victoria' ? victoryType : '',
       evidenceUrl,
@@ -175,7 +178,7 @@ const Composer = ({ userId, authorName, onPosted }) => {
   );
 };
 
-const CommentsSection = ({ postId, userId, authorName, isAdmin }) => {
+const CommentsSection = ({ postId, userId, cohortId, authorName, isAdmin }) => {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -184,18 +187,18 @@ const CommentsSection = ({ postId, userId, authorName, isAdmin }) => {
 
   useEffect(() => {
     let active = true;
-    getComments(postId).then(({ comments: loaded }) => {
+    getComments({ postId, cohortId }).then(({ comments: loaded }) => {
       if (active) setComments(loaded);
     }).finally(() => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [postId]);
+  }, [postId, cohortId]);
 
   const handleSend = async () => {
     if (!draft.trim()) return;
     setSending(true);
-    const { comment } = await addComment({ postId, userId, authorName, content: draft });
+    const { comment } = await addComment({ postId, userId, cohortId, authorName, content: draft });
     setSending(false);
     if (comment) {
       setComments((prev) => [...prev, comment]);
@@ -267,7 +270,7 @@ const AuthorLevelBadge = ({ validSimulations }) => {
   );
 };
 
-const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, onDeletePost }) => {
+const PostCard = ({ post, userId, cohortId, authorName, isAdmin, reacted, onToggleFire, onDeletePost }) => {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -376,7 +379,7 @@ const PostCard = ({ post, userId, authorName, isAdmin, reacted, onToggleFire, on
         )}
       </div>
 
-      {commentsOpen && <CommentsSection postId={post.id} userId={userId} authorName={authorName} isAdmin={isAdmin} />}
+      {commentsOpen && <CommentsSection postId={post.id} userId={userId} cohortId={cohortId} authorName={authorName} isAdmin={isAdmin} />}
     </article>
   );
 };
@@ -399,7 +402,28 @@ const Leaderboard = ({ leaderboard }) => {
   );
 };
 
+// El muro se monta con key = generación: al cambiar de generación se reinicia
+// por completo y nunca muestra datos de la anterior.
 const SetWins = () => {
+  const academyAccess = useAcademyAccess();
+  const scope = academyAccess.activeScope;
+  if (academyAccess.state === ACCESS_STATE.LOADING) return <AccessLoading />;
+  if (academyAccess.state === ACCESS_STATE.ERROR) return <AccessError error={academyAccess.error} onRetry={academyAccess.retry} />;
+  if (!scope) return <TrainingNotEnabled />;
+  // Solo colecciones (downsell): grabaciones sí, comunidad no.
+  const cohortScopes = academyAccess.scopes.filter((item) => item.type === 'cohort');
+  if (cohortScopes.length === 0) return <TrainingNotEnabled variant="comunidad" />;
+  const activeCohort = scope.type === 'cohort' ? scope : cohortScopes[cohortScopes.length - 1];
+  return (
+    <SetWinsWall
+      key={activeCohort.id}
+      cohortId={activeCohort.id}
+      switcher={<ScopeSwitcher scopes={cohortScopes} activeScope={activeCohort} onSelect={academyAccess.selectScope} />}
+    />
+  );
+};
+
+const SetWinsWall = ({ cohortId, switcher }) => {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
   const [posts, setPosts] = useState([]);
@@ -411,7 +435,7 @@ const SetWins = () => {
 
   useEffect(() => {
     let active = true;
-    getFeed({}).then(async ({ posts: loadedPosts, error: feedError }) => {
+    getFeed({ cohortId, userId: user.id }).then(async ({ posts: loadedPosts, error: feedError }) => {
       if (!active) return;
       setPosts(loadedPosts);
       if (feedError) setError(`No pudimos cargar el muro: ${feedError}`);
@@ -422,11 +446,11 @@ const SetWins = () => {
     }).finally(() => {
       if (active) setLoading(false);
     });
-    getWeeklyVictoryLeaderboard().then(({ leaderboard: board }) => {
+    getWeeklyVictoryLeaderboard({ cohortId }).then(({ leaderboard: board }) => {
       if (active) setLeaderboard(board);
     });
     return () => { active = false; };
-  }, [user.id]);
+  }, [user.id, cohortId]);
 
   const handlePosted = (post, xpReward) => {
     setPosts((prev) => [post, ...prev]);
@@ -442,7 +466,7 @@ const SetWins = () => {
       return next;
     });
     setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, fireCount: p.fireCount + (reacted ? -1 : 1) } : p)));
-    await toggleFireReaction({ postId, userId: user.id, reacted });
+    await toggleFireReaction({ postId, userId: user.id, cohortId, reacted });
   };
 
   const handleDeletePost = async (postId) => {
@@ -460,10 +484,12 @@ const SetWins = () => {
           <p className="mt-2 text-sm text-text-secondary">Muro de victorias, llamadas agendadas y rescate de chats. El número, no la sensación.</p>
         </header>
 
+        {switcher}
+
         <Leaderboard leaderboard={leaderboard} />
 
         <div className="mb-6">
-          <Composer userId={user.id} authorName={user.name} onPosted={handlePosted} />
+          <Composer userId={user.id} cohortId={cohortId} authorName={user.name} onPosted={handlePosted} />
         </div>
 
         {error && <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
@@ -480,6 +506,7 @@ const SetWins = () => {
                 key={post.id}
                 post={post}
                 userId={user.id}
+                cohortId={cohortId}
                 authorName={user.name}
                 isAdmin={isAdmin}
                 reacted={reactedPostIds.has(post.id)}
