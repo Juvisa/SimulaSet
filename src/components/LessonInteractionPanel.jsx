@@ -66,7 +66,7 @@ const CommentRow = ({ comment, userId, isReply, onReply, onToggleLike }) => (
   </div>
 );
 
-const DiscussionTab = ({ lessonId, userId, userName, userRole, comments, loading, error, onCommentPosted, onToggleLike }) => {
+const DiscussionTab = ({ lessonId, lessonRef, cohortId, userId, userName, userRole, comments, loading, error, onCommentPosted, onToggleLike }) => {
   const [content, setContent] = useState('');
   const [timestampMarker, setTimestampMarker] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
@@ -78,7 +78,7 @@ const DiscussionTab = ({ lessonId, userId, userName, userRole, comments, loading
     setPosting(true);
     setLocalError('');
     const { comment, error: postError } = await createLessonComment({
-      lessonId, userId, userName, userRole, content, timestampMarker,
+      lessonId, lessonRef, cohortId, userId, userName, userRole, content, timestampMarker,
     });
     setPosting(false);
     if (postError) { setLocalError(postError); return; }
@@ -92,7 +92,7 @@ const DiscussionTab = ({ lessonId, userId, userName, userRole, comments, loading
     setPosting(true);
     setLocalError('');
     const { comment, error: postError } = await createLessonComment({
-      lessonId, userId, userName, userRole, content: replyDraft, parentId,
+      lessonId, lessonRef, cohortId, userId, userName, userRole, content: replyDraft, parentId,
     });
     setPosting(false);
     if (postError) { setLocalError(postError); return; }
@@ -185,7 +185,10 @@ const MaterialsTab = ({ lesson }) => {
   );
 };
 
-const LessonInteractionPanel = ({ lesson, userId, userName, userRole }) => {
+// `lessonRef` = UUID de la clase; `cohortId` = generación activa. El panel se
+// monta con key por generación (ver Academy), así cambiar de generación no
+// mezcla comentarios de otra.
+const LessonInteractionPanel = ({ lesson, lessonRef, cohortId, userId, userName, userRole }) => {
   const [activeTab, setActiveTab] = useState('materials');
   const [comments, setComments] = useState([]);
   const [commentCount, setCommentCount] = useState(null);
@@ -195,18 +198,18 @@ const LessonInteractionPanel = ({ lesson, userId, userName, userRole }) => {
 
   useEffect(() => {
     let active = true;
-    getCommentCount(lesson.id).then(({ count }) => {
+    getCommentCount({ lessonRef, cohortId }).then(({ count }) => {
       if (active) setCommentCount(count);
     });
     return () => { active = false; };
-  }, [lesson.id]);
+  }, [lessonRef, cohortId]);
 
   const openDiscussion = () => {
     setActiveTab('discussion');
     if (loadedOnce) return;
     setLoadedOnce(true);
     setLoadingComments(true);
-    getLessonComments({ lessonId: lesson.id, userId }).then(({ comments: loaded, error: loadError }) => {
+    getLessonComments({ lessonRef, cohortId, userId }).then(({ comments: loaded, error: loadError }) => {
       setComments(loaded);
       setCommentCount(loaded.length);
       if (loadError) setError(`No pudimos cargar las preguntas: ${loadError}`);
@@ -247,6 +250,8 @@ const LessonInteractionPanel = ({ lesson, userId, userName, userRole }) => {
         ) : (
           <DiscussionTab
             lessonId={lesson.id}
+            lessonRef={lessonRef}
+            cohortId={cohortId}
             userId={userId}
             userName={userName}
             userRole={userRole}

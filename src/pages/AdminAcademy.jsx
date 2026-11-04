@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, CalendarDays, Loader2, Pencil, Plus, Trash2, Uploa
 import Layout from '../components/Layout';
 import { createAcademyLesson, deleteAcademyLesson, getAllAcademyLessons, updateAcademyLesson } from '../utils/adminAcademyLessons';
 import { createMuxDirectUpload, uploadFileToMux } from '../utils/muxUploads';
+import { getAllLessonCohorts, getCohortsOverview, setLessonCohorts } from '../utils/adminCohorts';
 
 const EMPTY_FORM = {
   title: '', description: '', module_id: '', lesson_id: '', position: 1,
@@ -82,6 +83,25 @@ const AdminAcademy = () => {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
+  // Generaciones y asignación clase ↔ generación (F1B · B1). Un alumno solo ve
+  // las clases asignadas a su generación; una clase sin generación no la ve nadie.
+  const [cohorts, setCohorts] = useState([]);
+  const [lessonCohortRows, setLessonCohortRows] = useState([]);
+  const [cohortsError, setCohortsError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getCohortsOverview(), getAllLessonCohorts()]).then(([overview, assignments]) => {
+      if (!active) return;
+      setCohorts(overview.cohorts);
+      setLessonCohortRows(assignments.rows);
+      setCohortsError(overview.error || assignments.error || '');
+    });
+    return () => { active = false; };
+  }, []);
+
+  const cohortIdsFor = (lessonId, rows = lessonCohortRows) => rows.filter(row => row.lesson_id === lessonId).map(row => row.cohort_id);
+  const cohortName = (cohortId) => cohorts.find(cohort => cohort.id === cohortId)?.name || 'Generación';
 
   useEffect(() => {
     let active = true;
@@ -100,7 +120,7 @@ const AdminAcademy = () => {
 
   const openCreate = () => {
     setEditingLesson(null);
-    setForm({ ...EMPTY_FORM, resources: [] });
+    setForm({ ...EMPTY_FORM, resources: [], cohort_ids: [] });
     setSaveError('');
     setSaveRawError(null);
     setVideoFile(null);
@@ -108,7 +128,7 @@ const AdminAcademy = () => {
     setUploadProgress(0);
   };
 
-  const openEdit = (lesson) => {
+  const openEdit = (lesson, cohortIds = cohortIdsFor(lesson.id)) => {
     setEditingLesson(lesson);
     setForm({
       title: lesson.title,
@@ -121,6 +141,7 @@ const AdminAcademy = () => {
       resources: Array.isArray(lesson.resources) ? lesson.resources.map(resource => ({ ...resource, id: resource.id || createResourceId() })) : [],
       published: lesson.published,
       video_url: lesson.video_url || '',
+      cohort_ids: cohortIds,
     });
     setSaveError('');
     setSaveRawError(null);
@@ -239,17 +260,32 @@ const AdminAcademy = () => {
 
     console.error('[AdminAcademy] handleSubmit → resultado:', result);
 
-    setSaving(false);
     if (result.error || !result.lesson) {
+      setSaving(false);
       setSaveError(`No se pudo guardar la clase: ${result.error || 'Respuesta inesperada'}`);
       setSaveRawError(result.rawError || null);
       return;
     }
     setSaveRawError(null);
 
+    // Generaciones de la clase: solo se escriben las diferencias.
+    const nextCohortIds = form.cohort_ids || [];
+    const assignment = await setLessonCohorts({ lessonId: result.lesson.id, currentIds: cohortIdsFor(result.lesson.id), nextIds: nextCohortIds });
+    setSaving(false);
+    const nextRows = assignment.error
+      ? lessonCohortRows
+      : [...lessonCohortRows.filter(row => row.lesson_id !== result.lesson.id), ...nextCohortIds.map(cohortId => ({ lesson_id: result.lesson.id, cohort_id: cohortId }))];
+    if (!assignment.error) setLessonCohortRows(nextRows);
+
     setLessons(current => sortLessons(isUpdate
       ? current.map(lesson => lesson.id === result.lesson.id ? result.lesson : lesson)
       : [...current, result.lesson]));
+    if (assignment.error) {
+      // La clase sí se guardó; solo falló la asignación: se deja el formulario abierto.
+      openEdit(result.lesson, cohortIdsFor(result.lesson.id));
+      setSaveError(`La clase se guardó, pero no se pudieron actualizar sus generaciones: ${assignment.error}`);
+      return;
+    }
     if (editingLesson) {
       // Edición normal de una clase ya abierta: cierra el formulario.
       setForm(null);
@@ -257,9 +293,16 @@ const AdminAcademy = () => {
     } else {
       // Clase nueva, o colisión resuelta como actualización: entra a modo
       // edición para poder subir el video/recording de inmediato.
-      openEdit(result.lesson);
+      openEdit(result.lesson, nextCohortIds);
     }
   };
+
+  const toggleFormCohort = (cohortId) => setForm(current => ({
+    ...current,
+    cohort_ids: (current.cohort_ids || []).includes(cohortId)
+      ? current.cohort_ids.filter(id => id !== cohortId)
+      : [...(current.cohort_ids || []), cohortId],
+  }));
 
   const handleDelete = async (lesson) => {
     if (editingLesson?.id === lesson.id) return;
@@ -432,6 +475,18 @@ const AdminAcademy = () => {
             </button>
           </div>
         )}
+        <fieldset className="md:col-span-2 rounded-xl border border-border-subtle bg-bg-input/40 p-4">
+          <legend className="px-1 text-sm font-semibold text-text-primary">Generaciones que ven esta clase</legend>
+          {cohortsError && <p className="mb-2 text-xs text-red-400">No se pudieron cargar las generaciones: {cohortsError}</p>}
+          <div className="flex flex-wrap gap-3">
+            {cohorts.map(cohort => (
+              <label key={cohort.id} className="flex min-h-11 items-center gap-2 rounded-xl border border-border-subtle bg-bg-input px-3 text-sm text-text-primary">
+                <input type="checkbox" checked={(form.cohort_ids || []).includes(cohort.id)} onChange={() => toggleFormCohort(cohort.id)} className="h-5 w-5 accent-accent-coral" /> {cohort.name}
+              </label>
+            ))}
+          </div>
+          {(form.cohort_ids || []).length === 0 && <p className="mt-2 text-xs text-amber-400">Sin generación, ningún alumno verá esta clase aunque esté publicada.</p>}
+        </fieldset>
         <label className="md:col-span-2 flex min-h-12 items-center gap-3 rounded-xl border border-border-subtle bg-bg-input px-4 text-sm font-semibold text-text-primary">
           <input type="checkbox" checked={form.published} onChange={event => updateField('published', event.target.checked)} className="h-5 w-5 accent-accent-coral" /> Publicada
         </label>
@@ -501,6 +556,9 @@ const AdminAcademy = () => {
                           <div className="flex flex-wrap gap-2 sm:justify-end">
                             <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${lesson.published ? 'bg-green-500/10 text-green-400' : 'bg-bg-input text-text-secondary'}`}>{lesson.published ? 'Publicada' : 'Borrador'}</span>
                             <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${videoState.className}`}>{videoState.label}</span>
+                            {cohortIdsFor(lesson.id).length === 0
+                              ? <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-400">Sin generación</span>
+                              : cohortIdsFor(lesson.id).map(cohortId => <span key={cohortId} className="rounded-full bg-accent-coral/10 px-2.5 py-1 text-xs font-bold text-accent-coral">{cohortName(cohortId)}</span>)}
                           </div>
                         </div>
                         <div className="mt-4 flex flex-col gap-3 border-t border-border-subtle pt-4 sm:flex-row sm:items-center sm:justify-between">

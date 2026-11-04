@@ -20,6 +20,7 @@ import RealLeadConversation from './pages/RealLeadConversation';
 import Analytics from './pages/Analytics';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminAcademy from './pages/AdminAcademy';
+import AdminCohorts from './pages/AdminCohorts';
 import AdminRewards from './pages/AdminRewards';
 import Profile from './pages/Profile';
 import Migrate from './pages/Migrate';
@@ -111,6 +112,7 @@ function App() {
           <Route path="/admin/setter/:setterId" element={<ProtectedRoute adminOnly><AdminSetterDetail /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
           <Route path="/admin/academy" element={<ProtectedRoute adminOnly><AdminAcademy /></ProtectedRoute>} />
+          <Route path="/admin/cohorts" element={<ProtectedRoute adminOnly><AdminCohorts /></ProtectedRoute>} />
           <Route path="/admin/rewards" element={<ProtectedRoute adminOnly><AdminRewards /></ProtectedRoute>} />
 
           {/* Utilities */}

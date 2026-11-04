@@ -6,7 +6,7 @@ import { getPracticeLevel, getPracticeProgress } from '../utils/practiceLevel';
 import { getValidSimulationCount } from '../utils/simulatorSessions';
 import {
   LayoutDashboard, Dumbbell, Zap, BookOpen, Shield, ShieldCheck, ListChecks, TrendingUp,
-  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles, IdCard,
+  BriefcaseBusiness, Gift, Trophy, Search, LogOut, X, GraduationCap, Sparkles, IdCard, Users,
 } from 'lucide-react';
 
 const isPathActive = (pathname, to) => pathname === to || pathname.startsWith(to + '/');
@@ -91,6 +91,7 @@ const Sidebar = ({ mobileOpen, onCloseMobile }) => {
   const adminItems = [
     { to: '/admin', icon: Shield, label: 'Pulso de Cohorte' },
     { to: '/admin/academy', icon: BookOpen, label: 'SET Academy' },
+    { to: '/admin/cohorts', icon: Users, label: 'Generaciones' },
     { to: '/admin/analytics', icon: TrendingUp, label: 'Analítica' },
     { to: '/admin/rewards', icon: Gift, label: 'Canjes de Recompensas' },
     { to: '/empresa', icon: ShieldCheck, label: 'Centro de Auditoría' },
