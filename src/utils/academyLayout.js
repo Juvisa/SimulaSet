@@ -1,13 +1,16 @@
 // Distribución de las clases en la pantalla de la Academia (sin catálogo fijo:
 // todo sale de la base de datos y de las clases visibles para el alumno).
+// Sirve para cualquier generación (G1, G2, G3…): los módulos `week-NN` se
+// muestran como «Semana N» en orden numérico, sin límite de semanas.
 export const START_COURSE_ID = 'set-academy';
 export const START_MODULE_ID = 'digital-set-start';
 export const LAB_MODULE_ID = 'practical-labs';
-export const WEEK_ORDER = ['week-01', 'week-02', 'week-03', 'week-04'];
-const SPECIAL_MODULE_IDS = new Set([START_MODULE_ID, ...WEEK_ORDER, LAB_MODULE_ID]);
+const WEEK_MODULE = /^week-0*(\d+)$/;
+export const isWeekModule = (moduleId) => WEEK_MODULE.test(moduleId || '');
+const weekNumber = (moduleId) => Number(WEEK_MODULE.exec(moduleId || '')?.[1] ?? Infinity);
 
 export const weekLabel = (moduleId) => {
-  const match = /^week-0*(\d+)$/.exec(moduleId || '');
+  const match = WEEK_MODULE.exec(moduleId || '');
   return match ? `Semana ${match[1]}` : moduleId;
 };
 
@@ -23,13 +26,15 @@ export const groupAcademyLessons = (lessons = []) => {
     byModule[lesson.module_id].push({ ...lesson, id: lesson.lesson_id, lesson_uuid: lesson.id });
   });
   Object.values(byModule).forEach((rows) => rows.sort(byPosition));
+  const moduleIds = Object.keys(byModule);
   return {
     startLessons: byModule[START_MODULE_ID] || [],
-    weekGroups: WEEK_ORDER.filter((moduleId) => byModule[moduleId]?.length)
+    weekGroups: moduleIds.filter(isWeekModule)
+      .sort((a, b) => weekNumber(a) - weekNumber(b))
       .map((moduleId) => ({ moduleId, week: weekLabel(moduleId), lessons: byModule[moduleId] })),
     labLessons: byModule[LAB_MODULE_ID] || [],
-    additionalModuleGroups: Object.keys(byModule)
-      .filter((moduleId) => !SPECIAL_MODULE_IDS.has(moduleId))
+    additionalModuleGroups: moduleIds
+      .filter((moduleId) => moduleId !== START_MODULE_ID && moduleId !== LAB_MODULE_ID && !isWeekModule(moduleId))
       .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))
       .map((moduleId) => ({ moduleId, lessons: byModule[moduleId] })),
   };

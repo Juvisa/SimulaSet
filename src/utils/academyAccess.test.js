@@ -109,6 +109,28 @@ describe('diseño de la Academia sin catálogo fijo', () => {
   });
 });
 
+describe('G3 y generaciones futuras sin cambiar código', () => {
+  const G3 = { id: '55555555-5555-4555-8555-555555555555', slug: 'g3-setter-pro', name: 'G3 Setter Pro', starts_on: null };
+  const g3Lessons = [L('g3w1', 'week-01', 'g3-intro'), L('g3w6', 'week-06', 'g3-cierre'), L('g3w2', 'week-02', 'g3-objeciones')];
+  const g3Cohorts = [...lessonCohorts, ...['m1', 'm2', 'ghl', 'g3w1', 'g3w6', 'g3w2'].map((lesson_id) => ({ lesson_id, cohort_id: G3.id }))];
+  const acc3 = (grants) => resolveAcademyAccess({ role: 'setter', grants, cohorts: [G1, G2, G3], collections: [PRO], now: NOW });
+  it('alumno de G3: compartidas + exclusivas de G3, nada de G1 ni de G2', () => {
+    const acc = acc3([grant({ cohort_id: G3.id })]);
+    const ids = filterLessonsForScope({ lessons: [...lessons, ...g3Lessons], scope: pickActiveScope(acc.scopes), lessonCohorts: g3Cohorts, now: NOW }).map((l) => l.id).sort();
+    expect(ids).toEqual(['g3w1', 'g3w2', 'g3w6', 'ghl', 'm1', 'm2']);
+  });
+  it('G3 con 6 semanas: «Semana 1, 2, 6» en orden numérico, en el mismo diseño que G1', () => {
+    const g = groupAcademyLessons(g3Lessons);
+    expect(g.weekGroups.map((w) => w.week)).toEqual(['Semana 1', 'Semana 2', 'Semana 6']);
+    expect(g.additionalModuleGroups).toEqual([]);
+  });
+  it('G2 + G3 (G3 aún sin fecha de inicio): por defecto la más reciente, G3', () => {
+    const acc = acc3([grant({ cohort_id: G2.id }), grant({ cohort_id: G3.id })]);
+    expect(acc.scopes.map((s) => s.slug)).toEqual(['g2-setter-pro', 'g3-setter-pro']);
+    expect(pickActiveScope(acc.scopes).slug).toBe('g3-setter-pro');
+  });
+});
+
 describe('comunidad y comentarios por generación', () => {
   it('filtro del muro: la generación, anuncios para todas y lo propio sin asignar', () => {
     expect(buildFeedFilter({ cohortId: G1.id, userId: ME }))

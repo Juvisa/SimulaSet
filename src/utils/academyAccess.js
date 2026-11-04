@@ -22,8 +22,9 @@ export const isGrantActive = (grant, now = new Date()) => Boolean(grant)
   && (!grant.starts_at || new Date(grant.starts_at) <= now)
   && (!grant.ends_at || new Date(grant.ends_at) > now);
 
+// Sin fecha de inicio = generación nueva: va al final (es la más reciente).
 const byStartThenName = (a, b) => (
-  String(a.starts_on || '').localeCompare(String(b.starts_on || ''))
+  String(a.starts_on || '9999-12-31').localeCompare(String(b.starts_on || '9999-12-31'))
   || String(a.name || '').localeCompare(String(b.name || ''), 'es')
 );
 
